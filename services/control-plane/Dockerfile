@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1.7
-FROM eclipse-temurin:21-jdk-alpine AS build
+ARG BUILDPLATFORM
+FROM --platform=${BUILDPLATFORM} eclipse-temurin:21-jdk-alpine AS build
 WORKDIR /workspace
 
 COPY services/control-plane/gradlew ./gradlew

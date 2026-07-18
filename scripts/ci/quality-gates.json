@@ -9,6 +9,18 @@
     "p95LatencyMs": {
       "maximum": 50,
       "payloadBytes": 10240
+    },
+    "blockRatePercent": {
+      "minimum": 80
+    },
+    "scenarioPassRatePercent": {
+      "minimum": 100
+    },
+    "fixturePassRatePercent": {
+      "minimum": 100
+    },
+    "fixtureCoverageRatePercent": {
+      "minimum": 100
     }
   }
 }

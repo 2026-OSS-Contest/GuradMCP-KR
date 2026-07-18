@@ -7,11 +7,11 @@
 GuardMCP-KR is an open-source, Korean privacy-first security gateway that inspects requests and responses between AI agents and MCP servers. It combines YAML policies, Korean PII/secret/prompt-injection detections, and a risk score to return one of `allow`, `warn`, `mask_then_allow`, `require_approval`, or `block`.
 
 > [!IMPORTANT]
-> This repository is in early development. Review policies and deployment settings before using real personal data or production credentials. Use unique secrets and a restricted network in production.
+> This repository is an early demo. The gateway evaluates the checked-in `default` and `korean-pii` packs, but human approval UI, replay, and durable audit storage are not implemented. `require_approval` fails closed in the demo. Do not use real personal data or production credentials.
 
 ## Five-minute quick start
 
-Prerequisites: Docker Engine 24+ and Compose v2.20+. Local ports `3000`, `8080`, `5432`, and `6379` must be available.
+Prerequisites: Docker Engine 24+ and Compose v2.20+. Local ports `3000`–`3003`, `8080`, `5432`, and `6379` must be available.
 
 ```bash
 git clone https://github.com/2026-OSS-Contest/GuradMCP-KR.git
@@ -34,12 +34,12 @@ See the [Quick Start](docs/quickstart.en.md) for a timed verification checklist,
 AI Agent → GuardMCP-KR Gateway → MCP Tools
                 │
                 ├─ bidirectional detection and policy evaluation
-                ├─ Control Plane / Approval / Replay
-                └─ PostgreSQL + Redis
+                ├─ Control Plane (demo inventory/health)
+                └─ PostgreSQL + Redis (health and deterministic seeds)
 ```
 
 - **Bidirectional inspection:** checks risky tools and arguments on requests, and PII, secrets, and indirect injection on responses.
-- **Explainable verdicts:** records the policy ID, detection type, risk score, and masking result in audit events.
+- **Explainable verdicts:** returns policy IDs, detection types, risk score, and masking result as MCP response metadata. Durable audit storage is future work.
 - **Korean defaults:** covers Korean phone numbers, RRN-like values, business registration numbers, bank accounts, and more.
 - **No-code extension:** policies and detection/attack samples can be contributed as YAML or datasets.
 

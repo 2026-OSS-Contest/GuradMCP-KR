@@ -9,7 +9,7 @@
 - Docker Engine 24 이상
 - Docker Compose v2.20 이상 (`docker compose version`)
 - Git
-- 사용 가능한 로컬 포트: `3000`, `8080`, `5432`, `6379`
+- 사용 가능한 로컬 포트: `3000`–`3003`, `8080`, `5432`, `6379`
 
 ```bash
 git clone https://github.com/2026-OSS-Contest/GuradMCP-KR.git
@@ -32,7 +32,11 @@ curl --fail --silent http://localhost:3001/health
 curl --fail --silent http://localhost:8080/actuator/health
 ```
 
-`docker compose ps`에서 시작된 서비스가 `healthy`이고 health 요청이 성공하면 <http://localhost:3000>을 엽니다. 콘솔의 Demo 화면에서 고정 시나리오를 실행하고, 판정에 정책 ID·탐지 항목·위험 점수가 표시되는지 확인합니다.
+`docker compose ps`에서 시작된 서비스가 `healthy`이고 health 요청이 성공하면 <http://localhost:3000>을 엽니다. 다음 고정 시나리오 호출로 정책 ID·탐지 항목·위험 점수가 포함된 판정을 확인합니다.
+
+```bash
+curl --fail --silent --request POST http://localhost:3002/demo/pii
+```
 
 ## 프로파일
 
@@ -45,6 +49,8 @@ curl --fail --silent http://localhost:8080/actuator/health
 ## MCP Agent 연결
 
 Agent가 사용하던 MCP endpoint를 게이트웨이 endpoint로 교체합니다. 로컬 데모의 기본 endpoint는 `http://localhost:3001/mcp`입니다. 정책팩은 `default`와 `korean-pii`가 활성화됩니다.
+
+이 데모는 정책 평가·요청/응답 마스킹·차단 경로를 검증합니다. 사람 승인 UI와 영구 audit/replay는 아직 없으므로 `require_approval` 판정은 upstream을 실행하지 않고 fail-closed 오류를 반환합니다. PostgreSQL/Redis는 기동·seed·health 경계를 검증하지만 현재 판정 이력을 저장하지 않습니다.
 
 ## 종료와 초기화
 

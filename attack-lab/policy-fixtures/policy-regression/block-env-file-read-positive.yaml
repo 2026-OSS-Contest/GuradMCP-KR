@@ -1,0 +1,16 @@
+id: block_env_file_read_positive
+description: Credential-file reads are blocked.
+coverage:
+  policy_id: block_env_file_read
+  expectation: match
+event:
+  direction: request
+  tool: read_file
+  server_trust: trusted
+  args:
+    path: /workspace/.env.production
+  detections: []
+  risk_score: 10
+expected:
+  action: block
+  matched_policy_ids: [block_env_file_read]

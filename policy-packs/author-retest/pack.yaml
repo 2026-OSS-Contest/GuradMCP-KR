@@ -1,0 +1,8 @@
+name: author-retest
+version: 1.0.0
+description: Independent policy-author documentation retest pack
+dsl_version: 1
+default_action: allow
+evaluation_strategy: severity-max
+policies:
+  - policies/block-limited-fetch-obfuscated-injection.yaml

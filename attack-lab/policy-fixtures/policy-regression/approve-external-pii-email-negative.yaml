@@ -1,0 +1,16 @@
+id: approve_external_email_with_korean_pii_negative
+description: Korean PII sent only to the internal domain does not require approval.
+coverage:
+  policy_id: approve_external_email_with_korean_pii
+  expectation: not_match
+event:
+  direction: request
+  tool: send_email
+  server_trust: trusted
+  args:
+    to: privacy@company.co.kr
+  detections: [PII.PHONE]
+  risk_score: 80
+expected:
+  action: allow
+  matched_policy_ids: []

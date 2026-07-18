@@ -8,7 +8,8 @@ on:
 
 permissions:
   contents: read
-  packages: write
+  actions: read
+  packages: read
 
 concurrency:
   group: containers-${{ github.event.pull_request.number || github.ref }}
@@ -43,13 +44,6 @@ jobs:
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Log in to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Generate image metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -69,20 +63,212 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
 
+  publish:
+    name: publish validated release
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Wait for required main validation workflows
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflows = ["ci.yml", "policy-benchmark.yml", "licenses.yml"];
+            const deadline = Date.now() + 45 * 60 * 1000;
+            for (const workflow_id of workflows) {
+              for (;;) {
+                const { data } = await github.rest.actions.listWorkflowRuns({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  workflow_id,
+                  head_sha: context.sha,
+                  per_page: 20
+                });
+                const run = data.workflow_runs
+                  .filter((candidate) => candidate.event === "push")
+                  .sort((left, right) => right.run_number - left.run_number)[0];
+                if (run?.status === "completed") {
+                  if (run.conclusion !== "success") {
+                    core.setFailed(`${workflow_id} concluded ${run.conclusion}`);
+                    return;
+                  }
+                  core.info(`${workflow_id} passed in run ${run.id}`);
+                  break;
+                }
+                if (Date.now() >= deadline) {
+                  core.setFailed(`Timed out waiting for ${workflow_id} at ${context.sha}`);
+                  return;
+                }
+                core.info(`Waiting for ${workflow_id} at ${context.sha}`);
+                await new Promise((resolve) => setTimeout(resolve, 15000));
+              }
+            }
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set release image names
+        id: images
+        shell: bash
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          prefix="${REGISTRY}/${owner}/guardmcp"
+          tag="sha-${GITHUB_SHA}"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "IMAGE_PREFIX=$prefix" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+      - name: Publish immutable gateway image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/gateway/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.images.outputs.prefix }}-gateway:${{ steps.images.outputs.tag }}
+          labels: |
+            org.opencontainers.image.title=GuardMCP-KR gateway
+            org.opencontainers.image.description=GuardMCP-KR MCP inspection gateway
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=gateway
+      - name: Publish immutable control-plane image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/control-plane/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.images.outputs.prefix }}-control-plane:${{ steps.images.outputs.tag }}
+          labels: |
+            org.opencontainers.image.title=GuardMCP-KR control-plane
+            org.opencontainers.image.description=GuardMCP-KR policy control plane
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=control-plane
+      - name: Publish immutable console image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/console/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.images.outputs.prefix }}-console:${{ steps.images.outputs.tag }}
+          labels: |
+            org.opencontainers.image.title=GuardMCP-KR console
+            org.opencontainers.image.description=GuardMCP-KR web console
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=console
+      - name: Publish immutable demo-agent image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/demo-agent/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.images.outputs.prefix }}-demo-agent:${{ steps.images.outputs.tag }}
+          labels: |
+            org.opencontainers.image.title=GuardMCP-KR demo-agent
+            org.opencontainers.image.description=GuardMCP-KR deterministic demo agent
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=demo-agent
+      - name: Publish immutable demo-mcp-tools image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/demo-mcp-tools/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.images.outputs.prefix }}-demo-mcp-tools:${{ steps.images.outputs.tag }}
+          labels: |
+            org.opencontainers.image.title=GuardMCP-KR demo-mcp-tools
+            org.opencontainers.image.description=GuardMCP-KR deterministic MCP tools
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=demo-mcp-tools
+      - name: Verify immutable release set before promotion
+        shell: bash
+        run: |
+          set -euo pipefail
+          for image in gateway control-plane console demo-agent demo-mcp-tools; do
+            docker buildx imagetools inspect "${IMAGE_PREFIX}-${image}:${RELEASE_TAG}" >/dev/null
+          done
+      - name: Smoke-test console runtime on both architectures
+        shell: bash
+        run: |
+          set -euo pipefail
+          containers=()
+          cleanup() { for container in "${containers[@]}"; do docker rm -f "$container" >/dev/null 2>&1 || true; done; }
+          trap cleanup EXIT
+          for pair in amd64:13000 arm64:13001; do
+            arch="${pair%%:*}"
+            port="${pair##*:}"
+            name="guardmcp-console-${arch}"
+            containers+=("$name")
+            docker run --detach --name "$name" --platform "linux/${arch}" --publish "127.0.0.1:${port}:3000" \
+              "${IMAGE_PREFIX}-console:${RELEASE_TAG}"
+            ready=false
+            for _ in $(seq 1 30); do
+              if curl --fail --silent "http://127.0.0.1:${port}/api/health" >/dev/null; then ready=true; break; fi
+              sleep 2
+            done
+            if [ "$ready" != true ]; then docker logs "$name"; exit 1; fi
+          done
+      - name: Promote the validated release set
+        shell: bash
+        run: |
+          set -euo pipefail
+          for image in gateway control-plane console demo-agent demo-mcp-tools; do
+            source="${IMAGE_PREFIX}-${image}:${RELEASE_TAG}"
+            docker buildx imagetools create \
+              --tag "${IMAGE_PREFIX}-${image}:main" \
+              --tag "${IMAGE_PREFIX}-${image}:latest" \
+              "$source"
+          done
+
   required:
     name: required / containers
     if: always()
-    needs: [build]
+    needs: [build, publish]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Enforce all image builds
         env:
           BUILD_RESULT: ${{ needs.build.result }}
-        run: test "$BUILD_RESULT" = success
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+          EVENT_NAME: ${{ github.event_name }}
+          GIT_REF: ${{ github.ref }}
+        run: |
+          test "$BUILD_RESULT" = success
+          if [ "$EVENT_NAME" = pull_request ] || [ "$GIT_REF" != refs/heads/main ]; then
+            test "$PUBLISH_RESULT" = skipped
+          else
+            test "$PUBLISH_RESULT" = success
+          fi

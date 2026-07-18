@@ -81,11 +81,25 @@ function extractMetrics(report) {
     "summary.p95LatencyMs", "summary.latencyP95Ms", "latency.p95Ms", "latency.p95", "p95LatencyMs",
     "latencyP95Ms", "p95Ms", "p95"
   ]) ?? percentile(report.latenciesMs ?? report.metrics?.latenciesMs ?? report.latencySamplesMs, 0.95);
+  const payloadBytes = numberAt(report, ["metrics.payloadBytes", "summary.payloadBytes", "payloadBytes"]);
+  const blockRate = numberAt(report, ["metrics.blockRate", "summary.blockRate", "blockRate"]);
+  const scenarioPassRate = numberAt(report, ["metrics.scenarioPassRate", "summary.scenarioPassRate", "scenarioPassRate"]);
+  const fixturePassRate = numberAt(report, ["metrics.fixturePassRate", "summary.fixturePassRate", "fixturePassRate"]);
+  const fixtureCoverageRate = numberAt(report, ["metrics.fixtureCoverageRate", "summary.fixtureCoverageRate", "fixtureCoverageRate"]);
+  const authorFixtures = numberAt(report, ["metrics.authorFixtures", "summary.authorFixtures", "authorFixtures"]);
+  const policyCount = numberAt(report, ["metrics.policyCount", "summary.policyCount", "policyCount"]);
 
   return {
     recallPercent: recallPercent ?? asPercent(recall),
     falsePositiveRatePercent: falsePositiveRatePercent ?? asPercent(falsePositiveRate),
-    p95LatencyMs
+    p95LatencyMs,
+    payloadBytes,
+    blockRatePercent: asPercent(blockRate),
+    scenarioPassRatePercent: asPercent(scenarioPassRate),
+    fixturePassRatePercent: asPercent(fixturePassRate),
+    fixtureCoverageRatePercent: asPercent(fixtureCoverageRate),
+    authorFixtures,
+    policyCount
   };
 }
 
@@ -119,8 +133,56 @@ function evaluate(metrics, gates) {
       expected: `<= ${gates.p95LatencyMs.maximum}ms`,
       pass: Number.isFinite(metrics.p95LatencyMs)
         && metrics.p95LatencyMs >= 0
-        && metrics.p95LatencyMs <= gates.p95LatencyMs.maximum,
+        && metrics.p95LatencyMs <= gates.p95LatencyMs.maximum
+        && metrics.payloadBytes === gates.p95LatencyMs.payloadBytes,
       display: format(metrics.p95LatencyMs, "ms")
+    },
+    {
+      metric: "Payload size",
+      actual: metrics.payloadBytes,
+      expected: `= ${gates.p95LatencyMs.payloadBytes} bytes`,
+      pass: metrics.payloadBytes === gates.p95LatencyMs.payloadBytes,
+      display: Number.isFinite(metrics.payloadBytes) ? `${metrics.payloadBytes} bytes` : "missing"
+    },
+    {
+      metric: "Expected-threat block rate",
+      actual: metrics.blockRatePercent,
+      expected: `>= ${gates.blockRatePercent.minimum}%`,
+      pass: Number.isFinite(metrics.blockRatePercent)
+        && metrics.blockRatePercent >= gates.blockRatePercent.minimum
+        && metrics.blockRatePercent <= 100,
+      display: format(metrics.blockRatePercent, "%")
+    },
+    {
+      metric: "Scenario expectation pass rate",
+      actual: metrics.scenarioPassRatePercent,
+      expected: `>= ${gates.scenarioPassRatePercent.minimum}%`,
+      pass: Number.isFinite(metrics.scenarioPassRatePercent)
+        && metrics.scenarioPassRatePercent >= gates.scenarioPassRatePercent.minimum
+        && metrics.scenarioPassRatePercent <= 100,
+      display: format(metrics.scenarioPassRatePercent, "%")
+    },
+    {
+      metric: "Policy fixture pass rate",
+      actual: metrics.fixturePassRatePercent,
+      expected: `>= ${gates.fixturePassRatePercent.minimum}%`,
+      pass: Number.isFinite(metrics.fixturePassRatePercent)
+        && metrics.fixturePassRatePercent >= gates.fixturePassRatePercent.minimum
+        && metrics.fixturePassRatePercent <= 100,
+      display: format(metrics.fixturePassRatePercent, "%")
+    },
+    {
+      metric: "Policy fixture coverage",
+      actual: metrics.fixtureCoverageRatePercent,
+      expected: `>= ${gates.fixtureCoverageRatePercent.minimum}% and >= 2 fixtures/policy`,
+      pass: Number.isFinite(metrics.fixtureCoverageRatePercent)
+        && metrics.fixtureCoverageRatePercent >= gates.fixtureCoverageRatePercent.minimum
+        && metrics.fixtureCoverageRatePercent <= 100
+        && Number.isInteger(metrics.authorFixtures)
+        && Number.isInteger(metrics.policyCount)
+        && metrics.policyCount > 0
+        && metrics.authorFixtures >= metrics.policyCount * 2,
+      display: `${format(metrics.fixtureCoverageRatePercent, "%")} (${metrics.authorFixtures ?? "missing"}/${metrics.policyCount ?? "missing"} policies)`
     }
   ];
 

@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1.7
-FROM node:22-alpine AS build
+ARG BUILDPLATFORM
+FROM --platform=${BUILDPLATFORM} node:22-alpine AS build
 WORKDIR /workspace
 
 COPY package*.json ./
@@ -11,8 +12,9 @@ COPY packages/gateway/package.json packages/gateway/package.json
 COPY packages/policy-engine/package.json packages/policy-engine/package.json
 RUN --mount=type=cache,target=/root/.npm npm ci
 
+COPY packages/policy-engine packages/policy-engine
 COPY packages/gateway packages/gateway
-RUN npm run build --workspace @guardmcp/gateway
+RUN npm run build --workspace @guardmcp/policy-engine && npm run build --workspace @guardmcp/gateway
 
 FROM node:22-alpine AS runtime
 ARG GUARDMCP_VERSION=dev
@@ -21,6 +23,8 @@ ENV NODE_ENV=production \
     GUARDMCP_VERSION=${GUARDMCP_VERSION}
 WORKDIR /app
 COPY --from=build --chown=node:node /workspace/packages/gateway/dist ./dist
+COPY --from=build --chown=node:node /workspace/packages/policy-engine/package.json ./node_modules/@guardmcp/policy-engine/package.json
+COPY --from=build --chown=node:node /workspace/packages/policy-engine/dist ./node_modules/@guardmcp/policy-engine/dist
 USER node
 EXPOSE 3001
 CMD ["node", "dist/server.js"]

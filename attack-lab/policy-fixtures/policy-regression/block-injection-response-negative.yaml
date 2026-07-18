@@ -1,0 +1,14 @@
+id: block_untrusted_injection_response_negative
+description: The same detection below the risk threshold does not match.
+coverage:
+  policy_id: block_untrusted_injection_response
+  expectation: not_match
+event:
+  direction: response
+  tool: search_documents
+  server_trust: untrusted
+  detections: [INJECTION.INDIRECT]
+  risk_score: 89
+expected:
+  action: allow
+  matched_policy_ids: []

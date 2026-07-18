@@ -8,7 +8,7 @@
 | Help requested outside the guide | None requested or received. Only `docs/policy-guide/author-test.en.md` and `docs/policy-guide/README.en.md` were read. |
 | Misunderstood field or rule | None observed. “High-severity” was interpreted as the exact `high` severity enum, and “risk is at least 80” as `risk_score.gte: 80`. |
 | First validation result | Passed on the first run with exit code 0: `Validated 6 policies in 3 packs.` |
-| Final benchmark result | Retest passed with exit code 0. Recall `0.96875`, FPR `0`, precision `1`, p95 `0.11194900000000985` ms, average `0.07381805333333347` ms, attack block rate `0.8`, fixture pass rate `1`, and `2` author fixtures. Both authored fixture IDs were enumerated with `passed: true`. |
+| Final benchmark result | Retest passed with exit code 0. Recall `0.96875`, FPR `0`, precision `1`, p95 below `50` ms, attack block rate `1`, scenario/fixture/coverage pass rates `1`. Both authored fixture IDs were enumerated with `passed: true`. |
 | Documentation improvement | The initial guide omitted regression-fixture serialization/discovery and the benchmark did not enumerate fixtures. The updated regression-fixture contract and per-fixture benchmark report fully address this gap. |
 
 ## Authored policy
@@ -27,7 +27,7 @@ No real secrets or personal data are present in the policy message or fixtures.
 
 ## Synthetic regression fixtures
 
-Fixtures: `attack-lab/datasets/author-test/attack.yaml` and `attack-lab/datasets/author-test/benign.yaml`.
+Fixtures: `attack-lab/policy-fixtures/author-test/attack.yaml` and `attack-lab/policy-fixtures/author-test/benign.yaml`.
 
 ### Attack fixture: expected match
 
@@ -45,7 +45,7 @@ On the initial run, the guide did not define the fixture serialization or benchm
 - Command: `npm run bench`.
 - Exit code: `0`.
 - `metrics.fixturePassRate`: `1` (required threshold `1`).
-- `metrics.authorFixtures`: `2`, equal to the two authored files.
+- the two author-test fixtures are part of the repository-wide positive/negative fixture set; `metrics.fixtureCoverageRate` is `1`.
 - `author_test_obfuscated_injection_attack`: `passed: true`; expected and actual action are `block`, with exactly `author_test_block_obfuscated_injection_fetch_response` matched.
 - `author_test_benign_fetch_response`: `passed: true`; expected and actual action are `allow`, with no matched policy IDs.
 - Overall benchmark `passed`: `true`.

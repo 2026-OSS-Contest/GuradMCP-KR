@@ -21,8 +21,10 @@ npm run bench -- --output reports/benchmark.json
 | Korean PII recall | `>= 0.90` | detected fraction of labeled PII positives |
 | Benign-sample FPR | `<= 0.05` | incorrectly detected fraction of benign negatives |
 | Attack block rate | `>= 0.80` | blocked fraction of scenarios derived from T-01–T-08 |
+| Scenario expectation pass rate | `= 1.00` | each attack/benign ID agrees with `expectBlocked` |
 | Rule-pipeline p95 | `<= 50 ms` | 10KB payload under the runner's fixed repetition setup |
 | Contribution fixture pass rate | `= 1.00` | every recursively discovered YAML fixture matches its expected action and policy IDs |
+| Policy-fixture coverage | `= 1.00` | every shipped policy has at least one match and one not-match fixture |
 | Precision | report-only | actual positives among detected samples |
 
 The authoritative thresholds are the `thresholds` object in [`attack-lab/benchmark/run.ts`](../attack-lab/benchmark/run.ts). Update code and documentation together if they differ. Never remove measured samples merely to pass a threshold.
@@ -31,7 +33,7 @@ The authoritative thresholds are the `thresholds` object in [`attack-lab/benchma
 
 1. A relevant path change runs policy validation and the benchmark inside `required / policy-benchmark`.
 2. Validation checks YAML parsing, manifests/required fields, enums, `require_approval` blocks, duplicate IDs, and `extends` errors.
-3. The benchmark records current output as an artifact/report and enforces the absolute thresholds above. Its `fixtures` array records every discovered YAML fixture ID plus actual and expected verdicts. The pull-request author includes a comparison against the previous report in the description.
+3. The benchmark records current output as an artifact/report and enforces the absolute thresholds above. `scenarios` and `fixtures` record actual and expected verdicts per ID, while `fixtureCoverage` records positive/negative coverage per policy. The central validator independently rechecks the 10,240-byte payload, block rate, scenario expectations, fixture pass rate, and coverage.
 4. Any failure blocks merge. Configure `required / policy-benchmark` as required in `main` branch protection.
 5. Documentation-only changes still pass normal lint/link checks and may skip the expensive benchmark by path policy. A required workflow must still return a success state when its path-specific work is skipped.
 
@@ -54,6 +56,6 @@ Separate a change that weakens a security threshold from an ordinary policy pull
 - [ ] Does every synthetic attack positive have a useful benign negative?
 - [ ] Did the sample count avoid unexplained decreases?
 - [ ] Do expected verdict changes match policy intent?
-- [ ] Do recall, FPR, block rate, p95, and the 100% fixture pass rate all pass?
+- [ ] Do recall, FPR, block rate, p95, scenario expectations, and 100% fixture pass/coverage rates all pass?
 - [ ] Does a new regex avoid ReDoS and excessive scope?
 - [ ] Do Korean and English policy explanations mean the same thing?

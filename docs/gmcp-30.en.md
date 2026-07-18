@@ -27,7 +27,7 @@
 
 1. The console loads within five minutes of the start.
 2. Every required service is healthy.
-3. A deterministic demo runs and displays a policy ID, detections, and risk score.
+3. The deterministic demo API runs and returns a policy ID, detections, and risk score.
 4. The tester completes the task from the document alone, without hidden settings or help.
 
 Attach the completed record and reproduction logs to an issue or pull request after removing secrets and personal data.

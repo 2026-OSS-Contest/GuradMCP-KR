@@ -1,0 +1,14 @@
+id: block_untrusted_injection_response_positive
+description: High-risk injection from an untrusted tool is blocked.
+coverage:
+  policy_id: block_untrusted_injection_response
+  expectation: match
+event:
+  direction: response
+  tool: search_documents
+  server_trust: untrusted
+  detections: [INJECTION.INDIRECT]
+  risk_score: 95
+expected:
+  action: block
+  matched_policy_ids: [block_untrusted_injection_response]

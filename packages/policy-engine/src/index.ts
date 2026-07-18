@@ -5,6 +5,7 @@ export type Action = (typeof actions)[number];
 export type Severity = (typeof severities)[number];
 export type Direction = "request" | "response";
 export type ServerTrust = "trusted" | "limited" | "untrusted";
+export type EvaluationStrategy = "severity-max" | "first-match";
 
 export interface Detection {
   type: string;
@@ -64,17 +65,20 @@ const actionWeight: Record<Action, number> = {
 export function evaluate(
   policies: Policy[],
   context: PolicyContext,
-  defaultAction: Action = "allow"
+  defaultAction: Action = "allow",
+  strategy: EvaluationStrategy = "severity-max"
 ): EvaluationResult {
   const matched = [...policies]
     .filter((policy) => policy.enabled !== false)
-    .sort((left, right) => left.priority - right.priority)
+    .sort((left, right) => left.priority - right.priority || left.id.localeCompare(right.id))
     .filter((policy) => matches(policy.match, context));
 
-  const action = matched.reduce<Action>(
-    (strongest, policy) => actionWeight[policy.action] > actionWeight[strongest] ? policy.action : strongest,
-    defaultAction
-  );
+  const action = strategy === "first-match"
+    ? matched[0]?.action ?? defaultAction
+    : matched.reduce<Action>(
+      (strongest, policy) => actionWeight[policy.action] > actionWeight[strongest] ? policy.action : strongest,
+      defaultAction
+    );
 
   return { action, matchedPolicyIds: matched.map(({ id }) => id), policies: matched };
 }
@@ -107,7 +111,7 @@ function matchesArgs(expected: Record<string, unknown>, actual: Record<string, u
     }
     if (condition.endsWith("_regex")) {
       const key = condition.slice(0, -"_regex".length);
-      return actual[key] !== undefined && typeof value === "string" && new RegExp(value).test(String(actual[key]));
+      return actual[key] !== undefined && typeof value === "string" && isSafePolicyRegex(value) && new RegExp(value).test(String(actual[key]));
     }
     if (condition.endsWith("_glob")) {
       const key = condition.slice(0, -"_glob".length);
@@ -117,13 +121,14 @@ function matchesArgs(expected: Record<string, unknown>, actual: Record<string, u
       const key = condition.slice(0, -"_not_domain".length);
       const domains = Array.isArray(value) ? value : [value];
       const target = actual[key];
-      return typeof target === "string" && !domains.some((domain) => domainMatches(target, String(domain)));
+      return typeof target === "string" && splitTargets(target).some((candidate) => !domains.some((domain) => domainMatches(candidate, String(domain))));
     }
     if (condition.endsWith("_domain")) {
       const key = condition.slice(0, -"_domain".length);
       const domains = Array.isArray(value) ? value : [value];
       const target = actual[key];
-      return typeof target === "string" && domains.some((domain) => domainMatches(target, String(domain)));
+      const targets = typeof target === "string" ? splitTargets(target) : [];
+      return targets.length > 0 && targets.every((candidate) => domains.some((domain) => domainMatches(candidate, String(domain))));
     }
     if (condition.endsWith("_not_in")) {
       const key = condition.slice(0, -"_not_in".length);
@@ -137,6 +142,13 @@ function matchesArgs(expected: Record<string, unknown>, actual: Record<string, u
   });
 }
 
+export function isSafePolicyRegex(pattern: string): boolean {
+  if (pattern.length === 0 || pattern.length > 512) return false;
+  if (/\\[1-9]/.test(pattern) || pattern.includes("(?<=") || pattern.includes("(?<!")) return false;
+  if (/(?:\([^)]*[|+*{][^)]*\))[+*{]/.test(pattern)) return false;
+  try { new RegExp(pattern); return true; } catch { return false; }
+}
+
 function domainMatches(target: string, allowedDomain: string): boolean {
   const normalizedAllowed = allowedDomain.toLowerCase().replace(/\.$/, "");
   const emailSeparator = target.lastIndexOf("@");
@@ -144,6 +156,10 @@ function domainMatches(target: string, allowedDomain: string): boolean {
   try { host = new URL(target).hostname; } catch { /* Target may be an email address or bare host. */ }
   const normalizedHost = host.toLowerCase().replace(/\.$/, "");
   return normalizedHost === normalizedAllowed || normalizedHost.endsWith(`.${normalizedAllowed}`);
+}
+
+function splitTargets(target: string): string[] {
+  return target.split(/[,;]/).map((value) => value.trim()).filter(Boolean);
 }
 
 function matchesDetections(

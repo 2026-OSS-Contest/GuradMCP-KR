@@ -1,0 +1,16 @@
+id: block_env_file_read_negative
+description: A non-sensitive project document does not match the credential-file policy.
+coverage:
+  policy_id: block_env_file_read
+  expectation: not_match
+event:
+  direction: request
+  tool: read_file
+  server_trust: trusted
+  args:
+    path: /workspace/README.md
+  detections: []
+  risk_score: 10
+expected:
+  action: allow
+  matched_policy_ids: []

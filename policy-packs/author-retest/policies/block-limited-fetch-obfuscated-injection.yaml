@@ -1,0 +1,16 @@
+id: author_retest_block_limited_fetch_obfuscated_injection
+pack: author-retest
+version: 1
+description: Block very high-risk obfuscated injection in limited-server fetch responses
+priority: 105
+match:
+  direction: response
+  tool: fetch_url
+  server_trust: limited
+  detections:
+    any_of: [INJECTION.OBFUSCATED]
+  risk_score:
+    gte: 90
+action: block
+severity: high
+message: A very high-risk obfuscated injection response was blocked by policy.

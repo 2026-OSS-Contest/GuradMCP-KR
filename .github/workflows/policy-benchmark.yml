@@ -44,7 +44,7 @@ jobs:
               echo "Base commit is unavailable; running the gate fail-closed."
               required=true
             elif git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -Eq \
-              '^(policy-packs/|attack-lab/(benchmark|datasets|scenarios)/|packages/(gateway|policy-engine|pii-detector-kr|secret-detector|injection-detector)/|scripts/(validate-policies\.ts|ci/(run-policy-benchmark|validate-policy-benchmark)\.mjs|ci/quality-gates\.json)|package(-lock)?\.json$)'; then
+              '^(policy-packs/|attack-lab/(benchmark|datasets|policy-fixtures|scenarios)/|packages/(gateway|policy-engine|pii-detector-kr|secret-detector|injection-detector)/|scripts/(validate-policies\.ts|ci/(run-policy-benchmark|validate-policy-benchmark)\.mjs|ci/quality-gates\.json)|package(-lock)?\.json$)'; then
               required=true
             fi
           fi
@@ -62,7 +62,9 @@ jobs:
         run: npm ci
       - name: Validate policy packs
         if: steps.scope.outputs.required == 'true'
-        run: npm run policy:validate
+        run: |
+          npm run policy:check-generated
+          npm run policy:validate
       - name: Run benchmark and enforce quality thresholds
         if: steps.scope.outputs.required == 'true'
         run: >-

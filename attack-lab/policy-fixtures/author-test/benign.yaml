@@ -1,5 +1,8 @@
 id: author_test_benign_fetch_response
 description: Synthetic untrusted fetch response below the policy risk threshold and without injection detection
+coverage:
+  policy_id: author_test_block_obfuscated_injection_fetch_response
+  expectation: not_match
 event:
   direction: response
   tool: fetch_url

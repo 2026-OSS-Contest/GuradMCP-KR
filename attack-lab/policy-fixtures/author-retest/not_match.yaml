@@ -1,0 +1,14 @@
+id: author_retest_limited_fetch_injection_not_match
+coverage:
+  policy_id: author_retest_block_limited_fetch_obfuscated_injection
+  expectation: not_match
+event:
+  direction: response
+  tool: fetch_url
+  server_trust: limited
+  detections: [INJECTION.OBFUSCATED]
+  risk_score: 89
+  content: Synthetic low-boundary test response with no personal data or secrets.
+expected:
+  action: allow
+  matched_policy_ids: []

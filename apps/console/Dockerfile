@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1.7
-FROM node:22-alpine AS build
+ARG BUILDPLATFORM
+FROM --platform=${BUILDPLATFORM} node:22-alpine AS build
+ARG TARGETARCH
 WORKDIR /workspace
 
 COPY package*.json ./
@@ -13,6 +15,22 @@ RUN --mount=type=cache,target=/root/.npm npm ci
 
 COPY apps/console apps/console
 RUN npm run build --workspace @guardmcp/console
+RUN --mount=type=cache,target=/root/.npm \
+    set -eux; \
+    case "$TARGETARCH" in amd64) npm_cpu=x64 ;; arm64) npm_cpu=arm64 ;; *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; esac; \
+    mkdir -p /target-dependencies/apps/console /target-dependencies/apps/demo-agent \
+      /target-dependencies/apps/demo-mcp-tools /target-dependencies/packages/gateway \
+      /target-dependencies/packages/policy-engine; \
+    cp package*.json /target-dependencies/; \
+    cp apps/console/package.json /target-dependencies/apps/console/; \
+    cp apps/demo-agent/package.json /target-dependencies/apps/demo-agent/; \
+    cp apps/demo-mcp-tools/package.json /target-dependencies/apps/demo-mcp-tools/; \
+    cp packages/gateway/package.json /target-dependencies/packages/gateway/; \
+    cp packages/policy-engine/package.json /target-dependencies/packages/policy-engine/; \
+    cd /target-dependencies; \
+    npm_config_cpu="$npm_cpu" npm_config_os=linux npm ci --ignore-scripts --omit=dev; \
+    rm -rf /workspace/apps/console/.next/standalone/node_modules/@img; \
+    cp -R /target-dependencies/node_modules/@img /workspace/apps/console/.next/standalone/node_modules/@img
 
 FROM node:22-alpine AS runtime
 ARG GUARDMCP_VERSION=dev

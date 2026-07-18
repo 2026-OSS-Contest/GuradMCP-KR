@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1.7
-FROM node:22-alpine AS build
+ARG BUILDPLATFORM
+FROM --platform=${BUILDPLATFORM} node:22-alpine AS build
 WORKDIR /workspace
 
 COPY package*.json ./

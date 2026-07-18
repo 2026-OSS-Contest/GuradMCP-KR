@@ -17,9 +17,12 @@ export default function Home() {
       <section aria-labelledby="policy-heading">
         <h2 id="policy-heading">정책 / Policies</h2>
         <div className="empty-state">
-          <p>아직 사용자 정책이 없습니다. 첫 정책을 작성해 보호 범위를 확장하세요.</p>
-          <p>No custom policies yet. Create your first policy to expand protection.</p>
-          <a href="https://github.com/2026-OSS-Contest/GuradMCP-KR/blob/main/docs/policy-guide/README.md">정책 작성 가이드 / Policy authoring guide</a>
+          <h3>아직 정책이 없습니다 / No policies yet</h3>
+          <p>정책 작성 가이드의 예제를 복사해 첫 정책을 만들고, validation과 benchmark로 안전하게 확인하세요.</p>
+          <p>Copy an example from the Policy Authoring Guide to create your first policy, then verify it safely with validation and the benchmark.</p>
+          <a href="https://github.com/2026-OSS-Contest/GuradMCP-KR/blob/main/docs/policy-guide/README.md">정책 작성 가이드 열기 / Open Policy Authoring Guide</a>
+          <a href="https://github.com/2026-OSS-Contest/GuradMCP-KR/tree/main/policy-packs/default">기본 정책팩 예제 보기 / View default policy-pack examples</a>
+          <small>코드를 작성하지 않아도 YAML 정책으로 기여할 수 있습니다. / You can contribute a YAML policy without writing application code.</small>
         </div>
       </section>
     </main>

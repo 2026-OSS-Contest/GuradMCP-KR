@@ -3,7 +3,6 @@ export type DetectionKind = "PII" | "SECRET" | "INJECTION";
 export interface Detection {
   type: DetectionKind;
   subtype: string;
-  value: string;
   maskedAs: string;
   start: number;
   end: number;
@@ -17,12 +16,18 @@ interface Rule {
   validate?: (value: string, input: string) => boolean;
 }
 
+interface NormalizedInput {
+  text: string;
+  sourceSpans: Array<{ start: number; end: number }>;
+  identity: boolean;
+}
+
 const piiRules: Rule[] = [
   { type: "PII", subtype: "PHONE", pattern: /(?<!\d)01[016789][- ]?\d{3,4}[- ]?\d{4}(?!\d)/g, maskedAs: "[PHONE]" },
   { type: "PII", subtype: "RRN_LIKE", pattern: /(?<!\d)\d{6}[- ]?[1-8]\d{6}(?!\d)/g, maskedAs: "[RRN_LIKE]", validate: validRrnLike },
   { type: "PII", subtype: "BIZ_NO", pattern: /(?<!\d)\d{3}[- ]?\d{2}[- ]?\d{5}(?!\d)/g, maskedAs: "[BIZ_NO]", validate: validBizNo },
   { type: "PII", subtype: "CARD", pattern: /(?<!\d)(?:\d[ -]?){13,19}(?!\d)/g, maskedAs: "[CARD]", validate: validLuhn },
-  { type: "PII", subtype: "EMAIL", pattern: /[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, maskedAs: "[EMAIL]" },
+  { type: "PII", subtype: "EMAIL", pattern: /\b[A-Za-z0-9][\w.+-]{0,63}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}\.)+[A-Za-z]{2,63}\b/g, maskedAs: "[EMAIL]" },
   { type: "PII", subtype: "PASSPORT", pattern: /(?<![A-Z0-9])[MS][0-9]{8}(?![A-Z0-9])/gi, maskedAs: "[PASSPORT]" },
   { type: "PII", subtype: "DL_NO", pattern: /(?<!\d)(?:11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|28)[- ]?\d{2}[- ]?\d{6}[- ]?\d{2}(?!\d)/g, maskedAs: "[DL_NO]" },
   { type: "PII", subtype: "ADDRESS", pattern: /(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)(?:특별시|광역시|특별자치시|특별자치도|도)?\s+[가-힣]+(?:시|군|구)\s+[가-힣0-9-]+(?:로|길|동)\s*\d*/g, maskedAs: "[ADDRESS]" },
@@ -46,7 +51,7 @@ const injectionRules: Rule[] = [
 ];
 
 export function detect(input: string): Detection[] {
-  const normalized = input.normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g, "");
+  const normalized = normalizeInput(input);
   return [...piiRules, ...secretRules, ...injectionRules].flatMap((rule) => findRule(rule, normalized));
 }
 
@@ -56,18 +61,52 @@ export function mask(input: string, detections = detect(input)): string {
     .reduce((result, detection) => `${result.slice(0, detection.start)}${detection.maskedAs}${result.slice(detection.end)}`, input);
 }
 
-function findRule(rule: Rule, input: string): Detection[] {
+function findRule(rule: Rule, input: NormalizedInput): Detection[] {
   const pattern = new RegExp(rule.pattern.source, rule.pattern.flags);
-  return [...input.matchAll(pattern)]
-    .filter((match) => match.index !== undefined && (!rule.validate || rule.validate(match[0], input)))
-    .map((match) => ({
-      type: rule.type,
-      subtype: rule.subtype,
-      value: match[0],
-      maskedAs: rule.maskedAs,
-      start: match.index,
-      end: match.index + match[0].length
-    }));
+  return [...input.text.matchAll(pattern)]
+    .filter((match) => match.index !== undefined && (!rule.validate || rule.validate(match[0], input.text)))
+    .flatMap((match) => {
+      if (input.identity) return [{
+        type: rule.type,
+        subtype: rule.subtype,
+        maskedAs: rule.maskedAs,
+        start: match.index,
+        end: match.index + match[0].length
+      }];
+      const first = input.sourceSpans[match.index];
+      const last = input.sourceSpans[match.index + match[0].length - 1];
+      return first && last ? [{
+        type: rule.type,
+        subtype: rule.subtype,
+        maskedAs: rule.maskedAs,
+        start: first.start,
+        end: last.end
+      }] : [];
+    });
+}
+
+function normalizeInput(input: string): NormalizedInput {
+  if (isAscii(input)) return { text: input, sourceSpans: [], identity: true };
+  const normalizedInput = input.normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g, "");
+  if (normalizedInput === input) return { text: input, sourceSpans: [], identity: true };
+  let text = "";
+  let sourceOffset = 0;
+  const sourceSpans: NormalizedInput["sourceSpans"] = [];
+  for (const symbol of input) {
+    const sourceEnd = sourceOffset + symbol.length;
+    const normalized = symbol.normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g, "");
+    text += normalized;
+    for (let index = 0; index < normalized.length; index += 1) sourceSpans.push({ start: sourceOffset, end: sourceEnd });
+    sourceOffset = sourceEnd;
+  }
+  return { text, sourceSpans, identity: false };
+}
+
+function isAscii(input: string): boolean {
+  for (let index = 0; index < input.length; index += 1) {
+    if (input.charCodeAt(index) > 0x7f) return false;
+  }
+  return true;
 }
 
 function digits(value: string): string {

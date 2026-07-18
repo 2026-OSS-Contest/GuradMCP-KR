@@ -87,11 +87,26 @@ while (( $(date +%s) <= deadline )); do
   done
 
   if [[ -z "$failed" ]]; then
-    elapsed=$(( $(date +%s) - start_epoch ))
-    write_report pass "$elapsed"
-    printf 'GMCP-30 PASS: console reachable and all services healthy in %ss (%s).\n' \
-      "$elapsed" "${CHECK_URLS[0]%/api/health}"
-    exit 0
+    demo_response="$(curl --fail --silent --show-error --max-time 3 \
+      --request POST "http://127.0.0.1:${DEMO_AGENT_PORT}/demo/pii" 2>/dev/null || true)"
+    if DEMO_RESPONSE="$demo_response" node -e '
+      const body = JSON.parse(process.env.DEMO_RESPONSE || "null");
+      const serialized = JSON.stringify(body);
+      const result = JSON.stringify(body?.result);
+      if (body?.verdict !== "mask_then_allow"
+        || !Array.isArray(body?.policyIds) || !body.policyIds.includes("mask_korean_pii_response")
+        || !Array.isArray(body?.detections) || body.detections.length < 2
+        || !Number.isFinite(body?.riskScore)
+        || !result.includes("[PHONE]") || !result.includes("[BANK_ACCOUNT]")
+        || serialized.includes("010-1234-5678") || serialized.includes("110-123-456789")) process.exit(1);
+    ' 2>/dev/null; then
+      elapsed=$(( $(date +%s) - start_epoch ))
+      write_report pass "$elapsed"
+      printf 'GMCP-30 PASS: console, dependencies, and deterministic demo ready in %ss (%s).\n' \
+        "$elapsed" "${CHECK_URLS[0]%/api/health}"
+      exit 0
+    fi
+    failed="demo-scenario"
   fi
 
   printf '  attempt %d: waiting for %s\n' "$attempt" "$failed"

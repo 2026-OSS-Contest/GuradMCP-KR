@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 
 const port = Number(process.env.PORT ?? 3003);
 const demoCustomers = [
-  { id: "C-001", name: "김가드", phone: "010-1234-5678", account: "110-123-456789" }
+  { id: "C-001", name: "김가드", phone: "010-1234-5678", account: "계좌번호 110-123-456789" }
 ];
 
 const server = createServer((request, response) => {

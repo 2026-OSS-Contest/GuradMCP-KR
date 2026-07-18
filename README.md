@@ -7,11 +7,11 @@
 GuardMCP-KR은 AI Agent와 MCP 서버 사이에서 요청과 응답을 검사하는 한국어 개인정보 보호형 오픈소스 보안 게이트웨이입니다. YAML 정책, 한국형 PII·Secret·프롬프트 인젝션 탐지 결과와 위험 점수를 함께 평가해 `allow`, `warn`, `mask_then_allow`, `require_approval`, `block` 중 하나를 결정합니다.
 
 > [!IMPORTANT]
-> 이 저장소는 초기 개발 단계입니다. 실제 개인정보나 운영 자격증명을 사용하기 전에 정책과 배포 설정을 검토하고, 프로덕션에서는 고유한 비밀값과 제한된 네트워크를 사용하세요.
+> 이 저장소는 초기 데모 단계입니다. Gateway는 체크인된 `default`/`korean-pii` 정책팩을 실제로 평가하지만, 사람 승인 UI·Replay·영구 감사 저장은 아직 구현되지 않았습니다. `require_approval`은 데모에서 fail-closed로 거부됩니다. 실제 개인정보나 운영 자격증명에는 사용하지 마세요.
 
 ## 5분 Quick Start
 
-필수 도구: Docker Engine 24+와 Compose v2.20+. 로컬 포트 `3000`, `8080`, `5432`, `6379`를 사용할 수 있어야 합니다.
+필수 도구: Docker Engine 24+와 Compose v2.20+. 로컬 포트 `3000`–`3003`, `8080`, `5432`, `6379`를 사용할 수 있어야 합니다.
 
 ```bash
 git clone https://github.com/2026-OSS-Contest/GuradMCP-KR.git
@@ -34,12 +34,12 @@ docker compose --profile demo down -v
 AI Agent → GuardMCP-KR Gateway → MCP Tools
                 │
                 ├─ 양방향 탐지와 정책 평가
-                ├─ Control Plane / Approval / Replay
-                └─ PostgreSQL + Redis
+                ├─ Control Plane (데모 inventory/health)
+                └─ PostgreSQL + Redis (health와 고정 seed)
 ```
 
 - **양방향 검사:** 요청의 위험한 도구·인자와 응답의 PII·Secret·간접 인젝션을 모두 검사합니다.
-- **설명 가능한 판정:** 정책 ID, 탐지 유형, 위험 점수와 마스킹 결과를 감사 이벤트에 남깁니다.
+- **설명 가능한 판정:** MCP 응답 metadata에 정책 ID, 탐지 유형, 위험 점수와 마스킹 결과를 반환합니다. 영구 감사 저장은 후속 범위입니다.
 - **한국형 기본값:** 휴대전화번호, 주민등록번호 유사 패턴, 사업자등록번호, 계좌번호 등 한국형 PII를 다룹니다.
 - **코드 없는 확장:** 정책과 탐지/공격 샘플은 YAML 또는 데이터셋만으로 기여할 수 있습니다.
 

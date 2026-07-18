@@ -1,0 +1,14 @@
+id: mask_korean_pii_response_negative
+description: A response without PII is not masked.
+coverage:
+  policy_id: mask_korean_pii_response
+  expectation: not_match
+event:
+  direction: response
+  tool: customer_lookup
+  server_trust: trusted
+  detections: []
+  risk_score: 50
+expected:
+  action: allow
+  matched_policy_ids: []

@@ -1,5 +1,8 @@
 id: author_test_obfuscated_injection_attack
 description: Synthetic untrusted fetch response with a high-risk obfuscated injection detection
+coverage:
+  policy_id: author_test_block_obfuscated_injection_fetch_response
+  expectation: match
 event:
   direction: response
   tool: fetch_url

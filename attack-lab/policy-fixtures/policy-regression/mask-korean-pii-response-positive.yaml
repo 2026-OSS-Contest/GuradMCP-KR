@@ -1,0 +1,14 @@
+id: mask_korean_pii_response_positive
+description: Korean PII in a response is masked.
+coverage:
+  policy_id: mask_korean_pii_response
+  expectation: match
+event:
+  direction: response
+  tool: customer_lookup
+  server_trust: trusted
+  detections: [PII.PHONE]
+  risk_score: 50
+expected:
+  action: mask_then_allow
+  matched_policy_ids: [mask_korean_pii_response]

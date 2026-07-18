@@ -20,7 +20,7 @@ payload="$(node - "$manifest" <<'NODE'
 const config = require(process.argv[2]);
 process.stdout.write(JSON.stringify({
     required_status_checks: { strict: config.strict, contexts: config.contexts },
-    enforce_admins: false,
+    enforce_admins: true,
     required_pull_request_reviews: {
       dismiss_stale_reviews: true,
       require_code_owner_reviews: false,

@@ -1,0 +1,16 @@
+id: approve_external_email_with_korean_pii_positive
+description: Korean PII sent to an external domain requires approval.
+coverage:
+  policy_id: approve_external_email_with_korean_pii
+  expectation: match
+event:
+  direction: request
+  tool: send_email
+  server_trust: trusted
+  args:
+    to: privacy@example.net
+  detections: [PII.PHONE]
+  risk_score: 80
+expected:
+  action: require_approval
+  matched_policy_ids: [approve_external_email_with_korean_pii]

@@ -1,0 +1,14 @@
+id: author_retest_limited_fetch_injection_match
+coverage:
+  policy_id: author_retest_block_limited_fetch_obfuscated_injection
+  expectation: match
+event:
+  direction: response
+  tool: fetch_url
+  server_trust: limited
+  detections: [INJECTION.OBFUSCATED]
+  risk_score: 90
+  content: Synthetic encoded instruction pattern from a constrained test server.
+expected:
+  action: block
+  matched_policy_ids: [author_retest_block_limited_fetch_obfuscated_injection]

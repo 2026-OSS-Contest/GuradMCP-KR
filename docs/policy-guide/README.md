@@ -91,7 +91,7 @@ glob은 전체 tool 이름에 매칭하며 대소문자를 구분합니다. 정�
 | 형태 | 값 | 의미 |
 | --- | --- | --- |
 | `<name>` | scalar | 정확 일치 |
-| `<name>_regex` | 문자열 | 문자열화된 값에 RE2 호환 정규식 전체/부분 매칭 |
+| `<name>_regex` | 문자열 | 문자열화된 값에 JavaScript 정규식 안전 부분집합으로 전체/부분 매칭(최대 512자, backreference·lookbehind·중첩/교대 그룹 반복 금지) |
 | `<name>_glob` | 문자열 | 문자열화된 값에 glob 매칭 |
 | `<name>_in` | 목록 | 목록 중 하나와 정확 일치 |
 | `<name>_not_in` | 목록 | 어떤 목록 값과도 정확 일치하지 않음 |
@@ -158,6 +158,8 @@ risk_score:
 | `block` | 즉시 차단 | tool을 호출/응답 전달하지 않고 민감 원문 없는 오류 반환 |
 
 정책 action의 강도는 `block > require_approval > warn > mask_then_allow > allow`입니다. `warn`이 `mask_then_allow`보다 강한 순서는 Appendix A v1의 판정 합성 규칙이며, severity와 별개입니다.
+
+이 절은 DSL v1의 규범 계약입니다. 현재 데모 Gateway는 체크인된 팩을 평가해 `allow`/`warn`/`mask_then_allow`/`block`을 적용하며, 승인 서비스가 아직 없으므로 `require_approval`은 upstream을 실행하지 않고 fail-closed 오류를 반환합니다. Approval Card와 영구 감사 로그는 구현 예정이며 데모에서 제공된다고 가정하면 안 됩니다.
 
 ## 5. severity 다섯 단계
 
@@ -259,7 +261,7 @@ policies:
 ## 10. 작성, 검증, 벤치마크와 PR
 
 ```bash
-# 1) YAML/manifest/enum/중복 ID 검사
+# 1) YAML/manifest/enum/중복 ID 검사 + Gateway runtime 정책 번들 생성
 npm run policy:validate
 
 # 2) recall, FPR, 공격 차단율, 10KB p95 검사
@@ -269,14 +271,19 @@ npm run bench
 npm run check
 ```
 
+`npm run policy:validate`는 schema 검증에 성공하면 `packages/gateway/src/policies.generated.ts`를 결정론적으로 다시 생성합니다. 정책팩을 바꾼 기여자는 이 생성 파일 변경도 같은 commit에 포함합니다. CI는 생성 결과가 YAML manifest/policy와 다르면 fail-closed로 실패하며, 생성 파일을 직접 편집해서는 안 됩니다.
+
 정책에는 최소 한 개 매칭 fixture와 한 개 비매칭 fixture를 추가하세요. detector 정책은 합성 양성·음성 데이터를 함께 추가합니다. PR 본문에는 의도된 verdict 변화, benchmark의 recall/FPR/p95/block rate, baseline과의 차이를 적습니다. 정확한 기준과 실패 처리 절차는 [정책팩 벤치마크 게이트](../benchmark-gate.md)에 있습니다.
 
 ### 회귀 fixture 계약
 
-YAML fixture를 `attack-lab/datasets/<기여명>/` 아래에 둡니다. Benchmark Runner는 하위 `.yaml`·`.yml` 파일을 재귀적으로 찾아 각 팩의 `policies/` 아래 정책 전체로 평가합니다. 실제 action 또는 매칭 ID가 기대값과 다르면 실패하며, JSON 리포트에 모든 fixture ID와 결과를 기록합니다.
+정책 회귀용 YAML fixture만 `attack-lab/policy-fixtures/<기여명>/` 아래에 둡니다. 일반 PII/공격 데이터셋은 `attack-lab/datasets/`에 유지하며 fixture로 자동 변환되지 않습니다. Benchmark Runner는 fixture 디렉터리의 `.yaml`·`.yml` 파일을 재귀적으로 찾아 모든 배포 정책으로 평가합니다. 실제 action 또는 매칭 ID가 기대값과 다르거나 schema가 잘못되면 실패하며, JSON 리포트에 모든 fixture ID와 결과를 기록합니다. 배포되는 정책마다 `match` 한 건과 `not_match` 한 건이 모두 있어야 합니다.
 
 ```yaml
 id: unique_synthetic_fixture_id
+coverage:
+  policy_id: your_policy_id
+  expectation: match # 반대 fixture에는 not_match
 event:
   direction: response
   tool: fetch_url
@@ -290,7 +297,7 @@ expected:
   matched_policy_ids: [your_policy_id]
 ```
 
-`id`는 안정적이고 유일해야 하며 enum과 탐지 tag는 이 가이드를 따릅니다. 정상 fixture는 보통 팩의 기본 action과 빈 `matched_policy_ids`를 기대합니다. 두 fixture 모두 합성 내용만 사용하세요. `npm run bench` 결과에서 `metrics.fixturePassRate`가 `1`인지, `metrics.authorFixtures`가 추가 파일 수만큼 늘었는지, `fixtures` 배열에 추가한 각 ID가 `passed: true`로 나오는지 확인합니다.
+`id`는 안정적이고 유일해야 하며 `coverage.policy_id`는 실제 정책 ID를, `coverage.expectation`은 `match` 또는 `not_match`를 사용합니다. `expectation`은 `expected.matched_policy_ids`와 일치해야 합니다. enum과 탐지 tag는 이 가이드를 따릅니다. 정상 fixture는 보통 팩의 기본 action과 빈 `matched_policy_ids`를 기대합니다. 두 fixture 모두 합성 내용만 사용하세요. `npm run bench` 결과에서 `metrics.fixturePassRate`와 `metrics.fixtureCoverageRate`가 모두 `1`인지, `metrics.authorFixtures`가 정책 수의 두 배 이상인지, `fixtures` 배열에 추가한 각 ID가 `passed: true`로 나오는지 확인합니다.
 
 ## 11. 작성자 자가 점검
 

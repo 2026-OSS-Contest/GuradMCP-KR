@@ -9,7 +9,7 @@ Success means opening the console and being ready to run the deterministic demo 
 - Docker Engine 24 or later
 - Docker Compose v2.20 or later (`docker compose version`)
 - Git
-- available local ports: `3000`, `8080`, `5432`, and `6379`
+- available local ports: `3000`–`3003`, `8080`, `5432`, and `6379`
 
 ```bash
 git clone https://github.com/2026-OSS-Contest/GuradMCP-KR.git
@@ -32,7 +32,11 @@ curl --fail --silent http://localhost:3001/health
 curl --fail --silent http://localhost:8080/actuator/health
 ```
 
-When the started services are `healthy` and the health request succeeds, open <http://localhost:3000>. Run a seeded scenario from Demo and confirm that the verdict shows its policy ID, detections, and risk score.
+When the started services are `healthy` and the health request succeeds, open <http://localhost:3000>. Run the deterministic scenario below and confirm that its verdict includes policy IDs, detections, and a risk score.
+
+```bash
+curl --fail --silent --request POST http://localhost:3002/demo/pii
+```
 
 ## Profiles
 
@@ -45,6 +49,8 @@ When the started services are `healthy` and the health request succeeds, open <h
 ## Connect an MCP agent
 
 Replace the MCP endpoint used by the agent with the gateway endpoint. The local demo default is `http://localhost:3001/mcp`. The `default` and `korean-pii` packs are enabled.
+
+This demo verifies policy evaluation plus request/response masking and blocking. Human approval UI and durable audit/replay are not implemented, so `require_approval` returns a fail-closed error without invoking upstream. PostgreSQL and Redis prove startup, seed, and health boundaries but do not yet store verdict history.
 
 ## Stop or reset
 

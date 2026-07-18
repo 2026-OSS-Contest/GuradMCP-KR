@@ -91,7 +91,7 @@ A condition map over the request's JSON argument object. Join a top-level argume
 | Form | Value | Meaning |
 | --- | --- | --- |
 | `<name>` | scalar | exact equality |
-| `<name>_regex` | string | partial/full RE2-compatible match over the stringified value |
+| `<name>_regex` | string | partial/full match over a safe JavaScript-regex subset (512 characters maximum; no backreferences, lookbehind, or repeated nested/alternating groups) |
 | `<name>_glob` | string | glob over the stringified value |
 | `<name>_in` | list | exactly equals one listed value |
 | `<name>_not_in` | list | equals none of the listed values |
@@ -158,6 +158,8 @@ risk_score:
 | `block` | deny immediately | do not call/forward; return an error without sensitive text |
 
 Action precedence is `block > require_approval > warn > mask_then_allow > allow`. The placement of `warn` above `mask_then_allow` is the Appendix A v1 composition rule and is independent of severity.
+
+This section is the normative DSL v1 contract. The current demo gateway evaluates checked-in packs and applies `allow`, `warn`, `mask_then_allow`, and `block`; because no approval service exists yet, `require_approval` returns a fail-closed error without invoking upstream. Approval Cards and durable audit logs are future work and must not be assumed in the demo.
 
 ## 5. Five severities
 
@@ -259,7 +261,7 @@ A duplicate policy `id` anywhere in the extended graph is an error rather than a
 ## 10. Author, validate, benchmark, and submit
 
 ```bash
-# 1) YAML, manifest, enum, and duplicate-ID checks
+# 1) YAML, manifest, enum, duplicate-ID checks, and Gateway runtime-policy generation
 npm run policy:validate
 
 # 2) recall, FPR, attack block rate, and 10KB p95
@@ -269,14 +271,19 @@ npm run bench
 npm run check
 ```
 
+After schema validation succeeds, `npm run policy:validate` deterministically regenerates `packages/gateway/src/policies.generated.ts`. A policy-pack contributor commits that generated change with the YAML change. CI fails closed when the generated output differs from manifests/policies; never edit the generated file by hand.
+
 Add at least one matching and one non-matching fixture. Add synthetic positive and negative data for a detector policy. In the pull request, report intended verdict changes, recall/FPR/p95/block rate, and baseline differences. The [policy-pack benchmark gate](../benchmark-gate.en.md) defines thresholds and failure handling.
 
 ### Regression-fixture contract
 
-Put YAML fixtures anywhere below `attack-lab/datasets/<contribution>/`. The benchmark recursively discovers `.yaml` and `.yml` files, evaluates them against every policy listed under a pack's `policies/` directory, fails if actual action or matched IDs differ, and lists every fixture ID and result in its JSON report.
+Put only policy-regression YAML fixtures below `attack-lab/policy-fixtures/<contribution>/`. Keep general PII and attack datasets under `attack-lab/datasets/`; they are not coerced into fixtures. The benchmark recursively discovers `.yaml` and `.yml` files in the fixture directory, evaluates them against every shipped policy, fails on schema errors or verdict differences, and lists every fixture ID and result in its JSON report. Every shipped policy needs both one `match` and one `not_match` fixture.
 
 ```yaml
 id: unique_synthetic_fixture_id
+coverage:
+  policy_id: your_policy_id
+  expectation: match # use not_match in the opposite fixture
 event:
   direction: response
   tool: fetch_url
@@ -290,7 +297,7 @@ expected:
   matched_policy_ids: [your_policy_id]
 ```
 
-Use a stable, unique `id`; all enum and tag values follow this guide. A benign fixture normally expects the pack default action and an empty `matched_policy_ids` list. Both fixtures must use synthetic content. In `npm run bench` output, confirm `metrics.fixturePassRate` is `1`, `metrics.authorFixtures` increased by your file count, and the `fixtures` array names each added ID with `passed: true`.
+Use a stable, unique `id`. `coverage.policy_id` names the actual policy and `coverage.expectation` is `match` or `not_match`; it must agree with `expected.matched_policy_ids`. All enum and tag values follow this guide. A benign fixture normally expects the pack default action and an empty `matched_policy_ids` list. Both fixtures must use synthetic content. In `npm run bench` output, confirm both `metrics.fixturePassRate` and `metrics.fixtureCoverageRate` are `1`, `metrics.authorFixtures` is at least twice `metrics.policyCount`, and the `fixtures` array names each added ID with `passed: true`.
 
 ## 11. Author checklist
 
