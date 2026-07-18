@@ -1,0 +1,42 @@
+name: 정책 규칙 기여 / Policy rule contribution
+description: 코드 없이 작은 YAML 정책 한 건을 제안합니다. Propose one small YAML policy without application code.
+title: "[Policy] "
+labels: ["good first issue", "policy", "contributions welcome"]
+body:
+  - type: input
+    id: threat
+    attributes:
+      label: 위협과 정책 목적 / Threat and purpose
+      placeholder: "T-04: untrusted 서버의 tool description 인젝션 차단"
+    validations:
+      required: true
+  - type: input
+    id: pack
+    attributes:
+      label: 대상 정책팩 / Target pack
+      placeholder: default
+    validations:
+      required: true
+  - type: textarea
+    id: match
+    attributes:
+      label: Match와 action 초안 / Match and action draft
+      render: yaml
+    validations:
+      required: true
+  - type: textarea
+    id: fixtures
+    attributes:
+      label: 양성·음성 fixture / Positive and negative fixtures
+      description: 합성 데이터만 사용하세요. Use synthetic data only.
+    validations:
+      required: true
+  - type: checkboxes
+    id: done
+    attributes:
+      label: 완료 기준 / Definition of done
+      options:
+        - label: 정책 가이드를 읽었습니다. / I read the Policy Authoring Guide.
+          required: true
+        - label: policy validation과 benchmark를 실행할 수 있습니다. / I can run policy validation and the benchmark.
+          required: true

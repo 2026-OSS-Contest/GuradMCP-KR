@@ -1,0 +1,14 @@
+{
+  "policyBenchmark": {
+    "recallPercent": {
+      "minimum": 90
+    },
+    "falsePositiveRatePercent": {
+      "maximum": 5
+    },
+    "p95LatencyMs": {
+      "maximum": 50,
+      "payloadBytes": 10240
+    }
+  }
+}

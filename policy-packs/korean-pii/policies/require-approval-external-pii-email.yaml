@@ -1,0 +1,23 @@
+# External-disclosure example: all match axes use AND.
+id: approve_external_email_with_korean_pii
+pack: korean-pii
+version: 1
+description: Require approval before emailing Korean PII outside the organization
+priority: 180 # Evaluates before the broad response masker.
+match:
+  direction: request
+  tool: send_email
+  server_trust: any
+  args:
+    to_not_domain: [company.co.kr]
+  detections:
+    any_of: [PII]
+  risk_score:
+    gte: 70
+action: require_approval
+severity: high
+approval:
+  timeout_seconds: 120
+  on_timeout: block
+  allow_masked_approval: true
+message: Sending personal data outside the organization requires approval.

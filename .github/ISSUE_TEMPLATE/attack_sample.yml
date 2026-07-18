@@ -1,0 +1,38 @@
+name: 공격·정상 샘플 기여 / Attack or benign sample contribution
+description: Attack Lab에 작은 회귀 데이터 한 쌍을 제안합니다. Propose a small regression pair for Attack Lab.
+title: "[Attack Lab] "
+labels: ["good first issue", "attack-lab", "contributions welcome"]
+body:
+  - type: dropdown
+    id: threat
+    attributes:
+      label: 위협 ID / Threat ID
+      options: ["T-01", "T-02", "T-03", "T-04", "T-05", "T-06", "T-07", "T-08"]
+    validations:
+      required: true
+  - type: textarea
+    id: attack
+    attributes:
+      label: 합성 공격 샘플 / Synthetic attack sample
+    validations:
+      required: true
+  - type: textarea
+    id: benign
+    attributes:
+      label: 정상 회귀 샘플 / Benign regression sample
+    validations:
+      required: true
+  - type: dropdown
+    id: verdict
+    attributes:
+      label: 기대 verdict / Expected verdict
+      options: ["allow", "warn", "mask_then_allow", "require_approval", "block"]
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: 안전 확인 / Safety
+      options:
+        - label: 샘플은 프로젝트 테스트 목적의 합성 데이터입니다. / Samples are synthetic and only for project testing.
+          required: true

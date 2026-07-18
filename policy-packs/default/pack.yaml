@@ -1,0 +1,12 @@
+# Base pack: no parent pack is required.
+name: default
+version: 1.0.0
+description: Baseline protection for risky files, secrets, and prompt injection
+dsl_version: 1
+default_action: allow
+evaluation_strategy: severity-max
+extends: []
+policies:
+  - policies/block-env-file-read.yaml
+  - policies/block-injection-response.yaml
+  - policies/require-approval-external-secret-email.yaml

@@ -1,0 +1,39 @@
+name: 한국형 PII 패턴 기여 / Korean PII pattern contribution
+description: 합성 양성·음성 샘플과 검증 규칙을 제안합니다. Propose synthetic positive/negative samples and validation.
+title: "[PII] "
+labels: ["good first issue", "pii", "contributions welcome"]
+body:
+  - type: input
+    id: type
+    attributes:
+      label: PII 유형 / PII type
+      placeholder: BIZ_NO
+    validations:
+      required: true
+  - type: textarea
+    id: format
+    attributes:
+      label: 형식과 검증 / Format and validation
+      description: 체크섬, 길이, 문맥 조건을 설명하세요. Explain checksum, length, and context.
+    validations:
+      required: true
+  - type: textarea
+    id: samples
+    attributes:
+      label: 합성 양성·음성 샘플 / Synthetic positive and negative samples
+    validations:
+      required: true
+  - type: input
+    id: mask
+    attributes:
+      label: 기대 마스킹 태그 / Expected masking tag
+      placeholder: "[BIZ_NO]"
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 개인정보 확인 / Privacy
+      options:
+        - label: 실제 사람이나 조직을 식별하는 값이 아닙니다. / No value identifies a real person or organization.
+          required: true

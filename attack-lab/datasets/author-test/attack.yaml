@@ -1,0 +1,14 @@
+id: author_test_obfuscated_injection_attack
+description: Synthetic untrusted fetch response with a high-risk obfuscated injection detection
+event:
+  direction: response
+  tool: fetch_url
+  server_trust: untrusted
+  detections:
+    - INJECTION.OBFUSCATED
+  risk_score: 85
+  content: Synthetic response containing encoded instructions to ignore prior safeguards.
+expected:
+  action: block
+  matched_policy_ids:
+    - author_test_block_obfuscated_injection_fetch_response

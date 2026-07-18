@@ -1,0 +1,14 @@
+node_modules/
+.next/
+dist/
+build/
+.gradle/
+coverage/
+playwright-report/
+test-results/
+artifacts/
+reports/*.json
+reports/*.html
+.env
+*.log
+.DS_Store

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 취약점 비공개 제보 / Private vulnerability report
+    url: https://github.com/2026-OSS-Contest/GuradMCP-KR/security/advisories/new
+    about: 보안 취약점은 공개 Issue 대신 이 비공개 채널을 사용하세요. Use this private channel instead of a public issue.
+  - name: 정책 작성 가이드 / Policy Authoring Guide
+    url: https://github.com/2026-OSS-Contest/GuradMCP-KR/tree/main/docs/policy-guide
+    about: 새 정책을 작성하기 전에 DSL v1과 벤치마크 게이트를 확인하세요. Read DSL v1 and the benchmark gate before authoring a policy.

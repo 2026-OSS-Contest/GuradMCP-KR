@@ -1,0 +1,62 @@
+name: Dependency licenses
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 18 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: licenses-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  NODE_VERSION: "22"
+  JAVA_VERSION: "21"
+
+jobs:
+  report:
+    name: required / licenses
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Install npm dependencies
+        run: npm ci
+      - name: Resolve JVM dependencies
+        working-directory: services/control-plane
+        run: |
+          mkdir -p ../../artifacts/licenses
+          ./gradlew dependencies --no-daemon > ../../artifacts/licenses/gradle-dependencies.txt
+      - name: Generate dependency license inventory
+        run: >-
+          node scripts/ci/generate-license-report.mjs
+          --output artifacts/licenses
+          --gradle-dependencies artifacts/licenses/gradle-dependencies.txt
+      - name: Upload dependency license report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-licenses-${{ github.run_id }}
+          path: artifacts/licenses/
+          if-no-files-found: error
+          retention-days: 90

@@ -1,0 +1,12 @@
+# Child pack: first load the compatible default v1 pack.
+name: korean-pii
+version: 1.0.0
+description: Korean PII masking and external-disclosure controls
+dsl_version: 1
+default_action: allow
+evaluation_strategy: severity-max
+extends:
+  - default@^1.0.0
+policies:
+  - policies/mask-korean-pii-response.yaml
+  - policies/require-approval-external-pii-email.yaml

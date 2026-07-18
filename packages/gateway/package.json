@@ -1,0 +1,13 @@
+{
+  "name": "@guardmcp/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./dist/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts"
+  }
+}

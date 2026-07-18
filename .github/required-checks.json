@@ -1,0 +1,10 @@
+{
+  "branch": "main",
+  "strict": true,
+  "contexts": [
+    "required / ci",
+    "required / policy-benchmark",
+    "required / licenses",
+    "required / containers"
+  ]
+}

@@ -1,0 +1,14 @@
+.git
+.github
+.omx
+.env
+node_modules
+**/node_modules
+**/build
+**/dist
+**/.next
+coverage
+reports
+*.log
+.DS_Store
+

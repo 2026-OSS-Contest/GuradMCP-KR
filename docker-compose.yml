@@ -1,0 +1,331 @@
+name: ${COMPOSE_PROJECT_NAME:-guardmcp-kr}
+
+x-service-defaults: &service-defaults
+  init: true
+  restart: unless-stopped
+  networks:
+    - guardmcp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+  tmpfs:
+    - /tmp:size=32m,mode=1777
+
+x-node-healthcheck: &node-healthcheck
+  interval: 5s
+  timeout: 3s
+  retries: 24
+  start_period: 5s
+
+x-demo-agent: &demo-agent
+  <<: *service-defaults
+  build:
+    context: .
+    dockerfile: apps/demo-agent/Dockerfile
+    args:
+      GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
+  image: ${GUARDMCP_REGISTRY:-ghcr.io/2026-oss-contest}/guardmcp-demo-agent:${GUARDMCP_IMAGE_TAG:-local}
+  environment:
+    PORT: "3002"
+    SERVICE_NAME: demo-agent
+    GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
+    GATEWAY_URL: http://gateway:3001
+    DEMO_MCP_TOOLS_URL: http://demo-mcp-tools:3003
+    DEPENDENCY_URLS: http://gateway:3001/health,http://demo-mcp-tools:3003/health
+  healthcheck:
+    <<: *node-healthcheck
+    test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3002/health"]
+
+x-demo-mcp-tools: &demo-mcp-tools
+  <<: *service-defaults
+  build:
+    context: .
+    dockerfile: apps/demo-mcp-tools/Dockerfile
+    args:
+      GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
+  image: ${GUARDMCP_REGISTRY:-ghcr.io/2026-oss-contest}/guardmcp-demo-mcp-tools:${GUARDMCP_IMAGE_TAG:-local}
+  environment:
+    PORT: "3003"
+    SERVICE_NAME: demo-mcp-tools
+    GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
+    DEMO_SEED_ID: guardmcp-demo-v1
+  healthcheck:
+    <<: *node-healthcheck
+    test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3003/health"]
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-guardmcp}
+      POSTGRES_USER: ${POSTGRES_USER:-guardmcp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-guardmcp-local-only}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - guardmcp
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+
+  postgres-seed:
+    image: postgres:16-alpine
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB:-guardmcp}
+      PGUSER: ${POSTGRES_USER:-guardmcp}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-guardmcp-local-only}
+    command: ["psql", "--set", "ON_ERROR_STOP=1", "--file", "/seed/001-demo-seed.sql"]
+    volumes:
+      - ./infra/postgres/001-demo-seed.sql:/seed/001-demo-seed.sql:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - guardmcp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-guardmcp-local-only}
+    command:
+      - sh
+      - -ec
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - guardmcp
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+
+  redis-seed:
+    image: redis:7-alpine
+    restart: "no"
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:-guardmcp-local-only}
+    entrypoint: ["sh", "/seed/001-demo-seed.sh"]
+    volumes:
+      - ./infra/redis/001-demo-seed.sh:/seed/001-demo-seed.sh:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - guardmcp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+
+  gateway:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: packages/gateway/Dockerfile
+      args:
+        GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
+    image: ${GUARDMCP_REGISTRY:-ghcr.io/2026-oss-contest}/guardmcp-gateway:${GUARDMCP_IMAGE_TAG:-local}
+    environment:
+      PORT: "3001"
+      SERVICE_NAME: gateway
+      GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-guardmcp}:${POSTGRES_PASSWORD:-guardmcp-local-only}@postgres:5432/${POSTGRES_DB:-guardmcp}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-guardmcp-local-only}@redis:6379/0
+      CONTROL_PLANE_URL: http://control-plane:8080
+      DEMO_MCP_TOOLS_URL: http://demo-mcp-tools:3003
+      DEPENDENCY_TCP: postgres:5432,redis:6379
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-3001}:3001"
+    depends_on:
+      postgres-seed:
+        condition: service_completed_successfully
+      redis-seed:
+        condition: service_completed_successfully
+    healthcheck:
+      <<: *node-healthcheck
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/health"]
+
+  control-plane:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: services/control-plane/Dockerfile
+      args:
+        GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
+    image: ${GUARDMCP_REGISTRY:-ghcr.io/2026-oss-contest}/guardmcp-control-plane:${GUARDMCP_IMAGE_TAG:-local}
+    environment:
+      PORT: "8080"
+      SERVER_PORT: "8080"
+      SERVICE_NAME: control-plane
+      GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
+      SPRING_PROFILES_ACTIVE: compose
+      DATABASE_URL: postgresql://${POSTGRES_USER:-guardmcp}:${POSTGRES_PASSWORD:-guardmcp-local-only}@postgres:5432/${POSTGRES_DB:-guardmcp}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-guardmcp}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-guardmcp}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-guardmcp-local-only}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-guardmcp-local-only}@redis:6379/0
+      DEPENDENCY_TCP: postgres:5432,redis:6379
+    ports:
+      - "127.0.0.1:${CONTROL_PLANE_PORT:-8080}:8080"
+    depends_on:
+      postgres-seed:
+        condition: service_completed_successfully
+      redis-seed:
+        condition: service_completed_successfully
+    healthcheck:
+      <<: *node-healthcheck
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/actuator/health"]
+
+  console:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: apps/console/Dockerfile
+      args:
+        GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
+    image: ${GUARDMCP_REGISTRY:-ghcr.io/2026-oss-contest}/guardmcp-console:${GUARDMCP_IMAGE_TAG:-local}
+    environment:
+      PORT: "3000"
+      SERVICE_NAME: console
+      GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
+      NODE_ENV: production
+      GATEWAY_URL: http://gateway:3001
+      CONTROL_PLANE_URL: http://control-plane:8080
+      DEPENDENCY_URLS: http://gateway:3001/health,http://control-plane:8080/actuator/health
+    ports:
+      - "127.0.0.1:${CONSOLE_PORT:-3000}:3000"
+    depends_on:
+      gateway:
+        condition: service_healthy
+      control-plane:
+        condition: service_healthy
+    healthcheck:
+      <<: *node-healthcheck
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+
+  # Demo mode: immutable images and deterministic scenarios.
+  demo-mcp-tools:
+    <<: *demo-mcp-tools
+    profiles: ["demo"]
+    environment:
+      PORT: "3003"
+      SERVICE_NAME: demo-mcp-tools
+      APP_MODE: demo
+      GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
+      DEMO_SEED_ID: guardmcp-demo-v1
+    ports:
+      - "127.0.0.1:${DEMO_MCP_TOOLS_PORT:-3003}:3003"
+
+  demo-agent:
+    <<: *demo-agent
+    profiles: ["demo"]
+    environment:
+      PORT: "3002"
+      SERVICE_NAME: demo-agent
+      APP_MODE: demo
+      GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
+      GATEWAY_URL: http://gateway:3001
+      DEMO_MCP_TOOLS_URL: http://demo-mcp-tools:3003
+      DEPENDENCY_URLS: http://gateway:3001/health,http://demo-mcp-tools:3003/health
+    ports:
+      - "127.0.0.1:${DEMO_AGENT_PORT:-3002}:3002"
+    depends_on:
+      gateway:
+        condition: service_healthy
+      demo-mcp-tools:
+        condition: service_healthy
+
+  # Development mode is deliberately a separate, mutually-exclusive profile.
+  # It has the same stable host ports while exposing APP_MODE=development.
+  demo-mcp-tools-dev:
+    <<: *demo-mcp-tools
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: apps/demo-mcp-tools/Dockerfile
+      target: development
+      args:
+        GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
+    environment:
+      PORT: "3003"
+      SERVICE_NAME: demo-mcp-tools
+      APP_MODE: development
+      GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
+      DEMO_SEED_ID: guardmcp-demo-v1
+    ports:
+      - "127.0.0.1:${DEMO_MCP_TOOLS_PORT:-3003}:3003"
+    volumes:
+      - ./apps/demo-mcp-tools/src:/workspace/apps/demo-mcp-tools/src:ro
+    networks:
+      guardmcp:
+        aliases:
+          - demo-mcp-tools
+
+  demo-agent-dev:
+    <<: *demo-agent
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: apps/demo-agent/Dockerfile
+      target: development
+      args:
+        GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
+    environment:
+      PORT: "3002"
+      SERVICE_NAME: demo-agent
+      APP_MODE: development
+      GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
+      GATEWAY_URL: http://gateway:3001
+      DEMO_MCP_TOOLS_URL: http://demo-mcp-tools:3003
+      DEPENDENCY_URLS: http://gateway:3001/health,http://demo-mcp-tools:3003/health
+    ports:
+      - "127.0.0.1:${DEMO_AGENT_PORT:-3002}:3002"
+    volumes:
+      - ./apps/demo-agent/src:/workspace/apps/demo-agent/src:ro
+    depends_on:
+      gateway:
+        condition: service_healthy
+      demo-mcp-tools-dev:
+        condition: service_healthy
+    networks:
+      guardmcp:
+        aliases:
+          - demo-agent
+
+networks:
+  guardmcp:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:

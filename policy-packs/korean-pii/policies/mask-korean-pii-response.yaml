@@ -1,0 +1,16 @@
+# Annotated Korean PII example: mask detector spans before the Agent sees them.
+id: mask_korean_pii_response
+pack: korean-pii
+version: 1
+description: Mask Korean PII detected in MCP tool responses
+priority: 300
+match:
+  direction: response
+  tool: '*' # Applies to the originating tool name.
+  server_trust: any
+  detections:
+    # Parent tag PII matches PHONE, RRN_LIKE, BANK_ACCOUNT, and other PII.* tags.
+    any_of: [PII]
+action: mask_then_allow
+severity: high
+message: Personal-data spans were masked before the tool response was delivered.

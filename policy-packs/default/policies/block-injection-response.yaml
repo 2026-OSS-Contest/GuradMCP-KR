@@ -1,0 +1,17 @@
+# Response-side example: detection tags + trust boundary + score threshold.
+id: block_untrusted_injection_response
+pack: default
+version: 1
+description: Block high-risk prompt injection returned by an untrusted MCP server
+priority: 120
+match:
+  direction: response # External data entering the Agent.
+  tool: '*' # Any originating tool; the other axes keep this match narrow.
+  server_trust: untrusted
+  detections:
+    any_of: [INJECTION, INJECTION.INDIRECT, INJECTION.OBFUSCATED]
+  risk_score:
+    gte: 90
+action: block
+severity: critical
+message: Tool output was blocked because it matched a high-risk injection policy.

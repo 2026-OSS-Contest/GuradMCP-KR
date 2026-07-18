@@ -1,0 +1,40 @@
+name: 버그 신고 / Bug report
+description: 재현 가능한 제품 또는 문서 오류를 신고합니다. Report a reproducible product or documentation bug.
+title: "[Bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: "보안 취약점은 공개하지 말고 Security의 비공개 채널을 사용하세요. Do not disclose vulnerabilities here."
+  - type: textarea
+    id: summary
+    attributes:
+      label: 현상 / What happened
+      description: 기대 결과와 실제 결과를 함께 적어 주세요. Include expected and actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 재현 절차 / Reproduction
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 버전 또는 commit / Version or commit
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 환경 / Environment
+      description: OS, CPU architecture, Docker/Node/JDK versions
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: 안전 확인 / Safety
+      options:
+        - label: 실제 개인정보·유효한 비밀값을 제거했습니다. / I removed real personal data and live secrets.
+          required: true

@@ -1,0 +1,8 @@
+name: author-test
+version: 1.0.0
+description: External author-test policy pack
+dsl_version: 1
+default_action: allow
+evaluation_strategy: severity-max
+policies:
+  - policies/block-obfuscated-injection-fetch-response.yaml

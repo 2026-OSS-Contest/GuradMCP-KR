@@ -1,0 +1,17 @@
+# Annotated Appendix A v1 example: request + exact tool + argument regex.
+id: block_env_file_read
+pack: default
+version: 1
+description: Block reads of credential-bearing files
+priority: 100 # Lower numbers evaluate first.
+match:
+  direction: request # Inspect Agent -> Tool arguments.
+  tool: read_file # Exact match; read_* would be a glob.
+  server_trust: any # Sensitive paths are forbidden regardless of server trust.
+  args:
+    # Single quotes keep regex backslashes literal in YAML.
+    path_regex: '(^|/)(\.env(\..*)?|id_(rsa|ed25519)|credentials(\.json)?)$'
+action: block
+severity: critical
+# Never echo the matched path or source content in a block message.
+message: Credential-file access was blocked by policy.

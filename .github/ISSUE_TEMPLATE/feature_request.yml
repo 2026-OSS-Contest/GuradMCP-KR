@@ -1,0 +1,35 @@
+name: 기능 제안 / Feature request
+description: 사용자 문제와 검증 가능한 결과를 제안합니다. Propose a user problem and verifiable outcome.
+title: "[Feature] "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 해결할 문제 / Problem
+      description: 해결책보다 먼저 사용자와 현재 불편을 설명하세요. Describe the user and current pain before the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 기대 결과 / Desired outcome
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 대안 / Alternatives
+  - type: dropdown
+    id: area
+    attributes:
+      label: 영역 / Area
+      options:
+        - Gateway
+        - Control Plane
+        - Console
+        - Policy pack
+        - Detector or dataset
+        - Documentation
+    validations:
+      required: true

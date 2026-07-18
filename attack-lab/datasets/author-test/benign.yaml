@@ -1,0 +1,12 @@
+id: author_test_benign_fetch_response
+description: Synthetic untrusted fetch response below the policy risk threshold and without injection detection
+event:
+  direction: response
+  tool: fetch_url
+  server_trust: untrusted
+  detections: []
+  risk_score: 20
+  content: Synthetic public weather summary with no instructions or sensitive data.
+expected:
+  action: allow
+  matched_policy_ids: []

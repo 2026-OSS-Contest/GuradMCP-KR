@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: guardmcp-control-plane
+  threads:
+    virtual:
+      enabled: true
+server:
+  port: ${PORT:8080}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true

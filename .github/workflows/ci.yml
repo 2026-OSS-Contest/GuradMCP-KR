@@ -1,0 +1,236 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  NODE_VERSION: "22"
+  JAVA_VERSION: "21"
+
+jobs:
+  workflow-lint:
+    name: quality / workflow-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Validate GitHub Actions workflows
+        uses: docker://rhysd/actionlint:1.7.7
+        with:
+          args: -color
+
+  quality:
+    name: quality / lint-typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type-check
+        run: npm run typecheck
+      - name: Test quality-gate contract
+        run: node scripts/ci/test-quality-gates.mjs
+
+  vitest:
+    name: test / vitest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run package and gateway tests
+        run: npm test
+      - name: Upload Vitest coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-coverage-${{ github.run_id }}
+          path: coverage/
+          if-no-files-found: warn
+          retention-days: 14
+
+  junit-kotest:
+    name: test / junit5-kotest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: services/control-plane
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Run JUnit 5 and Kotest suites
+        run: ./gradlew test --no-daemon
+      - name: Upload JVM test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-kotest-results-${{ github.run_id }}
+          path: |
+            services/control-plane/build/reports/tests/
+            services/control-plane/build/test-results/
+          if-no-files-found: warn
+          retention-days: 14
+
+  playwright:
+    name: test / playwright
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser end-to-end tests
+        run: npm run test:e2e
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 14
+
+  gmcp-30-compose:
+    name: test / gmcp-30-compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GUARDMCP_PROFILE: demo
+      GMCP30_REPORT_PATH: ${{ github.workspace }}/reports/gmcp-30-readiness.json
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Initialize GMCP-30 evidence
+        run: |
+          mkdir -p reports
+          cat > "$GMCP30_REPORT_PATH" <<'JSON'
+          {
+            "requirement": "GMCP-30",
+            "status": "fail",
+            "profile": "demo",
+            "timeoutSeconds": 300,
+            "failedService": "workflow-preflight"
+          }
+          JSON
+      - name: Validate Compose profiles
+        run: scripts/compose-verify.sh
+      - name: Start demo stack and enforce five-minute readiness
+        run: |
+          mkdir -p reports
+          started_at="$(date +%s)"
+          set +e
+          timeout --signal=TERM 300 scripts/compose-up.sh demo
+          startup_status=$?
+          set -e
+          elapsed=$(( $(date +%s) - started_at ))
+
+          node - "$GMCP30_REPORT_PATH" "$startup_status" "$elapsed" <<'NODE'
+          const fs = require("node:fs");
+          const [reportPath, rawStatus, rawElapsed] = process.argv.slice(2);
+          const startupStatus = Number(rawStatus);
+          const totalElapsedSeconds = Number(rawElapsed);
+          let report = {};
+          try { report = JSON.parse(fs.readFileSync(reportPath, "utf8")); } catch {}
+          report.requirement = "GMCP-30";
+          report.profile = "demo";
+          report.timeoutSeconds = 300;
+          report.totalElapsedSeconds = totalElapsedSeconds;
+          report.status = startupStatus === 0 && totalElapsedSeconds <= 300 ? "pass" : "fail";
+          if (startupStatus === 0) report.failedService = "";
+          else if (!report.failedService || report.failedService === "workflow-preflight") {
+            report.failedService = startupStatus === 124 ? "startup-timeout" : "compose-startup";
+          }
+          report.completedAt ||= new Date().toISOString();
+          fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+          NODE
+
+          test "$startup_status" -eq 0
+          test "$elapsed" -le 300
+      - name: Collect Compose diagnostics
+        if: always()
+        run: |
+          docker compose --profile demo ps --all > reports/gmcp-30-compose-ps.txt 2>&1 || true
+          docker compose --profile demo logs --no-color > reports/gmcp-30-compose.log 2>&1 || true
+      - name: Upload GMCP-30 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gmcp-30-readiness-${{ github.run_id }}
+          path: |
+            reports/gmcp-30-readiness.json
+            reports/gmcp-30-compose-ps.txt
+            reports/gmcp-30-compose.log
+          if-no-files-found: error
+          retention-days: 30
+      - name: Stop demo stack
+        if: always()
+        run: scripts/compose-down.sh --volumes
+
+  required:
+    name: required / ci
+    if: always()
+    needs: [workflow-lint, quality, vitest, junit-kotest, playwright, gmcp-30-compose]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Enforce all CI layers
+        env:
+          WORKFLOW_LINT_RESULT: ${{ needs.workflow-lint.result }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          VITEST_RESULT: ${{ needs.vitest.result }}
+          JVM_RESULT: ${{ needs.junit-kotest.result }}
+          PLAYWRIGHT_RESULT: ${{ needs.playwright.result }}
+          GMCP30_RESULT: ${{ needs.gmcp-30-compose.result }}
+        run: |
+          for result in "$WORKFLOW_LINT_RESULT" "$QUALITY_RESULT" "$VITEST_RESULT" "$JVM_RESULT" "$PLAYWRIGHT_RESULT" "$GMCP30_RESULT"; do
+            test "$result" = success || exit 1
+          done

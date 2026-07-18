@@ -1,0 +1,84 @@
+name: Policy benchmark
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 18 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: policy-benchmark-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  NODE_VERSION: "22"
+
+jobs:
+  benchmark:
+    name: required / policy-benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine whether the benchmark is required
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          required=true
+          if [ "$EVENT_NAME" = pull_request ]; then
+            required=false
+            if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+              echo "Base commit is unavailable; running the gate fail-closed."
+              required=true
+            elif git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -Eq \
+              '^(policy-packs/|attack-lab/(benchmark|datasets|scenarios)/|packages/(gateway|policy-engine|pii-detector-kr|secret-detector|injection-detector)/|scripts/(validate-policies\.ts|ci/(run-policy-benchmark|validate-policy-benchmark)\.mjs|ci/quality-gates\.json)|package(-lock)?\.json$)'; then
+              required=true
+            fi
+          fi
+          echo "required=$required" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        if: steps.scope.outputs.required == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        if: steps.scope.outputs.required == 'true'
+        run: npm ci
+      - name: Validate policy packs
+        if: steps.scope.outputs.required == 'true'
+        run: npm run policy:validate
+      - name: Run benchmark and enforce quality thresholds
+        if: steps.scope.outputs.required == 'true'
+        run: >-
+          node scripts/ci/run-policy-benchmark.mjs
+          --report artifacts/benchmark/metrics.json
+          --summary artifacts/benchmark/summary.md
+      - name: Explain no-op check
+        if: steps.scope.outputs.required != 'true'
+        run: |
+          echo "## Policy benchmark" >> "$GITHUB_STEP_SUMMARY"
+          echo "No policy, dataset, detector, gateway, or benchmark change was detected." >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload benchmark evidence
+        if: always() && steps.scope.outputs.required == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: policy-benchmark-${{ github.run_id }}
+          path: artifacts/benchmark/
+          if-no-files-found: error
+          retention-days: 30

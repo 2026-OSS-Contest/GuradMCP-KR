@@ -1,0 +1,310 @@
+# 정책 작성 가이드 — DSL v1
+
+[English](README.en.md) | **한국어**
+
+이 문서는 Appendix A 정책 DSL v1의 작성자용 레퍼런스입니다. 처음 읽는 사람도 이 문서와 예제만으로 정책 한 건을 만들고 검증할 수 있도록, 정책 구조부터 PR 벤치마크 게이트까지 한 흐름으로 설명합니다.
+
+## 1. 10분 안에 첫 정책 만들기
+
+1. `policy-packs/default/policies/block-env-file-read.yaml`을 같은 팩 안에서 복사합니다.
+2. 파일명과 `id`를 바꾸고, 아래 예제처럼 `match`를 가장 좁게 작성합니다.
+3. `npm run policy:validate`로 구조를 검사합니다.
+4. 공격/정상 fixture를 추가한 뒤 `npm run bench`로 회귀가 없는지 확인합니다.
+
+```yaml
+id: block_private_key_read
+pack: default
+version: 1
+description: private key 파일 읽기 차단
+priority: 110
+match:
+  direction: request
+  tool: read_file
+  server_trust: any
+  args:
+    path_regex: '(^|/)(id_(rsa|ed25519)|[^/]+\.pem)$'
+action: block
+severity: critical
+message: 비밀 키 파일 접근이 정책에 의해 차단되었습니다.
+```
+
+파일을 `policy-packs/default/policies/block-private-key-read.yaml`로 저장합니다. `id`는 전체 활성 정책 그래프에서 유일해야 하며, 예제 값은 실제 비밀값이나 개인정보를 포함하면 안 됩니다.
+
+## 2. 정책 문서 전체 구조
+
+| 필드 | 필수 | 타입/값 | 의미 |
+| --- | --- | --- | --- |
+| `id` | 예 | snake_case 문자열 | 감사 로그와 UI에 기록되는 안정적인 전역 식별자 |
+| `pack` | 예 | 팩 이름 | 소속 manifest의 `name`과 일치 |
+| `version` | 예 | `1` | DSL major version |
+| `description` | 권장 | 문자열 | 사람이 이해할 정책 목적 |
+| `priority` | 예 | 0 이상의 정수 | 낮을수록 먼저 평가 |
+| `match` | 예 | 객체 | 아래 여섯 조건 축. 서로 다른 축은 AND |
+| `action` | 예 | 다섯 값 중 하나 | 매칭 시 후보 판정 |
+| `severity` | 예 | 다섯 값 중 하나 | 사건의 보안 중요도 |
+| `message` | 권장 | 문자열 | 민감 원문 없는 사용자 메시지 |
+| `approval` | 조건부 | 객체 | `require_approval`일 때 필수 |
+
+알 수 없는 필드, 잘못된 enum, 빈 `match`, 중복 `id`, 팩 이름 불일치는 validation 오류입니다. 정규식은 YAML single quote로 감싸 역슬래시 해석을 피하는 것을 권장합니다.
+
+## 3. `match` 여섯 축
+
+한 정책의 서로 다른 축은 **모두 만족(AND)** 해야 합니다. 같은 축의 `any_of` 또는 목록은 명시된 OR 규칙을 사용합니다. 특정 축을 생략하면 그 축은 제한하지 않습니다. 단, 의도를 분명히 하기 위해 `direction`, `tool`, `server_trust`를 명시하는 편을 권장합니다.
+
+### 3.1 `direction`
+
+| 값 | 검사 대상 |
+| --- | --- |
+| `request` | Agent에서 MCP Tool로 나가는 호출과 인자 |
+| `response` | MCP Tool에서 Agent로 들어오는 결과와 description |
+| `any` | 양방향 |
+
+위험 도구/대상은 보통 `request`, PII 유출과 간접 인젝션은 보통 `response`에서 평가합니다. 양방향이 꼭 필요한 경우가 아니면 `any`를 피하면 오탐을 줄일 수 있습니다.
+
+### 3.2 `tool`
+
+문자열 하나이며 정확 일치 또는 glob(`*`, `?`)입니다.
+
+```yaml
+tool: send_email   # exact
+tool: read_*       # glob
+tool: '*'          # 모든 tool; 좁은 다른 조건과 함께 사용
+```
+
+glob은 전체 tool 이름에 매칭하며 대소문자를 구분합니다. 정규식은 허용하지 않습니다. tool 이름이 없는 response에서는 원래 request의 tool 이름을 사용합니다.
+
+### 3.3 `server_trust`
+
+| 값 | 의미 |
+| --- | --- |
+| `trusted` | 소유·운영과 정의 snapshot이 검증된 서버 |
+| `limited` | 일부 사용은 승인됐지만 권한/데이터 범위가 제한된 서버 |
+| `untrusted` | 외부 또는 검증되지 않은 서버 |
+| `any` | 모든 신뢰 등급 |
+
+서버를 찾을 수 없거나 trust 설정이 없으면 fail-safe로 `untrusted`로 정규화합니다. 정책의 `any`는 이 분류와 무관하게 매칭합니다.
+
+### 3.4 `args`
+
+요청 인자(JSON object)에 대한 조건 맵입니다. 키는 최상위 인자 이름과 연산자를 `_`로 연결합니다. v1 연산자는 다음과 같습니다.
+
+| 형태 | 값 | 의미 |
+| --- | --- | --- |
+| `<name>` | scalar | 정확 일치 |
+| `<name>_regex` | 문자열 | 문자열화된 값에 RE2 호환 정규식 전체/부분 매칭 |
+| `<name>_glob` | 문자열 | 문자열화된 값에 glob 매칭 |
+| `<name>_in` | 목록 | 목록 중 하나와 정확 일치 |
+| `<name>_not_in` | 목록 | 어떤 목록 값과도 정확 일치하지 않음 |
+| `<name>_domain` | 도메인 목록 | 이메일/URL host가 허용 도메인과 같거나 하위 도메인 |
+| `<name>_not_domain` | 도메인 목록 | 이메일/URL host가 어떤 도메인에도 속하지 않음 |
+| `<name>_exists` | boolean | 필드 존재 여부 |
+
+한 `args` 객체 안의 조건은 모두 AND입니다. 누락된 인자는 `*_exists: false` 외에는 매칭 실패입니다. 도메인은 소문자화하고 trailing dot을 제거한 뒤 라벨 경계로 비교하므로 `evilcompany.co.kr`는 `company.co.kr`에 속하지 않습니다.
+
+```yaml
+args:
+  path_regex: '(^|/)(\.env(\..*)?|id_rsa|credentials(\.json)?)$'
+  mode_in: [read, preview]
+  recursive: false
+
+args:
+  to_not_domain: [company.co.kr]
+  body_exists: true
+```
+
+### 3.5 `detections`
+
+Detector가 만든 정규화 tag를 평가합니다. tag는 `SECRET`, `INJECTION.INDIRECT`, `PII.PHONE`, `PII.RRN_LIKE`처럼 점으로 계층화합니다. 상위 tag `PII`는 모든 `PII.*`와 매칭합니다.
+
+| 키 | 규칙 |
+| --- | --- |
+| `any_of` | 목록 중 하나 이상이 존재 |
+| `all_of` | 목록의 모든 tag가 존재 |
+| `none_of` | 목록의 어떤 tag도 존재하지 않음 |
+
+`any_of`, `all_of`, `none_of`를 함께 쓰면 세 조건을 모두 만족해야 합니다. detector가 실행되지 않은 상태는 빈 detection 집합이며 `none_of`만 만족할 수 있습니다.
+
+```yaml
+detections:
+  any_of: [SECRET, PII.RRN_LIKE]
+  none_of: [TEST_FIXTURE]
+```
+
+### 3.6 `risk_score`
+
+정규화된 0–100 정수 위험 점수를 비교합니다.
+
+| 키 | 의미 |
+| --- | --- |
+| `gte` | 점수 ≥ 값 |
+| `lte` | 점수 ≤ 값 |
+
+하나 또는 둘을 쓸 수 있습니다. 둘을 쓰면 닫힌 구간이며 `gte <= lte`여야 합니다. 점수가 아직 계산되지 않은 이벤트는 risk 조건과 매칭하지 않습니다.
+
+```yaml
+risk_score:
+  gte: 70
+  lte: 89
+```
+
+## 4. 다섯 action
+
+| action | 의미 | 실행/기록 |
+| --- | --- | --- |
+| `allow` | 명시적 통과 | 원본으로 실행하고 매칭 정책을 기록 |
+| `warn` | 경고 후 통과 | 원본으로 실행, 콘솔 경고와 감사 이벤트 기록 |
+| `mask_then_allow` | 탐지 span 마스킹 후 통과 | 마스킹본만 전달; 원문은 기본적으로 저장하지 않음 |
+| `require_approval` | 사람 결정까지 보류 | timeout 동안 실행하지 않고 Approval Card 게시 |
+| `block` | 즉시 차단 | tool을 호출/응답 전달하지 않고 민감 원문 없는 오류 반환 |
+
+정책 action의 강도는 `block > require_approval > warn > mask_then_allow > allow`입니다. `warn`이 `mask_then_allow`보다 강한 순서는 Appendix A v1의 판정 합성 규칙이며, severity와 별개입니다.
+
+## 5. severity 다섯 단계
+
+| severity | 사용 기준 | 예 |
+| --- | --- | --- |
+| `info` | 보안 영향 없는 관찰 | 명시적 allow 감사 |
+| `low` | 낮은 확신 또는 작은 영향 | 신뢰 서버의 약한 패턴 |
+| `medium` | 검토가 필요한 현실적 위험 | 제한 서버의 위험 tool |
+| `high` | 민감정보 유출 또는 고권한 작업 가능 | 외부 이메일 + PII |
+| `critical` | 자격증명/권한 탈취가 즉시 가능한 명백한 위반 | `.env`·private key 읽기 |
+
+severity는 설명·정렬·알림에 쓰이며 action을 자동 선택하지 않습니다. 예를 들어 `severity: critical`과 `action: warn`을 함께 쓸 수는 있지만, 의도를 리뷰에서 명확히 설명해야 합니다.
+
+## 6. 평가 순서, 전략, 우선순위와 기본값
+
+1. 활성 팩의 `extends`를 위상 정렬하고 부모를 먼저 로드합니다. 순환 참조, 없는 팩, 중복 정책 ID는 시작/validation 오류입니다.
+2. 활성 정책을 `priority` 오름차순, 동률이면 `id` 사전순으로 평가합니다.
+3. 각 정책의 서로 다른 `match` 축은 AND로 평가합니다.
+4. manifest의 `evaluation_strategy`가 결과를 합성합니다.
+   - `first-match`: 첫 매칭 정책의 action을 즉시 채택합니다.
+   - `severity-max`(기본): 모든 매칭 정책을 평가하고 action 강도가 가장 높은 후보를 채택합니다. 동률이면 severity(`critical`→`info`), priority, id 순으로 대표 정책을 정합니다.
+5. 어떤 정책도 매칭되지 않으면 최종 활성 팩의 `default_action`을 사용합니다. 생략 시 일반 모드는 `allow`, strict 모드는 `warn`입니다.
+6. 모든 판정 이벤트에는 대표 정책뿐 아니라 매칭된 정책 ID 전체를 evaluation 순서로 기록합니다.
+
+`first-match`에서는 넓은 allow보다 구체적인 block/approval에 더 낮은 priority 숫자를 주어야 합니다. `severity-max`에서도 priority는 대표 근거와 결정론을 위해 유지합니다.
+
+## 7. `approval` 블록
+
+`action: require_approval`이면 필수이고 다른 action에는 쓰지 않습니다.
+
+```yaml
+approval:
+  timeout_seconds: 120
+  on_timeout: block
+  allow_masked_approval: true
+```
+
+| 필드 | v1 규칙 | 기본값 |
+| --- | --- | --- |
+| `timeout_seconds` | 1–3600 정수 | `120` |
+| `on_timeout` | v1은 fail-closed를 위해 `block`만 허용 | `block` |
+| `allow_masked_approval` | 운영자에게 "마스킹 후 승인" 선택을 제공 | `true` |
+
+운영자는 차단, 마스킹 후 승인(허용된 경우), 그대로 승인 중 하나를 선택합니다. 처리자, 시각, 선택, 매칭 정책을 감사 로그에 남깁니다. timeout 전에는 upstream tool을 실행하지 않습니다.
+
+## 8. 정책팩 구조, manifest와 `extends`
+
+```text
+policy-packs/
+  default/
+    pack.yaml
+    policies/
+      block-env-file-read.yaml
+      block-injection-response.yaml
+      require-approval-external-secret-email.yaml
+  korean-pii/
+    pack.yaml
+    policies/
+      mask-korean-pii-response.yaml
+      require-approval-external-pii-email.yaml
+```
+
+`pack.yaml` 예:
+
+```yaml
+name: korean-pii
+version: 1.0.0
+description: 한국형 PII 마스킹과 외부 반출 제어
+dsl_version: 1
+default_action: allow
+evaluation_strategy: severity-max
+extends:
+  - default@^1.0.0
+policies:
+  - policies/mask-korean-pii-response.yaml
+  - policies/require-approval-external-pii-email.yaml
+```
+
+- `name`은 directory와 각 정책의 `pack`과 같아야 합니다.
+- `version`은 정책팩 SemVer입니다. 정책 의미 변경은 version을 올립니다.
+- `dsl_version`은 이 문서에서는 `1`입니다.
+- `default_action`은 다섯 action 중 하나지만 안전한 재사용을 위해 `allow` 또는 `warn`을 권장합니다.
+- `evaluation_strategy`는 `severity-max` 또는 `first-match`입니다.
+- `extends`는 `pack@semver-range` 목록입니다. 부모를 먼저 적용하고 child manifest가 strategy/default를 정합니다.
+- `policies`는 팩 directory 기준 상대 파일이며 나열 순서가 아니라 `priority`가 평가 순서를 정합니다.
+
+`extends`로 로드된 전체 그래프에서 policy `id`가 중복되면 조용히 override하지 않고 오류로 중단합니다. 기존 정책을 바꾸려면 부모의 새 버전에 변경을 제안하거나 새 `id`와 더 강한 조건을 추가하세요.
+
+## 9. 주석이 있는 레퍼런스 예제
+
+### `default`
+
+[`block-env-file-read.yaml`](../../policy-packs/default/policies/block-env-file-read.yaml)은 request/tool/args를 조합해 자격증명 경로를 차단합니다. [`block-injection-response.yaml`](../../policy-packs/default/policies/block-injection-response.yaml)은 response/detections/server trust/risk score를 조합합니다. [`require-approval-external-secret-email.yaml`](../../policy-packs/default/policies/require-approval-external-secret-email.yaml)은 approval 블록 전체를 보여 줍니다.
+
+### `korean-pii`
+
+[`mask-korean-pii-response.yaml`](../../policy-packs/korean-pii/policies/mask-korean-pii-response.yaml)은 tool response의 `PII.*` span만 마스킹합니다. [`require-approval-external-pii-email.yaml`](../../policy-packs/korean-pii/policies/require-approval-external-pii-email.yaml)은 외부 도메인과 PII가 함께 있을 때 사람 승인을 요구합니다. 팩이 [`default`](../../policy-packs/default/pack.yaml)를 extends하는 방법은 [`pack.yaml`](../../policy-packs/korean-pii/pack.yaml)에 있습니다.
+
+## 10. 작성, 검증, 벤치마크와 PR
+
+```bash
+# 1) YAML/manifest/enum/중복 ID 검사
+npm run policy:validate
+
+# 2) recall, FPR, 공격 차단율, 10KB p95 검사
+npm run bench
+
+# 3) 필요하면 전체 로컬 게이트
+npm run check
+```
+
+정책에는 최소 한 개 매칭 fixture와 한 개 비매칭 fixture를 추가하세요. detector 정책은 합성 양성·음성 데이터를 함께 추가합니다. PR 본문에는 의도된 verdict 변화, benchmark의 recall/FPR/p95/block rate, baseline과의 차이를 적습니다. 정확한 기준과 실패 처리 절차는 [정책팩 벤치마크 게이트](../benchmark-gate.md)에 있습니다.
+
+### 회귀 fixture 계약
+
+YAML fixture를 `attack-lab/datasets/<기여명>/` 아래에 둡니다. Benchmark Runner는 하위 `.yaml`·`.yml` 파일을 재귀적으로 찾아 각 팩의 `policies/` 아래 정책 전체로 평가합니다. 실제 action 또는 매칭 ID가 기대값과 다르면 실패하며, JSON 리포트에 모든 fixture ID와 결과를 기록합니다.
+
+```yaml
+id: unique_synthetic_fixture_id
+event:
+  direction: response
+  tool: fetch_url
+  server_trust: untrusted
+  args: {} # 선택; 사용하지 않으면 생략
+  detections: [INJECTION.OBFUSCATED]
+  risk_score: 85
+  content: 합성 텍스트만 사용합니다. content는 의도 설명용이며 DSL v1 조건에는 쓰지 않습니다.
+expected:
+  action: block
+  matched_policy_ids: [your_policy_id]
+```
+
+`id`는 안정적이고 유일해야 하며 enum과 탐지 tag는 이 가이드를 따릅니다. 정상 fixture는 보통 팩의 기본 action과 빈 `matched_policy_ids`를 기대합니다. 두 fixture 모두 합성 내용만 사용하세요. `npm run bench` 결과에서 `metrics.fixturePassRate`가 `1`인지, `metrics.authorFixtures`가 추가 파일 수만큼 늘었는지, `fixtures` 배열에 추가한 각 ID가 `passed: true`로 나오는지 확인합니다.
+
+## 11. 작성자 자가 점검
+
+- [ ] 전역에서 유일하고 의미가 안정적인 `id`인가?
+- [ ] `direction`, `tool`, `server_trust`가 필요 이상 넓지 않은가?
+- [ ] `args` 정규식은 합성 positive/negative fixture로 검증했는가?
+- [ ] PII와 Secret을 메시지나 fixture에 그대로 넣지 않았는가?
+- [ ] action과 severity가 영향에 맞는가?
+- [ ] approval timeout이 fail-closed인가?
+- [ ] 한국어/영어 설명과 예제를 함께 갱신했는가?
+- [ ] validation과 benchmark가 통과하는가?
+
+문서만으로 신규 정책 한 건을 작성할 수 있는지 검증하는 외부자 테스트 절차는 [작성자 테스트](author-test.md)에 있습니다.
+
+## 12. SCR-302 빈 상태 문구
+
+Policy 화면에 정책이 없을 때는 사용자를 이 문서로 안내합니다. 구현에 사용할 정확한 한국어/영어 문구와 링크는 [SCR-302 UX copy](../ux/scr-302-empty-state.md)를 사용하세요.
