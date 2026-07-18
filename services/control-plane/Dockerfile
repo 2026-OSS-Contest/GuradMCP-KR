@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-ARG BUILDPLATFORM
+ARG BUILDPLATFORM=linux/amd64
 FROM --platform=${BUILDPLATFORM} eclipse-temurin:21-jdk-alpine AS build
 WORKDIR /workspace
 

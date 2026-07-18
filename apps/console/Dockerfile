@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
-ARG BUILDPLATFORM
+ARG BUILDPLATFORM=linux/amd64
 FROM --platform=${BUILDPLATFORM} node:22-alpine AS build
-ARG TARGETARCH
+ARG TARGETARCH=amd64
 WORKDIR /workspace
 
 COPY package*.json ./
