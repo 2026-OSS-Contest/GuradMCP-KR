@@ -12,3 +12,5 @@ reports/*.html
 .env
 *.log
 .DS_Store
+
+*.tsbuildinfo
