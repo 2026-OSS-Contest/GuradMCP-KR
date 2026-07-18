@@ -39,14 +39,14 @@ jobs:
             dockerfile: apps/demo-mcp-tools/Dockerfile
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       - name: Generate image metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/guardmcp-${{ matrix.image }}
           tags: |
@@ -58,7 +58,7 @@ jobs:
             org.opencontainers.image.title=GuardMCP-KR ${{ matrix.image }}
             org.opencontainers.image.description=GuardMCP-KR ${{ matrix.image }} service
       - name: Build multi-architecture image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -81,9 +81,9 @@ jobs:
       packages: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Wait for required main validation workflows
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const workflows = ["ci.yml", "policy-benchmark.yml", "licenses.yml"];
@@ -117,11 +117,11 @@ jobs:
               }
             }
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -138,7 +138,7 @@ jobs:
           echo "IMAGE_PREFIX=$prefix" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
       - name: Publish immutable gateway image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: packages/gateway/Dockerfile
@@ -153,7 +153,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=gateway
       - name: Publish immutable control-plane image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: services/control-plane/Dockerfile
@@ -168,7 +168,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=control-plane
       - name: Publish immutable console image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/console/Dockerfile
@@ -183,7 +183,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=console
       - name: Publish immutable demo-agent image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/demo-agent/Dockerfile
@@ -198,7 +198,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=demo-agent
       - name: Publish immutable demo-mcp-tools image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/demo-mcp-tools/Dockerfile
