@@ -1,0 +1,127 @@
+/* AUTO: Figma primitives -> Tailwind v4 theme. Utilities like bg-grayscale-900, text-verdict-block. */
+@theme {
+  --color-grayscale-white: var(--primitive-color-grayscale-white);
+  --color-grayscale-50: var(--primitive-color-grayscale-50);
+  --color-grayscale-100: var(--primitive-color-grayscale-100);
+  --color-grayscale-200: var(--primitive-color-grayscale-200);
+  --color-grayscale-300: var(--primitive-color-grayscale-300);
+  --color-grayscale-400: var(--primitive-color-grayscale-400);
+  --color-grayscale-500: var(--primitive-color-grayscale-500);
+  --color-grayscale-600: var(--primitive-color-grayscale-600);
+  --color-grayscale-700: var(--primitive-color-grayscale-700);
+  --color-grayscale-800: var(--primitive-color-grayscale-800);
+  --color-grayscale-900: var(--primitive-color-grayscale-900);
+  --color-grayscale-950: var(--primitive-color-grayscale-950);
+  --color-grayscale-black: var(--primitive-color-grayscale-black);
+  --color-red-50: var(--primitive-color-red-50);
+  --color-red-100: var(--primitive-color-red-100);
+  --color-red-200: var(--primitive-color-red-200);
+  --color-red-300: var(--primitive-color-red-300);
+  --color-red-400: var(--primitive-color-red-400);
+  --color-red-500: var(--primitive-color-red-500);
+  --color-red-600: var(--primitive-color-red-600);
+  --color-red-700: var(--primitive-color-red-700);
+  --color-red-800: var(--primitive-color-red-800);
+  --color-red-900: var(--primitive-color-red-900);
+  --color-red-950: var(--primitive-color-red-950);
+  --color-yellow-50: var(--primitive-color-yellow-50);
+  --color-yellow-100: var(--primitive-color-yellow-100);
+  --color-yellow-200: var(--primitive-color-yellow-200);
+  --color-yellow-300: var(--primitive-color-yellow-300);
+  --color-yellow-400: var(--primitive-color-yellow-400);
+  --color-yellow-500: var(--primitive-color-yellow-500);
+  --color-yellow-600: var(--primitive-color-yellow-600);
+  --color-yellow-700: var(--primitive-color-yellow-700);
+  --color-yellow-800: var(--primitive-color-yellow-800);
+  --color-yellow-900: var(--primitive-color-yellow-900);
+  --color-yellow-950: var(--primitive-color-yellow-950);
+  --color-green-50: var(--primitive-color-green-50);
+  --color-green-100: var(--primitive-color-green-100);
+  --color-green-200: var(--primitive-color-green-200);
+  --color-green-300: var(--primitive-color-green-300);
+  --color-green-400: var(--primitive-color-green-400);
+  --color-green-500: var(--primitive-color-green-500);
+  --color-green-600: var(--primitive-color-green-600);
+  --color-green-700: var(--primitive-color-green-700);
+  --color-green-800: var(--primitive-color-green-800);
+  --color-green-900: var(--primitive-color-green-900);
+  --color-green-950: var(--primitive-color-green-950);
+  --color-blue-50: var(--primitive-color-blue-50);
+  --color-blue-100: var(--primitive-color-blue-100);
+  --color-blue-200: var(--primitive-color-blue-200);
+  --color-blue-300: var(--primitive-color-blue-300);
+  --color-blue-400: var(--primitive-color-blue-400);
+  --color-blue-500: var(--primitive-color-blue-500);
+  --color-blue-600: var(--primitive-color-blue-600);
+  --color-blue-700: var(--primitive-color-blue-700);
+  --color-blue-800: var(--primitive-color-blue-800);
+  --color-blue-900: var(--primitive-color-blue-900);
+  --color-blue-950: var(--primitive-color-blue-950);
+  --color-violet-50: var(--primitive-color-violet-50);
+  --color-violet-100: var(--primitive-color-violet-100);
+  --color-violet-200: var(--primitive-color-violet-200);
+  --color-violet-300: var(--primitive-color-violet-300);
+  --color-violet-400: var(--primitive-color-violet-400);
+  --color-violet-500: var(--primitive-color-violet-500);
+  --color-violet-600: var(--primitive-color-violet-600);
+  --color-violet-700: var(--primitive-color-violet-700);
+  --color-violet-800: var(--primitive-color-violet-800);
+  --color-violet-900: var(--primitive-color-violet-900);
+  --color-violet-950: var(--primitive-color-violet-950);
+  --color-verdict-block: var(--primitive-verdict-block);
+  --color-verdict-warn: var(--primitive-verdict-warn);
+  --color-verdict-allow: var(--primitive-verdict-allow);
+  --color-verdict-require-approval: var(--primitive-verdict-require-approval);
+
+  --font-sans: "SUIT", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* ── shadcn/ui semantic tokens (dark theme) ── */
+:root {
+  --radius: 0.75rem;
+  --background: var(--primitive-color-grayscale-950);
+  --foreground: var(--primitive-color-grayscale-white);
+  --card: var(--primitive-color-grayscale-900);
+  --card-foreground: var(--primitive-color-grayscale-white);
+  --popover: var(--primitive-color-grayscale-900);
+  --popover-foreground: var(--primitive-color-grayscale-white);
+  --primary: var(--primitive-color-blue-600);
+  --primary-foreground: var(--primitive-color-grayscale-white);
+  --secondary: var(--primitive-color-grayscale-800);
+  --secondary-foreground: var(--primitive-color-grayscale-100);
+  --muted: var(--primitive-color-grayscale-800);
+  --muted-foreground: var(--primitive-color-grayscale-400);
+  --accent: var(--primitive-color-grayscale-800);
+  --accent-foreground: var(--primitive-color-grayscale-white);
+  --destructive: var(--primitive-verdict-block);
+  --destructive-foreground: var(--primitive-color-grayscale-white);
+  --border: var(--primitive-color-grayscale-800);
+  --input: var(--primitive-color-grayscale-800);
+  --ring: var(--primitive-color-blue-600);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}

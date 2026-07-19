@@ -1,0 +1,18 @@
+/* Self-hosted fonts (offline-safe, no runtime CDN). Family names match the
+   Figma text styles emitted into tokens.css (.text-* classes use "SUIT" / "JetBrains Mono"). */
+
+@font-face {
+  font-family: "SUIT";
+  src: url("./fonts/SUIT-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./fonts/JetBrainsMono-Variable.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
