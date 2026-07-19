@@ -14,3 +14,8 @@ reports/*.html
 .DS_Store
 
 *.tsbuildinfo
+
+.omc
+
+# Playwright MCP scratch (created at repo root during dev)
+.playwright-mcp/

@@ -1,0 +1,31 @@
+{
+  "nav": {
+    "gateway": "Gateway",
+    "liveConsole": "Live Console",
+    "replay": "Replay",
+    "detector": "Detector",
+    "approval": "Approval",
+    "policies": "Policies",
+    "settings": "Settings"
+  },
+  "shell": {
+    "protected": "Protected",
+    "disconnected": "Gateway offline",
+    "degraded": "Some servers down",
+    "policyPacks": "Policy packs",
+    "pendingApprovals": "Pending",
+    "session": "Session",
+    "collapse": "Collapse rail",
+    "expand": "Expand rail"
+  },
+  "screens": {
+    "gateway": { "title": "Gateway", "desc": "Overview of MCP servers, active policies and recent events" },
+    "liveConsole": { "title": "Demo & Live Console", "desc": "Run attack scenarios and watch the live verdict stream" },
+    "replay": { "title": "Replay", "desc": "Replay session timelines and inspect events" },
+    "detector": { "title": "Detector", "desc": "Preview PII, secret and injection detection" },
+    "approval": { "title": "Approval Console", "desc": "Approval queue and decision history" },
+    "policies": { "title": "Policies", "desc": "Browse policy packs and toggle policies" },
+    "settings": { "title": "Settings", "desc": "Upstream servers, failure policy and logging" }
+  },
+  "common": { "comingSoon": "Coming soon", "scaffold": "This screen is a scaffold. The detailed UI ships in a follow-up issue." }
+}

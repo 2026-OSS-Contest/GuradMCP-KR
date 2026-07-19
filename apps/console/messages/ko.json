@@ -1,0 +1,31 @@
+{
+  "nav": {
+    "gateway": "Gateway",
+    "liveConsole": "Live Console",
+    "replay": "Replay",
+    "detector": "Detector",
+    "approval": "Approval",
+    "policies": "Policies",
+    "settings": "Setting"
+  },
+  "shell": {
+    "protected": "보호 중",
+    "disconnected": "게이트웨이 미연결",
+    "degraded": "일부 서버 끊김",
+    "policyPacks": "정책 팩",
+    "pendingApprovals": "승인 대기",
+    "session": "세션",
+    "collapse": "레일 접기",
+    "expand": "레일 펼치기"
+  },
+  "screens": {
+    "gateway": { "title": "Gateway", "desc": "MCP 서버·활성 정책·최근 보안 이벤트 개요" },
+    "liveConsole": { "title": "Demo & Live Console", "desc": "공격 시나리오 실행과 실시간 판정 스트림" },
+    "replay": { "title": "Replay", "desc": "세션 타임라인 재생과 이벤트 상세" },
+    "detector": { "title": "Detector 테스트기", "desc": "PII·시크릿·인젝션 탐지 미리보기" },
+    "approval": { "title": "Approval Console", "desc": "승인 대기열과 처리 이력" },
+    "policies": { "title": "Policies", "desc": "정책팩·정책 열람과 활성/비활성" },
+    "settings": { "title": "Settings", "desc": "업스트림 서버·장애 정책·로그 설정" }
+  },
+  "common": { "comingSoon": "준비 중", "scaffold": "이 화면은 스캐폴드 단계입니다. 상세 UI는 후속 이슈에서 구현됩니다." }
+}

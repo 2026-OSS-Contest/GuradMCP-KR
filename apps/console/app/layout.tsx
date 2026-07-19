@@ -1,9 +1,18 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import "./styles.css";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale } from "next-intl/server";
+import "./globals.css";
 
 export const metadata: Metadata = { title: "GuardMCP-KR Console", description: "Every tool call, inspected." };
 
-export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
-  return <html lang="ko"><body>{children}</body></html>;
+export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+  const locale = await getLocale();
+  return (
+    <html lang={locale} suppressHydrationWarning>
+      <body>
+        <NextIntlClientProvider>{children}</NextIntlClientProvider>
+      </body>
+    </html>
+  );
 }

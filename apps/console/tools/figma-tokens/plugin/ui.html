@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root { color-scheme: light dark; font: 12px/1.5 ui-sans-serif, system-ui, sans-serif; }
+      body { margin: 0; padding: 16px; }
+      h1 { font-size: 13px; margin: 0 0 8px; }
+      #summary { margin: 0 0 12px; color: #666; }
+      .row { display: flex; gap: 8px; }
+      button { font: inherit; padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; cursor: pointer; background: #fff; }
+      button#sync { background: #0d99ff; color: #fff; border-color: #0d99ff; font-weight: 600; }
+      button:disabled { opacity: .5; cursor: default; }
+      pre { margin: 12px 0 0; white-space: pre-wrap; word-break: break-word; color: #333; background: #f5f5f5; padding: 8px; border-radius: 6px; min-height: 40px; }
+    </style>
+  </head>
+  <body>
+    <h1>GuardMCP Token Sync</h1>
+    <p id="summary">Variables 읽는 중…</p>
+    <div class="row">
+      <button id="sync" disabled>Sync tokens → repo</button>
+      <button id="close">닫기</button>
+    </div>
+    <pre id="status"></pre>
+    <script>
+      const BRIDGE = "http://localhost:3999/tokens";
+      let tokens = null;
+      const $ = (id) => document.getElementById(id);
+
+      onmessage = (e) => {
+        const msg = e.data.pluginMessage;
+        if (!msg) return;
+        if (msg.type === "tokens") {
+          tokens = msg.payload;
+          const vars = tokens.collections.reduce((n, c) => n + c.variables.length, 0);
+          const s = tokens.styles || { text: [], paint: [], effect: [] };
+          $("summary").textContent =
+            `${tokens.fileName} — 변수 ${vars} · 텍스트 ${s.text.length} · 이펙트 ${s.effect.length}`;
+          $("sync").disabled = false;
+        } else if (msg.type === "empty") {
+          $("summary").textContent = "이 파일에 로컬 Variables가 없습니다.";
+        } else if (msg.type === "error") {
+          $("summary").textContent = "오류: " + msg.message;
+        }
+      };
+
+      $("sync").onclick = async () => {
+        $("status").textContent = "전송 중…";
+        try {
+          const res = await fetch(BRIDGE, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(tokens)
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || res.statusText);
+          $("status").textContent = `완료 ✓  변수 ${data.variables}개 → ${data.path}`;
+        } catch (err) {
+          $("status").textContent =
+            "실패: " + (err.message || err) + "\n브릿지 서버가 켜져 있나요?  npm run figma:bridge";
+        }
+      };
+
+      $("close").onclick = () => parent.postMessage({ pluginMessage: { type: "close" } }, "*");
+    </script>
+  </body>
+</html>
