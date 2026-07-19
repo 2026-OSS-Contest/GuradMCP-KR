@@ -31,6 +31,7 @@
     "policy:check-generated": "tsx scripts/compile-runtime-policies.ts --check",
     "policy:validate": "tsx scripts/validate-policies.ts && npm run policy:generate",
     "license:report": "node scripts/ci/generate-license-report.mjs --output artifacts/licenses",
+    "figma:bridge": "node apps/console/tools/figma-tokens/bridge/server.mjs",
     "check": "npm run lint && npm run typecheck && npm run test:unit && npm run policy:validate && npm run bench"
   },
   "devDependencies": {

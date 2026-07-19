@@ -1,0 +1,12 @@
+{
+  "name": "GuardMCP Token Sync",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma", "dev"],
+  "networkAccess": {
+    "allowedDomains": ["none"],
+    "devAllowedDomains": ["http://localhost:3999"],
+    "reasoning": "Sends extracted local Figma variables to a localhost dev bridge that writes them into the repo as CSS custom properties."
+  }
+}

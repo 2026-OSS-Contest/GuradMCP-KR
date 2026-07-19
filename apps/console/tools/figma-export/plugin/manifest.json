@@ -1,0 +1,12 @@
+{
+  "name": "GuardMCP Export (selection)",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["none"],
+    "devAllowedDomains": ["http://localhost:3999"],
+    "reasoning": "Sends the exact structure and a PNG of the selected node to a localhost dev bridge that writes them into the repo for faithful reconstruction."
+  }
+}

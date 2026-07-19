@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root { color-scheme: light dark; font: 12px/1.5 ui-sans-serif, system-ui, sans-serif; }
+      body { margin: 0; padding: 16px; }
+      h1 { font-size: 13px; margin: 0 0 8px; }
+      #summary { margin: 0 0 12px; color: #666; }
+      .row { display: flex; gap: 8px; }
+      button { font: inherit; padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; cursor: pointer; background: #fff; }
+      button#send { background: #0d99ff; color: #fff; border-color: #0d99ff; font-weight: 600; }
+      button:disabled { opacity: .5; cursor: default; }
+      pre { margin: 12px 0 0; white-space: pre-wrap; word-break: break-word; color: #333; background: #f5f5f5; padding: 8px; border-radius: 6px; min-height: 40px; }
+    </style>
+  </head>
+  <body>
+    <h1>GuardMCP Export (selection)</h1>
+    <p id="summary">선택 읽는 중…</p>
+    <div class="row">
+      <button id="send" disabled>선택 → repo 내보내기</button>
+      <button id="rerun">선택 다시읽기</button>
+      <button id="close">닫기</button>
+    </div>
+    <pre id="status"></pre>
+    <script>
+      const BRIDGE = "http://localhost:3999/export";
+      let payload = null;
+      const $ = (id) => document.getElementById(id);
+
+      onmessage = (e) => {
+        const msg = e.data.pluginMessage;
+        if (!msg) return;
+        if (msg.type === "export") {
+          payload = msg;
+          const names = msg.nodes.map((n) => n.name).join(", ");
+          const withPng = msg.nodes.filter((n) => n.png).length;
+          $("summary").textContent = `선택 ${msg.nodes.length}개 (${names}) · PNG ${withPng}개`;
+          $("send").disabled = false;
+        } else if (msg.type === "empty") {
+          payload = null;
+          $("summary").textContent = "선택된 노드가 없습니다. Figma에서 컴포넌트/프레임을 선택하고 '선택 다시읽기'.";
+          $("send").disabled = true;
+        }
+      };
+
+      $("send").onclick = async () => {
+        if (!payload) return;
+        $("status").textContent = "전송 중…";
+        try {
+          const res = await fetch(BRIDGE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || res.statusText);
+          $("status").textContent = `완료 ✓  ${data.nodes.join(", ")}  → ${data.dir}`;
+        } catch (err) {
+          $("status").textContent = "실패: " + (err.message || err) + "\n브릿지 켜져 있나요?  npm run figma:bridge";
+        }
+      };
+
+      $("rerun").onclick = () => parent.postMessage({ pluginMessage: { type: "rerun" } }, "*");
+      $("close").onclick = () => parent.postMessage({ pluginMessage: { type: "close" } }, "*");
+    </script>
+  </body>
+</html>

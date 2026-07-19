@@ -14,3 +14,10 @@ reports/*.html
 .DS_Store
 
 *.tsbuildinfo
+
+.omc
+
+# Figma tooling: generated dumps and scratch (plugin source stays tracked)
+.playwright-mcp/
+apps/console/tools/figma-tokens/.last-payload.json
+apps/console/tools/figma-export/out/
