@@ -17,7 +17,5 @@ reports/*.html
 
 .omc
 
-# Figma tooling: generated dumps and scratch (plugin source stays tracked)
+# Playwright MCP scratch (created at repo root during dev)
 .playwright-mcp/
-apps/console/tools/figma-tokens/.last-payload.json
-apps/console/tools/figma-export/out/
