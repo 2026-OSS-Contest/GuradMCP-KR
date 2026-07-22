@@ -79,6 +79,10 @@ Do not disclose vulnerabilities in public issues. [SECURITY.md](SECURITY.md#engl
 | Policy Authoring Guide | [Open](docs/policy-guide/README.en.md) | [열기](docs/policy-guide/README.md) |
 | Benchmark gate | [Open](docs/benchmark-gate.en.md) | [열기](docs/benchmark-gate.md) |
 | Contribution guide | [Open](CONTRIBUTING.md#english) | [열기](CONTRIBUTING.md#한국어) |
+| Development workflow | [Open](docs/contributing/development-workflow.en.md) | [열기](docs/contributing/development-workflow.md) |
+| Commit convention | [Open](docs/contributing/commit-convention.en.md) | [열기](docs/contributing/commit-convention.md) |
+| CI and quality gates | [Open](docs/ci/quality-gates.md) | [열기](docs/ci/quality-gates.md) |
+| Repository agent instructions | [Open](AGENTS.md) | [열기](AGENTS.md) |
 | Security policy | [Open](SECURITY.md#english) | [열기](SECURITY.md#한국어) |
 
 ## License

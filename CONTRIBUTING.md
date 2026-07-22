@@ -13,6 +13,27 @@ GuardMCP-KR은 코드뿐 아니라 정책, 데이터셋, 문서 기여를 동등
 - 취약점은 공개 Issue 대신 [비공개 보안 채널](SECURITY.md)을 사용합니다.
 - 작은 PR 하나에는 하나의 목적만 담습니다.
 
+### 기여 흐름
+
+기본 개발 브랜치는 `dev`입니다. 일반 기능, 버그 수정, 문서 변경은 `dev`에서 분기하고 Pull Request의 base도 `dev`로 지정합니다. `main`은 검증된 릴리스 후보를 위한 브랜치이므로 maintainer가 요청한 릴리스·긴급 수정 외에는 직접 대상으로 삼지 않습니다.
+
+```bash
+git clone https://github.com/<your-account>/GuradMCP-KR.git
+cd GuradMCP-KR
+git remote add upstream https://github.com/2026-OSS-Contest/GuradMCP-KR.git
+git fetch upstream
+git switch -c feat/GMCP-123-short-description upstream/dev
+npm ci
+```
+
+1. 큰 동작 변경은 구현 전에 Issue에서 문제와 완료 조건을 합의합니다. 보안 취약점은 공개 Issue를 사용하지 않습니다.
+2. `dev` 최신 상태에서 작업 종류와 Issue를 드러내는 브랜치를 만듭니다: `feat/GMCP-123-policy-preview`, `fix/GMCP-456-mask-phone`, `docs/contribution-guide`.
+3. 한 브랜치와 PR에는 한 목적만 담고, 생성 파일은 원본 변경과 함께 갱신합니다.
+4. 커밋 메시지는 [Angular 커밋 규칙 기반 컨벤션](docs/contributing/commit-convention.md)을 따릅니다.
+5. 변경 범위에 맞는 로컬 검증을 실행하고 `dev` 대상 PR에 결과를 기록합니다.
+
+설치, 저장소 구조, 변경 유형별 검증 명령과 PR 흐름은 [개발 워크플로](docs/contributing/development-workflow.md)에 정리되어 있습니다.
+
 ### 코드 없이 기여하는 세 가지 길
 
 #### 1. 정책 규칙 한 건
@@ -32,7 +53,7 @@ GuardMCP-KR은 코드뿐 아니라 정책, 데이터셋, 문서 기여를 동등
 
 ### 개발 환경
 
-필수 도구는 Node.js 22+, npm, JDK 21, Docker Engine 24+, Docker Compose v2.20+입니다.
+필수 도구는 Node.js 22+, npm 10.9.4, JDK 21, Docker Engine 24+, Docker Compose v2.20+입니다.
 
 ```bash
 npm ci
@@ -61,6 +82,8 @@ npm run test:e2e
 
 ### Pull Request 체크리스트
 
+- base 브랜치를 `dev`로 지정합니다(maintainer가 요청한 릴리스·긴급 수정 제외).
+- PR 제목을 `<type>: <subject>` 또는 `<type>(<scope>): <subject>` 형식으로 작성합니다.
 - 관련 Issue와 사용자 영향을 적습니다.
 - 테스트 또는 데이터셋으로 변경 행위를 증명합니다.
 - 한국어/영어 문서 중 변경된 개념을 양쪽에 반영합니다.
@@ -87,6 +110,27 @@ GuardMCP-KR values policy, dataset, and documentation contributions as much as a
 - Use the [private security channel](SECURITY.md#english), not a public issue, for vulnerabilities.
 - Keep one purpose per pull request.
 
+### Contribution workflow
+
+The default development branch is `dev`. Branch normal features, bug fixes, and documentation changes from `dev`, and target `dev` in the pull request. `main` is reserved for validated release candidates; target it only for a maintainer-directed release or hotfix.
+
+```bash
+git clone https://github.com/<your-account>/GuradMCP-KR.git
+cd GuradMCP-KR
+git remote add upstream https://github.com/2026-OSS-Contest/GuradMCP-KR.git
+git fetch upstream
+git switch -c feat/GMCP-123-short-description upstream/dev
+npm ci
+```
+
+1. For substantial behavior changes, agree on the problem and completion criteria in an issue before implementation. Never use a public issue for a vulnerability.
+2. Create a branch from the latest `dev` whose name identifies the change and issue: `feat/GMCP-123-policy-preview`, `fix/GMCP-456-mask-phone`, or `docs/contribution-guide`.
+3. Keep one purpose per branch and pull request, and update generated files with their source change.
+4. Follow the [Angular-style commit convention](docs/contributing/commit-convention.en.md).
+5. Run validation appropriate to the change and record the results in a pull request targeting `dev`.
+
+See the [development workflow](docs/contributing/development-workflow.en.md) for setup, repository layout, change-specific validation commands, and the pull-request lifecycle.
+
 ### Three no-code contribution paths
 
 #### 1. One policy rule
@@ -106,7 +150,7 @@ Add at least one attack sample and a benign regression sample under `attack-lab/
 
 ### Development environment
 
-Prerequisites are Node.js 22+, npm, JDK 21, Docker Engine 24+, and Docker Compose v2.20+.
+Prerequisites are Node.js 22+, npm 10.9.4, JDK 21, Docker Engine 24+, and Docker Compose v2.20+.
 
 ```bash
 npm ci
@@ -135,6 +179,8 @@ A pull request that changes `policy-packs/**` or benchmark datasets must pass sc
 
 ### Pull-request checklist
 
+- Target `dev` unless a maintainer requested a release or hotfix against `main`.
+- Format the pull-request title as `<type>: <subject>` or `<type>(<scope>): <subject>`.
 - Link the issue and describe user impact.
 - Prove the behavior with tests or datasets.
 - Update both Korean and English documents for changed concepts.

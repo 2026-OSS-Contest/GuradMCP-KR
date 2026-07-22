@@ -4,6 +4,12 @@
 
 Closes #
 
+## Git 확인 / Git checks
+
+- [ ] 일반 변경은 `dev`를 base로 사용했습니다. / Normal changes target `dev`.
+- [ ] PR 제목과 커밋이 [커밋 컨벤션](../docs/contributing/commit-convention.md)을 따릅니다. / The PR title and commits follow the [commit convention](../docs/contributing/commit-convention.en.md).
+- [ ] 한 PR에 하나의 목적만 담았습니다. / This pull request has one purpose.
+
 ## 변경 유형 / Change type
 
 - [ ] 코드 / Code
