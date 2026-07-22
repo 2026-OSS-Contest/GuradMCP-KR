@@ -25,7 +25,7 @@ Use `npm ci`, not `npm install`, to reproduce the lockfile exactly. Use the repo
 The recommended branch format is `<type>/<issue>-<description>`. The issue may be omitted when none exists.
 
 ```text
-feat/GMCP-123-policy-preview
+feature/GMCP-123-policy-preview
 fix/GMCP-456-mask-phone
 docs/contribution-guide
 ci/license-report
@@ -35,7 +35,7 @@ When using a fork, create the working branch from the latest upstream branch:
 
 ```bash
 git fetch upstream
-git switch -c feat/GMCP-123-policy-preview upstream/dev
+git switch -c feature/GMCP-123-policy-preview upstream/dev
 ```
 
 Do not rewrite shared branch history or force-push to `main` or `dev`.
