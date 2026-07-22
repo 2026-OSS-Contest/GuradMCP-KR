@@ -79,6 +79,10 @@ npm run bench
 | 정책 작성 가이드 | [열기](docs/policy-guide/README.md) | [Open](docs/policy-guide/README.en.md) |
 | 벤치마크 게이트 | [열기](docs/benchmark-gate.md) | [Open](docs/benchmark-gate.en.md) |
 | 기여 가이드 | [열기](CONTRIBUTING.md#한국어) | [Open](CONTRIBUTING.md#english) |
+| 개발 워크플로 | [열기](docs/contributing/development-workflow.md) | [Open](docs/contributing/development-workflow.en.md) |
+| 커밋 컨벤션 | [열기](docs/contributing/commit-convention.md) | [Open](docs/contributing/commit-convention.en.md) |
+| CI·품질 게이트 | [열기](docs/ci/quality-gates.md) | [Open](docs/ci/quality-gates.md) |
+| 공통 에이전트 지침 | [열기](AGENTS.md) | [Open](AGENTS.md) |
 | 보안 정책 | [열기](SECURITY.md#한국어) | [Open](SECURITY.md#english) |
 
 ## 라이선스

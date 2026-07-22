@@ -5,8 +5,10 @@
   "type": "module",
   "description": "Korean privacy-first security gateway for MCP tool calls",
   "license": "Apache-2.0",
+  "packageManager": "npm@10.9.4",
   "engines": {
-    "node": ">=22"
+    "node": ">=22",
+    "npm": "10.x"
   },
   "workspaces": [
     "apps/console",
@@ -15,6 +17,7 @@
     "packages/*"
   ],
   "overrides": {
+    "next": "16.3.0-preview.8",
     "postcss": "8.5.10"
   },
   "scripts": {
