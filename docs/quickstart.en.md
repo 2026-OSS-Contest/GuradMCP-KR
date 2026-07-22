@@ -38,6 +38,15 @@ When the started services are `healthy` and the health request succeeds, open <h
 curl --fail --silent --request POST http://localhost:3002/demo/pii
 ```
 
+The Demo Agent (LangChain4j) also reproduces the T-01 malicious-README scenario. The same
+code runs against a different MCP endpoint only: in guarded mode the gateway policy blocks
+the `.env` read, and in vulnerable mode the leak is replayed inside an isolated sandbox.
+
+```bash
+curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?mode=guarded"
+curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?mode=vulnerable"
+```
+
 ## Profiles
 
 | Purpose | Command | Contents |

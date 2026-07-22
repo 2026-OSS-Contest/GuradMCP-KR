@@ -38,6 +38,13 @@ curl --fail --silent http://localhost:8080/actuator/health
 curl --fail --silent --request POST http://localhost:3002/demo/pii
 ```
 
+Demo Agent(LangChain4j)는 T-01 악성 README 시나리오도 재현합니다. 같은 코드가 MCP 엔드포인트만 바꿔 실행되며, 보호 모드에서는 게이트웨이 정책으로 `.env` 읽기가 차단되고, 미적용 모드에서는 격리 샌드박스에서 유출이 재현됩니다.
+
+```bash
+curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?mode=guarded"
+curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?mode=vulnerable"
+```
+
 ## 프로파일
 
 | 목적 | 명령 | 포함 범위 |
