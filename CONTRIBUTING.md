@@ -22,12 +22,12 @@ git clone https://github.com/<your-account>/GuradMCP-KR.git
 cd GuradMCP-KR
 git remote add upstream https://github.com/2026-OSS-Contest/GuradMCP-KR.git
 git fetch upstream
-git switch -c feat/GMCP-123-short-description upstream/dev
+git switch -c feature/GMCP-123-short-description upstream/dev
 npm ci
 ```
 
 1. 큰 동작 변경은 구현 전에 Issue에서 문제와 완료 조건을 합의합니다. 보안 취약점은 공개 Issue를 사용하지 않습니다.
-2. `dev` 최신 상태에서 작업 종류와 Issue를 드러내는 브랜치를 만듭니다: `feat/GMCP-123-policy-preview`, `fix/GMCP-456-mask-phone`, `docs/contribution-guide`.
+2. `dev` 최신 상태에서 작업 종류와 Issue를 드러내는 브랜치를 만듭니다: `feature/GMCP-123-policy-preview`, `fix/GMCP-456-mask-phone`, `docs/contribution-guide`.
 3. 한 브랜치와 PR에는 한 목적만 담고, 생성 파일은 원본 변경과 함께 갱신합니다.
 4. 커밋 메시지는 [Angular 커밋 규칙 기반 컨벤션](docs/contributing/commit-convention.md)을 따릅니다.
 5. 변경 범위에 맞는 로컬 검증을 실행하고 `dev` 대상 PR에 결과를 기록합니다.
@@ -119,12 +119,12 @@ git clone https://github.com/<your-account>/GuradMCP-KR.git
 cd GuradMCP-KR
 git remote add upstream https://github.com/2026-OSS-Contest/GuradMCP-KR.git
 git fetch upstream
-git switch -c feat/GMCP-123-short-description upstream/dev
+git switch -c feature/GMCP-123-short-description upstream/dev
 npm ci
 ```
 
 1. For substantial behavior changes, agree on the problem and completion criteria in an issue before implementation. Never use a public issue for a vulnerability.
-2. Create a branch from the latest `dev` whose name identifies the change and issue: `feat/GMCP-123-policy-preview`, `fix/GMCP-456-mask-phone`, or `docs/contribution-guide`.
+2. Create a branch from the latest `dev` whose name identifies the change and issue: `feature/GMCP-123-policy-preview`, `fix/GMCP-456-mask-phone`, or `docs/contribution-guide`.
 3. Keep one purpose per branch and pull request, and update generated files with their source change.
 4. Follow the [Angular-style commit convention](docs/contributing/commit-convention.en.md).
 5. Run validation appropriate to the change and record the results in a pull request targeting `dev`.

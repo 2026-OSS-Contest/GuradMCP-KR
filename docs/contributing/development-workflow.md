@@ -25,7 +25,7 @@
 권장 브랜치 형식은 `<type>/<issue>-<description>`입니다. Issue가 없으면 번호를 생략할 수 있습니다.
 
 ```text
-feat/GMCP-123-policy-preview
+feature/GMCP-123-policy-preview
 fix/GMCP-456-mask-phone
 docs/contribution-guide
 ci/license-report
@@ -35,7 +35,7 @@ Fork를 사용하는 경우 다음처럼 최신 upstream에서 작업 브랜치�
 
 ```bash
 git fetch upstream
-git switch -c feat/GMCP-123-policy-preview upstream/dev
+git switch -c feature/GMCP-123-policy-preview upstream/dev
 ```
 
 공유 브랜치의 이력을 임의로 다시 쓰거나 `main`/`dev`에 force-push하지 않습니다.
