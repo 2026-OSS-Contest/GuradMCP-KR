@@ -51,7 +51,9 @@ curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?m
 | --- | --- | --- |
 | 제품 최소 구성 | `docker compose up -d` | gateway, control-plane, console, PostgreSQL, Redis |
 | 재현 가능한 데모 | `docker compose --profile demo up -d` | 제품 구성 + demo-agent + demo-mcp-tools + 고정 시드 |
-| 개발 모드 데모 | `docker compose --profile dev up -d` | 제품 구성 + development 모드 demo-agent + demo-mcp-tools |
+| 개발 모드 데모 | `docker compose --profile dev up -d` | 제품 구성 + demo-mcp-tools(소스 변경 반영) + demo-agent(빌드 이미지) |
+
+개발 모드에서는 `demo-mcp-tools`가 소스 변경을 반영합니다. `demo-agent`는 컴파일형 JVM 서비스라 빌드된 이미지로 실행되며, 소스 변경은 이미지 재빌드로 반영합니다.
 
 ## MCP Agent 연결
 

@@ -26,5 +26,6 @@ USER guardmcp
 EXPOSE 3002
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-Djava.security.egd=file:/dev/urandom", "-jar", "/app/app.jar"]
 
-# Development mode reuses the immutable runtime image; APP_MODE is set via Compose.
+# This compiled JVM service has no source-watch dev mode: the dev profile reuses the
+# immutable runtime image unchanged. Kept as a named stage so Compose can target it.
 FROM runtime AS development

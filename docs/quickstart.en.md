@@ -53,7 +53,9 @@ curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?m
 | --- | --- | --- |
 | Minimal product | `docker compose up -d` | gateway, control-plane, console, PostgreSQL, Redis |
 | Reproducible demo | `docker compose --profile demo up -d` | product services + demo-agent + demo-mcp-tools + deterministic seed |
-| Development-mode demo | `docker compose --profile dev up -d` | product services + development-mode demo-agent + demo-mcp-tools |
+| Development-mode demo | `docker compose --profile dev up -d` | product services + demo-mcp-tools (source-mounted) + demo-agent (built image) |
+
+In development mode, `demo-mcp-tools` reflects source edits. `demo-agent` is a compiled JVM service that runs from its built image, so code changes take effect on rebuild.
 
 ## Connect an MCP agent
 

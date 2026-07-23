@@ -291,6 +291,8 @@ services:
         aliases:
           - demo-mcp-tools
 
+  # Unlike demo-mcp-tools-dev, this compiled JVM agent has no source-watch dev mode:
+  # it reuses the immutable runtime image. Source changes require an image rebuild.
   demo-agent-dev:
     <<: *demo-agent
     profiles: ["dev"]
