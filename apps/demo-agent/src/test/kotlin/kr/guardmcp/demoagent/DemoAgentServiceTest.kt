@@ -86,6 +86,65 @@ class DemoAgentServiceTest : StringSpec({
         mapper.readTree(sendEmail.arguments()).get("body").asString() shouldBe "ENV_DATA_SYNTHETIC"
     }
 
+    "guarded path fails closed when the gateway omits the _guardmcp block" {
+        val stub = GatewayStub().start()
+        try {
+            val gateway = GatewayToolInvoker(
+                DemoAgentProperties(gatewayUrl = stub.baseUrl),
+                mapper,
+                HttpClient.newHttpClient(),
+            )
+            val result = gateway.call(
+                ToolExecutionRequest.builder().name("missing_guard").arguments("{}").build(),
+                "s-missing",
+            )
+            // No verdict → must be treated as blocked, never as an implicit allow.
+            result.blocked.shouldBeTrue()
+            result.verdict shouldBe "error"
+            result.resultJson.shouldBeNull()
+        } finally {
+            stub.stop()
+        }
+    }
+
+    "guarded path fails closed on an unrecognized verdict" {
+        val stub = GatewayStub().start()
+        try {
+            val gateway = GatewayToolInvoker(
+                DemoAgentProperties(gatewayUrl = stub.baseUrl),
+                mapper,
+                HttpClient.newHttpClient(),
+            )
+            val result = gateway.call(
+                ToolExecutionRequest.builder().name("unknown_verdict").arguments("{}").build(),
+                "s-unknown",
+            )
+            result.blocked.shouldBeTrue()
+            result.verdict shouldBe "error"
+        } finally {
+            stub.stop()
+        }
+    }
+
+    "guarded path fails closed on a non-2xx gateway status" {
+        val stub = GatewayStub().start()
+        try {
+            val gateway = GatewayToolInvoker(
+                DemoAgentProperties(gatewayUrl = stub.baseUrl),
+                mapper,
+                HttpClient.newHttpClient(),
+            )
+            val result = gateway.call(
+                ToolExecutionRequest.builder().name("server_error").arguments("{}").build(),
+                "s-5xx",
+            )
+            result.blocked.shouldBeTrue()
+            result.verdict shouldBe "error"
+        } finally {
+            stub.stop()
+        }
+    }
+
     "pii lookup preserves the merged guard verdict contract" {
         val stub = GatewayStub().start()
         try {

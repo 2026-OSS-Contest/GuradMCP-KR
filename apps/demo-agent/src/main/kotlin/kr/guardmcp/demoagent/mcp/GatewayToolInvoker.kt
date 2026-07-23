@@ -59,6 +59,12 @@ class GatewayToolInvoker(
                 .build(),
             HttpResponse.BodyHandlers.ofString(),
         )
+        // A security gateway must fail closed: any non-2xx status means the verdict is
+        // unknown, so we reject rather than read a body that may not carry a verdict.
+        // The gateway returns HTTP 200 even for blocks (JSON-RPC error inside the body).
+        if (response.statusCode() !in 200..299) {
+            throw IllegalStateException("gateway returned HTTP ${response.statusCode()}")
+        }
         return objectMapper.readTree(response.body())
     }
 
@@ -69,11 +75,13 @@ class GatewayToolInvoker(
         val error = node.get("error")
         if (error != null && !error.isNull) {
             val data = error.get("data")
+            // A JSON-RPC error means nothing executed upstream — always treat it as blocked,
+            // regardless of the verdict string, so a malformed error can't read as allowed.
             val verdict = data?.get("verdict")?.asString() ?: "block"
             return McpCallResult(
                 tool = tool, mode = mode, source = "gateway",
                 verdict = verdict,
-                blocked = verdict == "block" || verdict == "require_approval",
+                blocked = true,
                 riskScore = data?.get("riskScore")?.asInt() ?: 0,
                 policyIds = stringList(data?.get("policyIds")),
                 detections = detectionTags(data?.get("detections")),
@@ -83,16 +91,27 @@ class GatewayToolInvoker(
             )
         }
 
+        // Success branch: only a recognized verdict from a present _guardmcp block may pass.
+        // A missing block or an unknown verdict is a broken contract → fail closed.
         val guard = node.get("_guardmcp")
-        val verdict = guard?.get("verdict")?.asString() ?: "allow"
+        val verdict = guard?.get("verdict")?.asString()
+        if (guard == null || guard.isNull || verdict == null || verdict !in KNOWN_VERDICTS) {
+            return McpCallResult(
+                tool = tool, mode = mode, source = "gateway", verdict = "error",
+                blocked = true, riskScore = 0, policyIds = emptyList(), detections = emptyList(),
+                resultJson = null,
+                message = "게이트웨이 응답에 유효한 _guardmcp.verdict가 없어 fail-closed로 차단했습니다.",
+                rpcCode = null,
+            )
+        }
         val result = node.get("result")
         return McpCallResult(
             tool = tool, mode = mode, source = "gateway",
             verdict = verdict,
             blocked = verdict == "block" || verdict == "require_approval",
-            riskScore = guard?.get("riskScore")?.asInt() ?: 0,
-            policyIds = stringList(guard?.get("policyIds")),
-            detections = detectionTags(guard?.get("detections")),
+            riskScore = guard.get("riskScore")?.asInt() ?: 0,
+            policyIds = stringList(guard.get("policyIds")),
+            detections = detectionTags(guard.get("detections")),
             resultJson = result?.let { objectMapper.writeValueAsString(it) },
             message = null,
             rpcCode = null,
@@ -112,4 +131,9 @@ class GatewayToolInvoker(
                 if (subtype.isNullOrBlank()) type else "$type.$subtype"
             }.distinct()
         }
+
+    private companion object {
+        /** The five DSL v1 verdicts the gateway may return; anything else is rejected. */
+        val KNOWN_VERDICTS = setOf("allow", "warn", "mask_then_allow", "require_approval", "block")
+    }
 }
