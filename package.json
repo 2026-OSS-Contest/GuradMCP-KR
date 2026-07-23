@@ -12,7 +12,6 @@
   },
   "workspaces": [
     "apps/console",
-    "apps/demo-agent",
     "apps/demo-mcp-tools",
     "packages/*"
   ],

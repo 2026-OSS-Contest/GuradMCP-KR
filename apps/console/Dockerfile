@@ -7,7 +7,6 @@ WORKDIR /workspace
 COPY package*.json ./
 COPY tsconfig.base.json ./
 COPY apps/console/package.json apps/console/package.json
-COPY apps/demo-agent/package.json apps/demo-agent/package.json
 COPY apps/demo-mcp-tools/package.json apps/demo-mcp-tools/package.json
 COPY packages/gateway/package.json packages/gateway/package.json
 COPY packages/policy-engine/package.json packages/policy-engine/package.json
@@ -18,12 +17,11 @@ RUN npm run build --workspace @guardmcp/console
 RUN --mount=type=cache,target=/root/.npm \
     set -eux; \
     case "$TARGETARCH" in amd64) npm_cpu=x64 ;; arm64) npm_cpu=arm64 ;; *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; esac; \
-    mkdir -p /target-dependencies/apps/console /target-dependencies/apps/demo-agent \
+    mkdir -p /target-dependencies/apps/console \
       /target-dependencies/apps/demo-mcp-tools /target-dependencies/packages/gateway \
       /target-dependencies/packages/policy-engine; \
     cp package*.json /target-dependencies/; \
     cp apps/console/package.json /target-dependencies/apps/console/; \
-    cp apps/demo-agent/package.json /target-dependencies/apps/demo-agent/; \
     cp apps/demo-mcp-tools/package.json /target-dependencies/apps/demo-mcp-tools/; \
     cp packages/gateway/package.json /target-dependencies/packages/gateway/; \
     cp packages/policy-engine/package.json /target-dependencies/packages/policy-engine/; \

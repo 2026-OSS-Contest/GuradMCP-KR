@@ -6,7 +6,6 @@ WORKDIR /workspace
 COPY package*.json ./
 COPY tsconfig.base.json ./
 COPY apps/console/package.json apps/console/package.json
-COPY apps/demo-agent/package.json apps/demo-agent/package.json
 COPY apps/demo-mcp-tools/package.json apps/demo-mcp-tools/package.json
 COPY packages/gateway/package.json packages/gateway/package.json
 COPY packages/policy-engine/package.json packages/policy-engine/package.json

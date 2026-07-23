@@ -291,6 +291,8 @@ services:
         aliases:
           - demo-mcp-tools
 
+  # Unlike demo-mcp-tools-dev, this compiled JVM agent has no source-watch dev mode:
+  # it reuses the immutable runtime image. Source changes require an image rebuild.
   demo-agent-dev:
     <<: *demo-agent
     profiles: ["dev"]
@@ -310,8 +312,6 @@ services:
       DEPENDENCY_URLS: http://gateway:3001/health,http://demo-mcp-tools:3003/health
     ports:
       - "127.0.0.1:${DEMO_AGENT_PORT:-3002}:3002"
-    volumes:
-      - ./apps/demo-agent/src:/workspace/apps/demo-agent/src:ro
     depends_on:
       gateway:
         condition: service_healthy

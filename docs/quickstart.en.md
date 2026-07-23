@@ -38,13 +38,26 @@ When the started services are `healthy` and the health request succeeds, open <h
 curl --fail --silent --request POST http://localhost:3002/demo/pii
 ```
 
+The Demo Agent (LangChain4j) also reproduces the T-01 malicious-README scenario. Both modes
+run the same agent logic; guarded mode routes requests to the gateway (`/mcp`) so the policy
+blocks the `.env` read. Vulnerable mode currently replays the leak inside an isolated local
+sandbox rather than a real MCP endpoint — full endpoint-swap parity between the two modes
+arrives once the demo MCP servers (GMCP-19) are in place.
+
+```bash
+curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?mode=guarded"
+curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?mode=vulnerable"
+```
+
 ## Profiles
 
 | Purpose | Command | Contents |
 | --- | --- | --- |
 | Minimal product | `docker compose up -d` | gateway, control-plane, console, PostgreSQL, Redis |
 | Reproducible demo | `docker compose --profile demo up -d` | product services + demo-agent + demo-mcp-tools + deterministic seed |
-| Development-mode demo | `docker compose --profile dev up -d` | product services + development-mode demo-agent + demo-mcp-tools |
+| Development-mode demo | `docker compose --profile dev up -d` | product services + demo-mcp-tools (source-mounted) + demo-agent (built image) |
+
+In development mode, `demo-mcp-tools` reflects source edits. `demo-agent` is a compiled JVM service that runs from its built image, so code changes take effect on rebuild.
 
 ## Connect an MCP agent
 

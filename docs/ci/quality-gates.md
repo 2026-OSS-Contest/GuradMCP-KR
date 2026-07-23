@@ -33,7 +33,7 @@ source of truth for check names is
 | --- | --- | --- |
 | `quality / lint-typecheck` | `npm run lint`, `npm run typecheck` | TypeScript workspaces |
 | `test / vitest` | `npm test` | Gateway and package unit/integration tests |
-| `test / junit5-kotest` | `services/control-plane/gradlew -p services/control-plane test` | Spring control plane |
+| `test / junit5-kotest` | `./gradlew test` in `services/control-plane` and `apps/demo-agent` | Spring control plane, LangChain4j demo agent |
 | `test / playwright` | `npm run test:e2e` | Console browser flows |
 | `test / gmcp-30-compose` | `scripts/compose-up.sh demo` | Cold demo-stack startup and health checks within 300 seconds |
 | `quality / workflow-lint` | `actionlint` | `.github/workflows/*.yml` |

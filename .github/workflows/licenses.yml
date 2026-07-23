@@ -44,10 +44,16 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
       - name: Resolve JVM dependencies
-        working-directory: services/control-plane
         run: |
-          mkdir -p ../../artifacts/licenses
-          ./gradlew dependencies --no-daemon > ../../artifacts/licenses/gradle-dependencies.txt
+          mkdir -p artifacts/licenses
+          out="$GITHUB_WORKSPACE/artifacts/licenses/gradle-dependencies.txt"
+          : > "$out"
+          # Every standalone Gradle module must contribute to the license inventory.
+          # The generator dedupes by coordinate, so concatenating the dumps is safe.
+          for module in services/control-plane apps/demo-agent; do
+            echo "# gradle dependencies: $module" >> "$out"
+            ( cd "$module" && ./gradlew dependencies --no-daemon ) >> "$out"
+          done
       - name: Generate dependency license inventory
         run: >-
           node scripts/ci/generate-license-report.mjs
