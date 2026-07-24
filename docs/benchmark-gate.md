@@ -26,6 +26,9 @@ npm run bench -- --output reports/benchmark.json
 | 기여 fixture 일치율 | `= 1.00` | 재귀 탐색한 YAML fixture의 action·매칭 정책 ID가 기대값과 모두 일치 |
 | 정책 fixture 커버리지 | `= 1.00` | 배포 정책마다 match/not_match fixture를 각각 한 건 이상 보유 |
 | Precision | report-only | 탐지로 분류한 샘플 중 실제 positive 비율 |
+| 유형별 Recall | report-only | `type` 라벨이 붙은 positive 샘플의 유형별 탐지 비율 (`perTypeRecall`) |
+
+`attack-lab/datasets/`의 각 positive 샘플은 기대 PII 유형을 `type` 필드로 라벨합니다. runner는 이를 모아 유형별 recall과 라벨된 유형 수(`labeledTypeCount`)를 report에 남기지만, 합격 판정은 위 절대 기준으로만 합니다.
 
 현재 구현의 authoritative threshold는 [`attack-lab/benchmark/run.ts`](../attack-lab/benchmark/run.ts)의 `thresholds` 객체입니다. 문서와 코드가 다르면 PR에서 둘을 함께 고쳐야 하며, 기준을 통과시키기 위해 측정 샘플을 삭제해서는 안 됩니다.
 

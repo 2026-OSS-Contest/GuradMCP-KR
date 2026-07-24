@@ -26,6 +26,9 @@ npm run bench -- --output reports/benchmark.json
 | Contribution fixture pass rate | `= 1.00` | every recursively discovered YAML fixture matches its expected action and policy IDs |
 | Policy-fixture coverage | `= 1.00` | every shipped policy has at least one match and one not-match fixture |
 | Precision | report-only | actual positives among detected samples |
+| Per-type recall | report-only | detected fraction per PII type for `type`-labeled positives (`perTypeRecall`) |
+
+Every positive sample under `attack-lab/datasets/` labels its expected PII type with a `type` field. The runner aggregates these into per-type recall and a labeled-type count (`labeledTypeCount`) in the report, while the pass decision still uses only the absolute thresholds above.
 
 The authoritative thresholds are the `thresholds` object in [`attack-lab/benchmark/run.ts`](../attack-lab/benchmark/run.ts). Update code and documentation together if they differ. Never remove measured samples merely to pass a threshold.
 
