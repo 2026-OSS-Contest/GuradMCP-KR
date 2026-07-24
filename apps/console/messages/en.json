@@ -16,7 +16,70 @@
     "pendingApprovals": "Pending",
     "session": "Session",
     "collapse": "Collapse rail",
-    "expand": "Expand rail"
+    "expand": "Expand rail",
+    "offlineBanner": "The gateway needs to be connected.",
+    "lastFetched": "Last checked"
+  },
+  "verdict": {
+    "allow": "Allowed",
+    "warn": "Warning",
+    "requireApproval": "Pending",
+    "block": "Blocked"
+  },
+  "time": {
+    "justNow": "just now",
+    "minutesAgo": "{count}m ago",
+    "hoursAgo": "{count}h ago",
+    "daysAgo": "{count}d ago"
+  },
+  "gateway": {
+    "kpi": {
+      "servers": "MCP servers",
+      "serversDown": "{count} down",
+      "tools": "Protected tools",
+      "policies": "Active policies",
+      "packCount": "{count} packs",
+      "blocked": "Blocked 24h"
+    },
+    "inventory": {
+      "title": "MCP server inventory",
+      "connected": "Connected",
+      "disconnected": "Offline",
+      "toolCount": "Tools {count}",
+      "risk": "Risk",
+      "riskHigh": "high",
+      "riskMedium": "medium",
+      "riskLow": "low",
+      "morePolicies": "+{count}",
+      "noPolicies": "No policy applied",
+      "snapshotChanged": "Definition changed"
+    },
+    "events": {
+      "title": "Recent security events",
+      "empty": "No security events recorded yet.",
+      "reconnecting": "Live connection lost. Reconnecting…"
+    },
+    "cta": { "demo": "Run the demo" },
+    "error": {
+      "unreachable": "Cannot reach the gateway. Check the gateway container with docker compose ps."
+    },
+    "quickStart": {
+      "title": "Get started with GuardMCP-KR",
+      "desc": "Register an MCP server with the three steps below and the gateway home fills in with your server inventory and security events.",
+      "policyPacks": "Policy packs",
+      "step1": {
+        "title": "Point the MCP endpoint at the gateway",
+        "desc": "From then on every tool call is inspected."
+      },
+      "step2": {
+        "title": "Choose policy packs",
+        "desc": "Enable the packs matching the threats you care about. You can change this any time from the Policies screen."
+      },
+      "step3": {
+        "title": "Run the demo",
+        "desc": "Pick an attack scenario and compare the unguarded and guarded runs side by side in under three minutes."
+      }
+    }
   },
   "screens": {
     "gateway": { "title": "Gateway", "desc": "Overview of MCP servers, active policies and recent events" },
