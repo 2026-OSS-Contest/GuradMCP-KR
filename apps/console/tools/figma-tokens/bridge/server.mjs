@@ -2,7 +2,7 @@
 // and writes them into the repo as CSS. Run: `npm run figma:bridge`.
 
 import { createServer } from "node:http";
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir, rm } from "node:fs/promises";
 import { dirname, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,14 +13,28 @@ const REPO_ROOT = resolve(CONSOLE_ROOT, "../.."); // repo root
 const OUT_FILE = resolve(CONSOLE_ROOT, "app/tokens.css");
 const DEBUG_FILE = resolve(HERE, "..", ".last-payload.json");
 const EXPORT_DIR = resolve(CONSOLE_ROOT, "tools/figma-export/out");
-const SHOTS_DIR = resolve(EXPORT_DIR, "screenshots");
+// tokens.css sits three levels above out/ (out → figma-export → tools → apps/console).
+const TOKENS_DEPTH = 3;
 const rel = (p) => relative(REPO_ROOT, p);
 
+// CSS identifiers stay ASCII — they become custom-property names in tokens.css and must keep
+// matching what theme.css references.
 const slug = (...parts) =>
   parts
     .join("-")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+// File and folder names keep Hangul. Stripping it collapses distinct Korean frame names into
+// the same slug ("SCR-101 게이트웨이" and "SCR-101 정책" both became "scr-101"), and a purely
+// Korean name slugged to nothing at all.
+const FILE_UNSAFE = /[^a-z0-9가-힣ᄀ-ᇿ㄰-㆏]+/g;
+const fileSlug = (name) =>
+  String(name)
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(FILE_UNSAFE, "-")
     .replace(/^-+|-+$/g, "");
 
 const round = (n) => Math.round(n * 1000) / 1000;
@@ -156,12 +170,15 @@ function radiusCss(o) {
 const JUST = { MIN: "flex-start", CENTER: "center", MAX: "flex-end", SPACE_BETWEEN: "space-between" };
 const ALIGN = { MIN: "flex-start", CENTER: "center", MAX: "flex-end", BASELINE: "baseline" };
 
-function genNode(node, rules, seq, abs) {
+function genNode(node, rules, seq, abs, parentDir) {
   if (node.hidden) return ""; // don't render layers hidden in Figma
   const cls = `n-${slug(node.name) || "node"}-${seq.i++}`;
   const s = [];
   if (abs) s.push("position:absolute", `left:${node.x || 0}px`, `top:${node.y || 0}px`);
-  if (node.layout) {
+  // An icon exported as one SVG already contains its own padding and alignment. Re-applying the
+  // frame's padding to the <img> shrinks the artwork into the content box (border-box), which is
+  // how a 40px badge ends up drawing at 24px.
+  if (node.layout && !node.image) {
     const L = node.layout;
     s.push("display:flex", `flex-direction:${L.dir === "VERTICAL" ? "column" : "row"}`);
     if (L.wrap === "WRAP") s.push("flex-wrap:wrap");
@@ -173,28 +190,80 @@ function genNode(node, rules, seq, abs) {
   if (node.sizing) {
     if (node.sizing.h === "FIXED" && node.w) s.push(`width:${node.w}px`);
     if (node.sizing.v === "FIXED" && node.h) s.push(`height:${node.h}px`);
-    if (node.sizing.h === "FILL") s.push("align-self:stretch", "flex:1 1 0");
+    // A frame set to HUG with nothing inside it has nothing to hug, so CSS collapses it to its
+    // padding — an emptied component instance loses its whole height. Figma still measured the
+    // size it was drawn at (via a min-size or the instance's own bounds); hold that as a floor.
+    // Never for text: pinning a run to the width Figma measured would mask a missing font
+    // instead of letting the mismatch show.
+    if (node.type !== "TEXT" && !node.image && !(node.children || []).length) {
+      if (node.sizing.h === "HUG" && node.w) s.push(`min-width:${node.w}px`);
+      if (node.sizing.v === "HUG" && node.h) s.push(`min-height:${node.h}px`);
+    }
+    // FILL means "fill the parent", but which CSS property does that depends on the parent's
+    // direction: flex-grow along its main axis, align-self across it. Emitting both (or the
+    // wrong one) makes every child of a column stretch to full height and the layout collapses.
+    const fillMain = parentDir === "VERTICAL" ? node.sizing.v : node.sizing.h;
+    const fillCross = parentDir === "VERTICAL" ? node.sizing.h : node.sizing.v;
+    if (parentDir) {
+      if (fillMain === "FILL") s.push("flex:1 1 0");
+      if (fillCross === "FILL") s.push("align-self:stretch");
+    } else {
+      if (node.sizing.h === "FILL") s.push("width:100%");
+      if (node.sizing.v === "FILL") s.push("height:100%");
+    }
   } else if (typeof node.w === "number" && node.type !== "TEXT") {
     s.push(`width:${node.w}px`, `height:${node.h}px`);
   }
   const r = radiusCss(node);
   if (r) s.push(`border-radius:${r}`);
-  if (node.strokes) {
+  else if (node.type === "ELLIPSE") s.push("border-radius:50%");
+  // Strokes and effects share `box-shadow`, so they have to be emitted together — declaring
+  // it twice silently drops whichever came first.
+  const shadows = [];
+  // Not for image nodes: Figma's SVG export already draws their fill and stroke. Emitting the
+  // stroke again as CSS wraps a rectangle around the artwork — an arrow ends up in a box.
+  if (node.strokes && !node.image) {
     const sc = paintCss(node.strokes);
-    if (sc) s.push(`border:${node.strokeWeight || 1}px solid ${sc}`);
+    const sides = node.strokeSides;
+    const weight = node.strokeWeight || 1;
+    const inset = node.strokeAlign === "OUTSIDE" ? "" : "inset ";
+    // Figma's default INSIDE stroke is painted within the frame; a CSS border grows the box
+    // instead, which is a 2px error on every bordered element. A ring shadow does not.
+    if (!sc) {
+      /* no visible stroke paint */
+    } else if (sides && new Set(Object.values(sides)).size > 1) {
+      // Sides differ — usually a single divider rule. One shadow per side keeps it that way.
+      const OFFSET = { top: [0, 1], bottom: [0, -1], left: [1, 0], right: [-1, 0] };
+      for (const [side, w] of Object.entries(sides)) {
+        if (!w || !OFFSET[side]) continue;
+        const [x, y] = OFFSET[side];
+        shadows.push(`${inset}${x * w}px ${y * w}px 0 0 ${sc}`);
+      }
+    } else if (node.strokeAlign === "CENTER") {
+      s.push(`border:${weight}px solid ${sc}`);
+    } else {
+      shadows.push(`${inset}0 0 0 ${weight}px ${sc}`);
+    }
   }
   if (typeof node.opacity === "number") s.push(`opacity:${node.opacity}`);
   if (node.clip) s.push("overflow:hidden");
   if (node.effects) {
-    const sh = node.effects
-      .filter((e) => e.type === "DROP_SHADOW" || e.type === "INNER_SHADOW")
-      .map((e) => `${e.type === "INNER_SHADOW" ? "inset " : ""}${e.offset.x}px ${e.offset.y}px ${e.radius}px ${e.spread || 0}px ${e.color ? color(e.color) : "#0000"}`)
-      .join(", ");
-    if (sh) s.push(`box-shadow:${sh}`);
+    for (const e of node.effects) {
+      if (e.type !== "DROP_SHADOW" && e.type !== "INNER_SHADOW") continue;
+      shadows.push(
+        `${e.type === "INNER_SHADOW" ? "inset " : ""}${e.offset.x}px ${e.offset.y}px ${e.radius}px ${e.spread || 0}px ${e.color ? color(e.color) : "#0000"}`
+      );
+    }
   }
+  if (shadows.length) s.push(`box-shadow:${shadows.join(", ")}`);
 
   if (node.image) {
     const mime = node.image.format === "svg" ? "image/svg+xml" : "image/png";
+    // An icon in a flex row is shrunk by the browser unless it is told not to; and an SVG
+    // exported at its own size must not be re-stretched by a FILL rule above.
+    s.push("flex:none", "object-fit:contain");
+    if (typeof node.w === "number" && !s.some((d) => d.startsWith("width:")))
+      s.push(`width:${node.w}px`, `height:${node.h}px`);
     rules.push(`.${cls}{${s.join(";")}}`);
     return `<img class="${cls}" src="data:${mime};base64,${node.image.base64}" alt="${escapeHtml(node.name)}" />`;
   }
@@ -204,13 +273,33 @@ function genNode(node, rules, seq, abs) {
     if (fg) s.push(`color:${fg}`);
     if (!node.textStyle) {
       if (node.fontSize) s.push(`font-size:${node.fontSize}px`);
-      if (node.font) s.push(`font-family:"${node.font.family}"`);
+      if (node.font) {
+        s.push(`font-family:"${node.font.family}"`);
+        // Without these three the draft renders every label at 400 weight and the browser's
+        // default leading, which is where most of the vertical drift against the design comes from.
+        s.push(`font-weight:${fontWeight(node.font.style)}`);
+        if (isItalic(node.font.style)) s.push("font-style:italic");
+      }
+      const lh = fmtLineHeight(node.lineHeight);
+      if (lh !== "normal") s.push(`line-height:${lh}`);
+      const ls = fmtLetterSpacing(node.letterSpacing);
+      if (ls !== "normal") s.push(`letter-spacing:${ls}`);
     }
     if (node.textAlign && node.textAlign !== "LEFT") s.push(`text-align:${node.textAlign.toLowerCase()}`);
     if (abs && node.autoResize === "NONE" && node.w) s.push(`width:${node.w}px`);
     else if (abs) s.push("white-space:nowrap");
     rules.push(`.${cls}{${s.join(";")}}`);
     const tc = node.textStyle ? ` text-${slug(node.textStyle)}` : "";
+    // Per-character colours arrive as segments; each becomes its own coloured span.
+    if (Array.isArray(node.segments) && node.segments.length > 1) {
+      const inner = node.segments
+        .map((seg) => {
+          const c = paintCss(seg.fills);
+          return c ? `<span style="color:${c}">${escapeHtml(seg.text)}</span>` : escapeHtml(seg.text);
+        })
+        .join("");
+      return `<span class="${cls}${tc}">${inner}</span>`;
+    }
     return `<span class="${cls}${tc}">${escapeHtml(node.text || "")}</span>`;
   }
 
@@ -229,34 +318,106 @@ function genNode(node, rules, seq, abs) {
   const childAbs = !node.layout && Array.isArray(node.children) && node.children.length > 0;
   if (childAbs) s.push("position:relative");
   rules.push(`.${cls}{${s.join(";")}}`);
-  const inner = (node.children || []).map((c) => genNode(c, rules, seq, childAbs)).join("");
+  const inner = (node.children || [])
+    .map((c) => genNode(c, rules, seq, childAbs, node.layout ? node.layout.dir : null))
+    .join("");
   return `<div class="${cls}">${inner}</div>`;
 }
 
-function structureToHtml(structure, title) {
+function structureToHtml(structure, title, depth) {
   const rules = [];
   const body = genNode(structure, rules, { i: 0 });
+  const up = "../".repeat(TOKENS_DEPTH + depth);
   return (
     `<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8" />\n<title>${escapeHtml(title)}</title>\n` +
     `<!-- Draft auto-generated from Figma. Tokens referenced via var(--...) resolve against app/tokens.css. -->\n` +
-    `<link rel="stylesheet" href="../../../app/tokens.css" />\n` +
-    `<style>\nbody{margin:0;padding:24px;background:#0b0b0c}\n${rules.join("\n")}\n</style>\n</head>\n<body>\n${body}\n</body>\n</html>\n`
+    // fonts.css carries the @font-face rules. Without it every draft silently falls back to a
+    // system font, so nothing the design measured — text width, and any box hugging it — lines up.
+    `<link rel="stylesheet" href="${up}app/fonts.css" />\n` +
+    `<link rel="stylesheet" href="${up}app/tokens.css" />\n` +
+    // border-box: Figma's widths already include padding and stroke, so the browser default
+    // (content-box) inflates every fixed-size frame that has either.
+    // No body padding: the frame has to start at 0,0 so the draft can be laid over the .png
+    // next to it. A viewing gutter here shifts every coordinate and hides real misalignment.
+    `<style>\n*{box-sizing:border-box}\nbody{margin:0;background:#0b0b0c}\n${rules.join("\n")}\n</style>\n</head>\n<body>\n${body}\n</body>\n</html>\n`
   );
 }
 
-async function handleExport(payload, res) {
-  await mkdir(SHOTS_DIR, { recursive: true });
-  const written = [];
-  for (const node of payload.nodes || []) {
-    const name = slug(node.name || "node");
-    const jsonNoBlobs = JSON.stringify(node.structure, (k, v) => (k === "base64" ? `<${v.length}b>` : v), 2);
-    await writeFile(resolve(EXPORT_DIR, `${name}.json`), jsonNoBlobs, "utf8");
-    await writeFile(resolve(EXPORT_DIR, `${name}.html`), structureToHtml(node.structure, node.name || name), "utf8");
-    if (node.png) await writeFile(resolve(SHOTS_DIR, `${name}.png`), Buffer.from(node.png, "base64"));
-    written.push(name);
+// ---- section-scoped export (streamed one item per request) ----------------
+
+let exportRun = { written: [], taken: new Map() };
+
+// Figma names are attacker-adjacent input for the filesystem: keep only slugged segments.
+const safeSegments = (path) => (Array.isArray(path) ? path : []).map((p) => fileSlug(p)).filter(Boolean);
+
+// Two frames can still legitimately share a name inside one folder. Number the later ones
+// rather than overwriting, and say so — a silent overwrite looks like a missing export.
+function claimName(dirKey, base) {
+  const used = exportRun.taken.get(dirKey) || new Set();
+  let name = base;
+  for (let n = 2; used.has(name); n++) name = `${base}-${n}`;
+  used.add(name);
+  exportRun.taken.set(dirKey, used);
+  return name;
+}
+
+async function handleBegin(payload, res) {
+  exportRun = { written: [], taken: new Map() };
+  const roots = safeSegments(payload.roots);
+  for (const root of roots) await rm(resolve(EXPORT_DIR, root), { recursive: true, force: true });
+  await mkdir(EXPORT_DIR, { recursive: true });
+  console.log(`\n▸ export "${payload.fileName || "?"}" → ${rel(EXPORT_DIR)}`);
+  if (roots.length) console.log(`  cleared: ${roots.join(", ")}`);
+  res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, cleared: roots }));
+}
+
+async function handleItem(item, res) {
+  const segments = safeSegments(item.path);
+  const base = fileSlug(item.name || "") || "node";
+  const name = claimName(segments.join("/"), base);
+  // Every item owns a folder, so it can be wiped wholesale without touching its siblings —
+  // this also cleans up loose items at the root, which /begin never clears.
+  const dir = resolve(EXPORT_DIR, ...segments, name);
+  await rm(dir, { recursive: true, force: true });
+  await mkdir(dir, { recursive: true });
+
+  const jsonNoBlobs = JSON.stringify(item.structure, (k, v) => (k === "base64" ? `<${v.length}b>` : v), 2);
+  await writeFile(resolve(dir, `${name}.json`), jsonNoBlobs, "utf8");
+  await writeFile(resolve(dir, `${name}.html`), structureToHtml(item.structure, item.name || name, segments.length + 1), "utf8");
+  if (item.png) await writeFile(resolve(dir, `${name}.png`), Buffer.from(item.png, "base64"));
+
+  const shown = segments.concat([name, ""]).join("/");
+  exportRun.written.push(shown);
+  const renamed = name !== base ? `  ⚠ "${item.name}" collides with an earlier export` : "";
+  console.log(`  ✓ ${shown}${item.png ? "" : "  (no png)"}${renamed}`);
+  res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, path: shown }));
+}
+
+async function handleTokens(payload, res) {
+  await mkdir(dirname(OUT_FILE), { recursive: true });
+  await writeFile(OUT_FILE, buildCss(payload), "utf8");
+  await writeFile(DEBUG_FILE, JSON.stringify(payload, null, 2), "utf8");
+
+  const vars = (payload.collections || []).reduce((n, c) => n + c.variables.length, 0);
+  const s = payload.styles || { text: [], paint: [], effect: [] };
+  const total = vars + s.text.length + s.paint.length + s.effect.length;
+
+  console.log(`\n✓ ${rel(OUT_FILE)}`);
+  for (const c of payload.meta ? payload.meta.collections : []) {
+    console.log(`  collection "${c.name}"  modes=[${c.modes.join(", ")}]  vars=${c.variables}`);
   }
-  console.log(`✓ export: ${written.join(", ")} → ${rel(EXPORT_DIR)} (json + html + png)`);
-  res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, nodes: written, dir: rel(EXPORT_DIR) }));
+  console.log(`  text=${s.text.length}  paint=${s.paint.length}  effect=${s.effect.length}  → debug: ${rel(DEBUG_FILE)}`);
+
+  res.writeHead(200, { "Content-Type": "application/json" }).end(
+    JSON.stringify({ ok: true, variables: vars, text: s.text.length, paint: s.paint.length, effect: s.effect.length, total, path: rel(OUT_FILE) })
+  );
+}
+
+async function handleDone(payload, res) {
+  const written = exportRun.written.length;
+  const missing = (payload.total || written) - written;
+  console.log(`✓ ${written} item(s) → ${rel(EXPORT_DIR)}${missing > 0 ? `  (${missing} failed)` : ""}`);
+  res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, written, dir: rel(EXPORT_DIR) }));
 }
 
 const server = createServer((req, res) => {
@@ -264,32 +425,26 @@ const server = createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return void res.writeHead(204).end();
-  if (req.method !== "POST" || !(req.url.startsWith("/tokens") || req.url.startsWith("/export"))) {
-    return void res.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "not found" }));
+  // Exact routes only: an unmatched path must never fall through to the tokens writer,
+  // which would clobber app/tokens.css with whatever body it was handed.
+  const route = (req.url || "").split("?")[0].replace(/\/+$/, "");
+  const HANDLERS = {
+    "/tokens": handleTokens,
+    "/export/begin": handleBegin,
+    "/export/item": handleItem,
+    "/export/done": handleDone,
+  };
+  const handler = req.method === "POST" ? HANDLERS[route] : undefined;
+  if (!handler) {
+    return void res
+      .writeHead(404, { "Content-Type": "application/json" })
+      .end(JSON.stringify({ error: `not found: ${req.method} ${route}` }));
   }
   let body = "";
   req.on("data", (chunk) => (body += chunk));
   req.on("end", async () => {
     try {
-      const payload = JSON.parse(body);
-      if (req.url.startsWith("/export")) return void (await handleExport(payload, res));
-      await mkdir(dirname(OUT_FILE), { recursive: true });
-      await writeFile(OUT_FILE, buildCss(payload), "utf8");
-      await writeFile(DEBUG_FILE, JSON.stringify(payload, null, 2), "utf8");
-
-      const vars = (payload.collections || []).reduce((n, c) => n + c.variables.length, 0);
-      const s = payload.styles || { text: [], paint: [], effect: [] };
-      const total = vars + s.text.length + s.paint.length + s.effect.length;
-
-      console.log(`\n✓ ${rel(OUT_FILE)}`);
-      for (const c of payload.meta ? payload.meta.collections : []) {
-        console.log(`  collection "${c.name}"  modes=[${c.modes.join(", ")}]  vars=${c.variables}`);
-      }
-      console.log(`  text=${s.text.length}  paint=${s.paint.length}  effect=${s.effect.length}  → debug: ${rel(DEBUG_FILE)}`);
-
-      res.writeHead(200, { "Content-Type": "application/json" }).end(
-        JSON.stringify({ ok: true, variables: vars, text: s.text.length, paint: s.paint.length, effect: s.effect.length, total, path: rel(OUT_FILE) })
-      );
+      await handler(JSON.parse(body), res);
     } catch (err) {
       res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(err.message || err) }));
       console.error("✗", err);
