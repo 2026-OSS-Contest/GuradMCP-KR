@@ -1,15 +1,14 @@
-import { getTranslations } from "next-intl/server";
-import { ScreenStub } from "@/components/screen-stub";
+import { ReplayScreen } from "@/components/replay/replay-screen";
 
-export default async function ReplaySessionPage({ params }: { params: Promise<{ sessionId: string }> }) {
+/** Deep-linked replay: /replay/{sessionId}?event={eventId} (spec §3). */
+export default async function ReplaySessionPage({
+  params,
+  searchParams
+}: {
+  params: Promise<{ sessionId: string }>;
+  searchParams: Promise<{ event?: string }>;
+}) {
   const { sessionId } = await params;
-  const t = await getTranslations();
-  return (
-    <ScreenStub
-      scr="SCR-301"
-      title={t("screens.replay.title")}
-      desc={`${t("screens.replay.desc")} · ${sessionId}`}
-      note={t("common.scaffold")}
-    />
-  );
+  const { event } = await searchParams;
+  return <ReplayScreen sessionId={sessionId} eventId={event} />;
 }

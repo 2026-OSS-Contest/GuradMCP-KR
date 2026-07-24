@@ -56,3 +56,87 @@ export interface ServersResponse {
 export interface RecentEventsResponse {
   events: SecurityEvent[];
 }
+
+// ── SCR-301 Replay (spec §5.3) ──────────────────────────────────────────────
+// Shared by the timeline (SCR-301 centre, GMCP-11) and the event detail panel
+// (SCR-301 right, GMCP-34). `GET /sessions` and `GET /sessions/{id}/timeline`.
+
+/** Left column: one row per session, with a verdict tally and the live marker. */
+export interface SessionSummary {
+  id: string;
+  /** ISO 8601; the list shows the time part. */
+  startedAt: string;
+  live: boolean;
+  eventCount: number;
+  /** Non-zero verdict counts, in the order the design stacks the small badges. */
+  verdicts: { verdict: Verdict; count: number }[];
+}
+
+/** Timeline node kinds and their markers (spec §5.3 no.3). */
+export type TimelineNodeType = "user" | "agent" | "tool_call" | "verdict" | "result";
+
+/** One node on the Timeline Rail. `detailId` links to its right-panel detail. */
+export interface TimelineEvent {
+  id: string;
+  type: TimelineNodeType;
+  at: string;
+  /** Primary line (e.g. "README를 요약해줘", `read_file(".env")`). */
+  title: string;
+  /** Optional second line shown under the title on richer nodes. */
+  subtitle?: string;
+  /** Present on `verdict` nodes; colours the marker and shows the badge. */
+  verdict?: Verdict;
+  /** The one policy id a verdict node chips inline on the rail. */
+  policy?: string;
+}
+
+/** A single PII/secret/injection finding (detection list, spec §5.3 no.4③). */
+export interface Detection {
+  /** Top-level tag, e.g. "SECRET", "PHONE". */
+  type: string;
+  subtype: string;
+  /** 0–100. */
+  confidence: number;
+}
+
+/** Mask Diff View (spec §5.3 no.4④): the text before and after masking. */
+export interface MaskDiff {
+  before: string;
+  after: string;
+}
+
+export type ChainStatus = "verified" | "failed";
+
+/** Right panel for a selected event (spec §5.3 no.4). */
+export interface EventDetail {
+  id: string;
+  sessionId: string;
+  at: string;
+  verdict: Verdict;
+  tool: string;
+  /** Matching policies (Policy Chip list). */
+  policies: string[];
+  /** 0–100; shown red for a block. */
+  threatScore: number;
+  detections: Detection[];
+  maskDiff: MaskDiff | null;
+  chain: { status: ChainStatus; hash: string };
+  /** Whether the reveal-original action is available to this operator (spec §5.3 no.5). */
+  canReveal: boolean;
+}
+
+/** Policy Chip popover payload (spec §3): the read-only YAML behind a policy id. */
+export interface PolicyDetail {
+  id: string;
+  yaml: string;
+}
+
+export interface SessionsResponse {
+  sessions: SessionSummary[];
+}
+
+export interface TimelineResponse {
+  events: TimelineEvent[];
+  /** Full detail for each event id the panel can select. */
+  details: Record<string, EventDetail>;
+}

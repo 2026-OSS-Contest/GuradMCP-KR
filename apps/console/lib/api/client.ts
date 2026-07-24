@@ -1,4 +1,11 @@
-import type { Overview, RecentEventsResponse, ServersResponse } from "./types";
+import type {
+  Overview,
+  PolicyDetail,
+  RecentEventsResponse,
+  ServersResponse,
+  SessionsResponse,
+  TimelineResponse
+} from "./types";
 
 /** Empty in development, where MSW answers these same-origin requests. */
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
@@ -19,3 +26,8 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
 export const getOverview = (signal?: AbortSignal) => get<Overview>("/overview", signal);
 export const getServers = (signal?: AbortSignal) => get<ServersResponse>("/servers", signal);
 export const getRecentEvents = (signal?: AbortSignal) => get<RecentEventsResponse>("/events/recent", signal);
+export const getSessions = (signal?: AbortSignal) => get<SessionsResponse>("/sessions", signal);
+export const getSessionTimeline = (id: string, signal?: AbortSignal) =>
+  get<TimelineResponse>(`/sessions/${encodeURIComponent(id)}/timeline`, signal);
+export const getPolicy = (id: string, signal?: AbortSignal) =>
+  get<PolicyDetail>(`/policies/${encodeURIComponent(id)}`, signal);

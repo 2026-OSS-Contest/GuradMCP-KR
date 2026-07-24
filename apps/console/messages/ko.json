@@ -59,7 +59,9 @@
       "empty": "아직 기록된 보안 이벤트가 없습니다.",
       "reconnecting": "실시간 연결이 끊겼습니다. 재연결 중…"
     },
-    "cta": { "demo": "데모 실행" },
+    "cta": {
+      "demo": "데모 실행"
+    },
     "error": {
       "unreachable": "게이트웨이에 연결할 수 없습니다. docker compose ps로 gateway 컨테이너 상태를 확인하세요."
     },
@@ -81,14 +83,75 @@
       }
     }
   },
-  "screens": {
-    "gateway": { "title": "Gateway", "desc": "MCP 서버·활성 정책·최근 보안 이벤트 개요" },
-    "liveConsole": { "title": "Demo & Live Console", "desc": "공격 시나리오 실행과 실시간 판정 스트림" },
-    "replay": { "title": "Replay", "desc": "세션 타임라인 재생과 이벤트 상세" },
-    "detector": { "title": "Detector 테스트기", "desc": "PII·시크릿·인젝션 탐지 미리보기" },
-    "approval": { "title": "Approval Console", "desc": "승인 대기열과 처리 이력" },
-    "policies": { "title": "Policies", "desc": "정책팩·정책 열람과 활성/비활성" },
-    "settings": { "title": "Settings", "desc": "업스트림 서버·장애 정책·로그 설정" }
+  "replay": {
+    "sessions": {
+      "title": "세션 목록",
+      "searchPlaceholder": "세션 ID, 도구명 검색",
+      "eventCount": "이벤트 {count}",
+      "noResults": "검색 결과가 없습니다."
+    },
+    "timeline": {
+      "title": "타임라인",
+      "scaffold": "타임라인은 후속 이슈(GMCP-11)에서 구현됩니다."
+    },
+    "detail": {
+      "title": "이벤트 상세",
+      "matchingPolicies": "매칭 정책",
+      "threatScore": "위협 점수",
+      "detections": "탐지",
+      "detectionUnit": "건",
+      "detectionList": "탐지 목록 상세",
+      "expand": "상세 보기",
+      "collapse": "간단히",
+      "chainVerified": "체인 검증 성공",
+      "chainFailed": "체인 검증 실패",
+      "reveal": "원문 열람",
+      "revealed": "원문이 표시되었습니다. 열람 기록이 감사 로그에 남았습니다.",
+      "noSelection": "타임라인에서 이벤트를 선택하세요."
+    },
+    "policy": {
+      "goToPolicy": "정책으로 이동",
+      "loadError": "정책을 불러오지 못했습니다."
+    },
+    "reveal": {
+      "title": "원문 열람 기록 안내",
+      "body": "원문 열람 시 열람 기록이 감사 로그에 남습니다. 열람을 진행하시겠습니까?",
+      "cancel": "취소",
+      "continue": "계속"
+    }
   },
-  "common": { "comingSoon": "준비 중", "scaffold": "이 화면은 스캐폴드 단계입니다. 상세 UI는 후속 이슈에서 구현됩니다." }
+  "screens": {
+    "gateway": {
+      "title": "Gateway",
+      "desc": "MCP 서버·활성 정책·최근 보안 이벤트 개요"
+    },
+    "liveConsole": {
+      "title": "Demo & Live Console",
+      "desc": "공격 시나리오 실행과 실시간 판정 스트림"
+    },
+    "replay": {
+      "title": "Replay",
+      "desc": "세션 타임라인 재생과 이벤트 상세"
+    },
+    "detector": {
+      "title": "Detector 테스트기",
+      "desc": "PII·시크릿·인젝션 탐지 미리보기"
+    },
+    "approval": {
+      "title": "Approval Console",
+      "desc": "승인 대기열과 처리 이력"
+    },
+    "policies": {
+      "title": "Policies",
+      "desc": "정책팩·정책 열람과 활성/비활성"
+    },
+    "settings": {
+      "title": "Settings",
+      "desc": "업스트림 서버·장애 정책·로그 설정"
+    }
+  },
+  "common": {
+    "comingSoon": "준비 중",
+    "scaffold": "이 화면은 스캐폴드 단계입니다. 상세 UI는 후속 이슈에서 구현됩니다."
+  }
 }
