@@ -4,32 +4,56 @@
   "rules": [
     {
       "subtype": "IGNORE_INSTRUCTIONS",
-      "description": "English instruction-override phrasing",
-      "pattern": "(?:ignore|disregard)\\s+(?:all\\s+)?(?:previous|prior)\\s+instructions?",
+      "description": "Instruction-override phrasing (category 1); English and Korean-English mixed objects",
+      "pattern": "(?:ignore|disregard|forget|override)\\s+(?:(?:all|any|every|the|previous|prior|above|earlier|your|모든|이전|앞선|위의?)\\s+)+(?:instructions?|prompts?|rules?|guidelines?|directions?|지시(?:사항)?|명령|규칙|프롬프트|지침)",
       "flags": "gi",
       "maskedAs": "[INJECTION]",
       "confidence": 0.9
     },
     {
       "subtype": "KO_IGNORE_INSTRUCTIONS",
-      "description": "Korean instruction-override phrasing",
-      "pattern": "(?:이전|앞선)\\s*(?:의\\s*)?(?:지시|명령)(?:를|은|는)?\\s*(?:모두\\s*)?(?:무시|잊어)",
+      "description": "Instruction-override phrasing (category 1); Korean verb-final form, allows English objects",
+      "pattern": "(?:이전|앞선|앞의|위의?|모든|기존|상기)\\s*(?:의\\s*)?(?:지시(?:사항)?|명령|규칙|프롬프트|지침|instructions?|prompts?|rules?)(?:을|를|은|는)?\\s*(?:모두\\s*|전부\\s*|싹\\s*)?(?:무시|잊어|잊고|어기|따르지\\s*마)",
       "flags": "g",
       "maskedAs": "[INJECTION]",
       "confidence": 0.9
     },
     {
       "subtype": "ROLE_OVERRIDE",
-      "description": "Role hijack phrasing in Korean or English",
-      "pattern": "(?:지금부터\\s*너는|you\\s+are\\s+now)\\s*(?:관리자|admin|developer)",
+      "description": "Role hijack (category 2); 'from now you are admin', developer/jailbreak mode, Korean and English",
+      "pattern": "(?:지금부터|이제부터)\\s*(?:너는|넌|당신은)[^\\n]{0,12}(?:관리자|개발자|루트|시스템\\s*관리자|제한\\s*없|무엇이든)|(?:you\\s+are\\s+now|now\\s+you\\s+are|act\\s+as|pretend\\s+to\\s+be)\\s+(?:a\\s+|an\\s+|the\\s+)?(?:admin(?:istrator)?|developer|root|dan|unrestricted|jailbroken|god\\s*mode)|(?:개발자|관리자|디버그|탈옥)\\s*모드|developer\\s+mode",
       "flags": "gi",
       "maskedAs": "[INJECTION]",
       "confidence": 0.85
     },
     {
+      "subtype": "SYSTEM_PROMPT_LEAK",
+      "description": "System-prompt exposure request (category 3); reveal/show your system prompt or instructions",
+      "pattern": "(?:reveal|show|print|display|repeat|expose|give\\s+me|tell\\s+me)\\s+(?:me\\s+)?(?:your|your\\s+system|the\\s+system|the\\s+initial|the\\s+original)\\s+(?:system\\s+)?(?:prompt|instructions?|system\\s*message|rules?|configuration)|(?:시스템\\s*프롬프트|시스템\\s*지시문|당신의\\s*지시문|너의\\s*지시문|초기\\s*프롬프트|원본\\s*프롬프트)(?:을|를)?\\s*(?:그대로\\s*)?(?:보여|알려|공개|출력|말해|보내)",
+      "flags": "gi",
+      "maskedAs": "[INJECTION]",
+      "confidence": 0.85
+    },
+    {
+      "subtype": "CREDENTIAL_ACCESS",
+      "description": "Sensitive-file access inducement (category 4); read/open .env, id_rsa, credentials, keys",
+      "pattern": "(?:read|open|cat|display|access|print|show|fetch|dump)\\s+(?:the\\s+)?(?:contents?\\s+of\\s+)?(?:[^\\s'\"\\n]*\\/)?(?:\\.env(?:\\.[a-z]+)?|id_rsa|id_ed25519|credentials(?:\\.json)?|secrets?\\.[a-z]+|\\.aws\\/credentials|\\.ssh\\/[a-z_]+)|(?:\\.env|id_rsa|id_ed25519|credentials(?:\\.json)?|비밀번호\\s*파일|자격\\s*증명|개인\\s*키|비밀\\s*키|환경\\s*변수\\s*파일)(?:\\s*파일)?(?:의\\s*내용)?(?:을|를)?\\s*(?:읽어|열어|출력|확인|가져|덤프)",
+      "flags": "gi",
+      "maskedAs": "[INJECTION]",
+      "confidence": 0.8
+    },
+    {
       "subtype": "EXFILTRATION",
-      "description": "Credential file named next to an outbound-transfer verb",
-      "pattern": "(?:\\.env|id_rsa|credentials).{0,80}(?:send|전송|메일)",
+      "description": "Outbound transfer of sensitive data (category 5); secret next to a send verb, or send to an external target",
+      "pattern": "(?:\\.env|id_rsa|id_ed25519|credentials|secret|token|api[_-]?key|password|비밀|토큰|자격\\s*증명|개인\\s*키).{0,80}(?:send|e-?mail|upload|exfiltrat|leak|post\\s+to|전송|메일|업로드|유출|빼돌|외부로\\s*보)|(?:send|e-?mail|upload|exfiltrate|전송|유출|보내|메일로\\s*보)[^\\n]{0,80}(?:attacker|외부\\s*서버|외부\\s*주소|@[a-z0-9.-]+\\.[a-z]{2,})",
+      "flags": "gi",
+      "maskedAs": "[INJECTION]",
+      "confidence": 0.8
+    },
+    {
+      "subtype": "CONCEALMENT",
+      "description": "Concealment or false justification (category 6); hide from the user or claim prior authorization",
+      "pattern": "(?:do\\s*n(?:o|')?t|don't|never)\\s+(?:tell|mention|inform|notify|alert|let)\\s+(?:the\\s+)?(?:user|human|them|him|her|anyone)|this\\s+(?:action\\s+)?is\\s+(?:authorized|approved|permitted|allowed|sanctioned|pre-?approved)|keep\\s+this\\s+(?:secret|hidden|confidential|quiet|between\\s+us)|사용자(?:에게|한테)?\\s*(?:는)?\\s*(?:말하지|알리지|언급하지|보고하지|들키지)\\s*(?:마|말|않)|(?:이건|이것은|이\\s*작업은|이\\s*요청은)\\s*(?:승인|허가)(?:된|받은|됨)|몰래\\s*(?:진행|수행|실행|처리)",
       "flags": "gi",
       "maskedAs": "[INJECTION]",
       "confidence": 0.75
