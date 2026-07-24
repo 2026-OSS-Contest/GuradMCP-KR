@@ -39,6 +39,15 @@ describe.each(catalogNames)("%s rule catalog", (name) => {
     }
   });
 
+  it("scores every rule with a confidence in the unit interval", () => {
+    for (const rule of catalog.rules) {
+      const label = `${String(catalog.type)}.${String(rule.subtype)}`;
+      expect(typeof rule.confidence, `${label} confidence`).toBe("number");
+      expect(rule.confidence as number, `${label} confidence`).toBeGreaterThan(0);
+      expect(rule.confidence as number, `${label} confidence`).toBeLessThanOrEqual(1);
+    }
+  });
+
   it("only references validators the detector implements", () => {
     for (const rule of catalog.rules) {
       if (rule.validate === undefined) continue;

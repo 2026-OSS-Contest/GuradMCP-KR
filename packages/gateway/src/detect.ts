@@ -10,6 +10,7 @@ export interface Detection {
   maskedAs: string;
   start: number;
   end: number;
+  confidence: number;
 }
 
 interface Rule {
@@ -17,6 +18,7 @@ interface Rule {
   subtype: string;
   pattern: RegExp;
   maskedAs: string;
+  confidence: number;
   validate?: (value: string) => boolean;
 }
 
@@ -68,19 +70,21 @@ function parseCatalog(source: unknown): Rule[] {
 
 function parseRule(type: DetectionKind, entry: unknown): Rule {
   if (!isRecord(entry)) throw new Error(`${type} rule must be an object.`);
-  const { subtype, description, pattern, flags, maskedAs, validate } = entry;
+  const { subtype, description, pattern, flags, maskedAs, confidence, validate } = entry;
   if (!isNonEmptyString(subtype)) throw new Error(`${type} rule must declare a subtype.`);
   const label = `${type}.${subtype}`;
   if (!isNonEmptyString(description)) throw new Error(`${label} must document why it exists.`);
   if (!isNonEmptyString(pattern)) throw new Error(`${label} must declare a pattern.`);
   if (!isNonEmptyString(maskedAs)) throw new Error(`${label} must declare a mask tag.`);
   if (typeof flags !== "string" || !flags.includes("g")) throw new Error(`${label} must use the global flag.`);
+  if (typeof confidence !== "number" || !(confidence > 0 && confidence <= 1)) throw new Error(`${label} must declare a confidence in (0, 1].`);
   const compiled = compilePattern(label, pattern, flags);
-  if (validate === undefined) return { type, subtype, pattern: compiled, maskedAs };
+  const base = { type, subtype, pattern: compiled, maskedAs, confidence };
+  if (validate === undefined) return base;
   if (!isNonEmptyString(validate)) throw new Error(`${label} declares a non-string validator.`);
   const validator = validators[validate];
   if (!validator) throw new Error(`${label} references an unknown validator: ${validate}`);
-  return { type, subtype, pattern: compiled, maskedAs, validate: validator };
+  return { ...base, validate: validator };
 }
 
 function compilePattern(label: string, pattern: string, flags: string): RegExp {
@@ -101,7 +105,8 @@ function findRule(rule: Rule, input: NormalizedInput): Detection[] {
         subtype: rule.subtype,
         maskedAs: rule.maskedAs,
         start: match.index,
-        end: match.index + match[0].length
+        end: match.index + match[0].length,
+        confidence: rule.confidence
       }];
       const first = input.sourceSpans[match.index];
       const last = input.sourceSpans[match.index + match[0].length - 1];
@@ -110,7 +115,8 @@ function findRule(rule: Rule, input: NormalizedInput): Detection[] {
         subtype: rule.subtype,
         maskedAs: rule.maskedAs,
         start: first.start,
-        end: last.end
+        end: last.end,
+        confidence: rule.confidence
       }] : [];
     });
 }

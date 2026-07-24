@@ -22,4 +22,11 @@ describe("Korean privacy detector", () => {
   it("does not flag ordinary numbers as validated identifiers", () => {
     expect(detect("릴리스 2026-07-18, 주문번호 1234567890")).toEqual([]);
   });
+
+  it("emits a catalog confidence with every detection span", () => {
+    const [phone] = detect("연락처 010-1234-5678");
+    expect(phone?.subtype).toBe("PHONE");
+    expect(phone?.confidence).toBeGreaterThan(0);
+    expect(phone?.confidence).toBeLessThanOrEqual(1);
+  });
 });
