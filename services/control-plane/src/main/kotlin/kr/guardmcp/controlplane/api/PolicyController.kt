@@ -1,5 +1,6 @@
 package kr.guardmcp.controlplane.api
 
+import kr.guardmcp.controlplane.domain.EventStreamHub
 import kr.guardmcp.controlplane.domain.GuardAction
 import kr.guardmcp.controlplane.domain.Policy
 import kr.guardmcp.controlplane.domain.PolicyPack
@@ -23,7 +24,10 @@ data class PolicyUpdateRequest(
 
 @RestController
 @RequestMapping("/api/v1")
-class PolicyController(private val policyStore: PolicyStore) {
+class PolicyController(
+    private val policyStore: PolicyStore,
+    private val eventStreamHub: EventStreamHub,
+) {
     @GetMapping("/policy-packs")
     fun policyPacks(): List<PolicyPack> = policyStore.listPacks()
 
@@ -31,9 +35,12 @@ class PolicyController(private val policyStore: PolicyStore) {
     fun policies(): List<Policy> = policyStore.listPolicies()
 
     @PutMapping("/policy-packs/{packId}")
-    fun updatePack(@PathVariable packId: String, @RequestBody request: PolicyPackUpdateRequest): PolicyPack =
-        policyStore.updatePack(packId, request.enabled)
+    fun updatePack(@PathVariable packId: String, @RequestBody request: PolicyPackUpdateRequest): PolicyPack {
+        val updated = policyStore.updatePack(packId, request.enabled)
             ?: throw ApiException(HttpStatus.NOT_FOUND, "policy_pack_not_found", "policy pack $packId not found")
+        eventStreamHub.publishPolicyReloaded(updated)
+        return updated
+    }
 
     @PutMapping("/policies/{policyId}")
     fun updatePolicy(@PathVariable policyId: String, @RequestBody request: PolicyUpdateRequest): Policy {
@@ -48,7 +55,10 @@ class PolicyController(private val policyStore: PolicyStore) {
         if (request.priority != null && request.priority <= 0) {
             throw ApiException(HttpStatus.BAD_REQUEST, "invalid_policy_priority", "priority must be positive")
         }
-        return policyStore.updatePolicy(policyId, action, severity, request.priority)
+        val updated = policyStore.updatePolicy(policyId, action, severity, request.priority)
             ?: throw ApiException(HttpStatus.NOT_FOUND, "policy_not_found", "policy $policyId not found")
+        val owningPack = policyStore.listPacks().single { it.id == updated.packId }
+        eventStreamHub.publishPolicyReloaded(owningPack)
+        return updated
     }
 }

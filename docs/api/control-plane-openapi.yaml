@@ -16,7 +16,29 @@ tags:
   - name: approvals
   - name: detect
   - name: attack-lab
+  - name: events
 paths:
+  /api/v1/events/stream:
+    get:
+      tags: [events]
+      summary: Server-sent event stream for the console
+      description: >-
+        Long-lived text/event-stream connection. Event names are guard.event
+        (GuardEvent payload), approval.created and approval.resolved (Approval
+        payload), policy.reloaded ({packId, version, enabled}), and
+        gateway.health ({status, dependencies}); each event carries a monotonic
+        id usable for reconnection bookkeeping. A gateway.health snapshot is
+        published on connect. A subscriber that cannot keep up with the stream
+        (bounded buffer overflow) is disconnected and must reconnect;
+        reconnection backoff is owned by the console.
+      operationId: streamEvents
+      responses:
+        "200":
+          description: SSE stream of typed events
+          content:
+            text/event-stream:
+              schema:
+                type: string
   /api/v1/overview:
     get:
       tags: [overview]
