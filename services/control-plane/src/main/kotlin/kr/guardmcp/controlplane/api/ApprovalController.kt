@@ -2,9 +2,9 @@ package kr.guardmcp.controlplane.api
 
 import kr.guardmcp.controlplane.domain.Approval
 import kr.guardmcp.controlplane.domain.ApprovalDecision
+import kr.guardmcp.controlplane.domain.ApprovalNotFoundException
 import kr.guardmcp.controlplane.domain.ApprovalStatus
-import kr.guardmcp.controlplane.domain.ApprovalStore
-import kr.guardmcp.controlplane.domain.EventStreamHub
+import kr.guardmcp.controlplane.domain.ApprovalWorkflowService
 import kr.guardmcp.controlplane.domain.GuardEventStore
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.GetMapping
@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import java.time.Duration
 import java.util.UUID
+import kotlin.math.min
 
 /** Optional fields are nullable: the JSON mapper passes null for absent keys, normalized in the controller. */
 data class ApprovalCreateRequest(
@@ -35,9 +36,8 @@ data class ApprovalDecisionRequest(
 @RestController
 @RequestMapping("/api/v1")
 class ApprovalController(
-    private val approvalStore: ApprovalStore,
+    private val workflow: ApprovalWorkflowService,
     private val eventStore: GuardEventStore,
-    private val eventStreamHub: EventStreamHub,
 ) {
     @GetMapping("/approvals")
     fun approvals(@RequestParam(required = false) status: String?): List<Approval> {
@@ -45,7 +45,27 @@ class ApprovalController(
             ApprovalStatus.fromWire(it)
                 ?: throw ApiException(HttpStatus.BAD_REQUEST, "invalid_approval_status", "unknown status '$it'")
         }
-        return approvalStore.list(filter)
+        return workflow.list(filter)
+    }
+
+    @GetMapping("/approvals/{approvalId}")
+    fun approval(@PathVariable approvalId: UUID): Approval =
+        workflow.get(approvalId) ?: throw ApprovalNotFoundException(approvalId)
+
+    /**
+     * Long-poll used by the gateway to resume a held tool call. Returns as soon as the
+     * approval resolves, or with the current (still pending) state after `timeoutMs`.
+     */
+    @GetMapping("/approvals/{approvalId}/await")
+    fun await(
+        @PathVariable approvalId: UUID,
+        @RequestParam(required = false) timeoutMs: Long?,
+    ): Approval {
+        val waitMs = min(timeoutMs ?: DEFAULT_AWAIT_MS, MAX_AWAIT_MS)
+        if (waitMs < 0) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "invalid_await_timeout", "timeoutMs must not be negative")
+        }
+        return workflow.await(approvalId, Duration.ofMillis(waitMs))
     }
 
     @PostMapping("/approvals")
@@ -60,16 +80,13 @@ class ApprovalController(
         if (request.riskReason.isBlank()) {
             throw ApiException(HttpStatus.BAD_REQUEST, "invalid_risk_reason", "riskReason must not be blank")
         }
-        val approval = approvalStore.create(
+        return workflow.create(
             sessionId = request.sessionId,
             toolName = request.toolName,
             arguments = request.arguments ?: emptyMap(),
             riskReason = request.riskReason,
             policyId = request.policyId,
-            ttl = APPROVAL_TTL,
         )
-        eventStreamHub.publishApprovalCreated(approval)
-        return approval
     }
 
     @PostMapping("/approvals/{approvalId}/decision")
@@ -80,13 +97,11 @@ class ApprovalController(
                 "invalid_approval_decision",
                 "decision must be one of block, approve_masked, approve",
             )
-        val decided = approvalStore.decide(approvalId, decision, request.decidedBy ?: "console")
-        eventStreamHub.publishApprovalResolved(decided)
-        return decided
+        return workflow.decide(approvalId, decision, request.decidedBy ?: "console")
     }
 
     companion object {
-        /** FR-APR-03: undecided approvals fail closed after 120 seconds. */
-        val APPROVAL_TTL: Duration = Duration.ofSeconds(120)
+        const val DEFAULT_AWAIT_MS = 30_000L
+        const val MAX_AWAIT_MS = 30_000L
     }
 }

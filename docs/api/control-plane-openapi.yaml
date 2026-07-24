@@ -213,6 +213,63 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/approvals/{approvalId}:
+    get:
+      tags: [approvals]
+      summary: Read one approval card
+      operationId: getApproval
+      parameters:
+        - name: approvalId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The approval card
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Approval"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/approvals/{approvalId}/await:
+    get:
+      tags: [approvals]
+      summary: Long-poll until the approval resolves
+      description: >-
+        Used by the gateway to resume a held tool call. Returns as soon as a
+        decision (or the fail-closed timeout) resolves the approval, or with
+        the current still-pending state once timeoutMs (capped at 30000)
+        elapses so the caller can poll again.
+      operationId: awaitApproval
+      parameters:
+        - name: approvalId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: timeoutMs
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 30000
+            default: 30000
+      responses:
+        "200":
+          description: The approval in its current or resolved state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Approval"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/approvals/{approvalId}/decision:
     post:
       tags: [approvals]

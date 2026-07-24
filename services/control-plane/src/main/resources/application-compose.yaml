@@ -1,0 +1,8 @@
+spring:
+  data:
+    redis:
+      url: ${REDIS_URL}
+management:
+  health:
+    redis:
+      enabled: true
