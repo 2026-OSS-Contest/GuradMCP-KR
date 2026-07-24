@@ -92,7 +92,16 @@
     },
     "timeline": {
       "title": "타임라인",
-      "scaffold": "타임라인은 후속 이슈(GMCP-11)에서 구현됩니다."
+      "play": "재생",
+      "pause": "정지",
+      "toStart": "처음으로",
+      "nextVerdict": "다음 판정",
+      "blocked": "차단",
+      "empty": "이 세션에는 기록된 이벤트가 없습니다.",
+      "node": {
+        "user": "사용자",
+        "agent": "Agent"
+      }
     },
     "detail": {
       "title": "이벤트 상세",

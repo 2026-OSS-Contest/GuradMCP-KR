@@ -92,7 +92,16 @@
     },
     "timeline": {
       "title": "Timeline",
-      "scaffold": "The timeline ships in a follow-up issue (GMCP-11)."
+      "play": "Play",
+      "pause": "Pause",
+      "toStart": "To start",
+      "nextVerdict": "Next verdict",
+      "blocked": "Block",
+      "empty": "This session has no recorded events.",
+      "node": {
+        "user": "User",
+        "agent": "Agent"
+      }
     },
     "detail": {
       "title": "Event detail",
