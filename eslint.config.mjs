@@ -7,6 +7,8 @@ export default tseslint.config(
     ignores: [
       "**/node_modules/**",
       "**/.next/**",
+      // Per-developer scratch space for measurement and screenshot scripts; gitignored.
+      "apps/console/temp/**",
       "**/dist/**",
       "**/build/**",
       "**/coverage/**",
