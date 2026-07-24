@@ -1,0 +1,526 @@
+openapi: 3.1.0
+info:
+  title: GuardMCP Control Plane Public API
+  version: 1.0.0
+  description: >-
+    Public API v1 served by services/control-plane for the GuardMCP console.
+    All identifiers and demo data mirror the deterministic seeds in
+    infra/postgres/001-demo-seed.sql and infra/redis/001-demo-seed.sh.
+servers:
+  - url: http://localhost:8080
+    description: Local development (docker compose exposes the same port)
+tags:
+  - name: overview
+  - name: sessions
+  - name: policies
+  - name: approvals
+  - name: detect
+  - name: attack-lab
+paths:
+  /api/v1/overview:
+    get:
+      tags: [overview]
+      summary: Protection status summary
+      operationId: getOverview
+      responses:
+        "200":
+          description: Current protection summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Overview"
+  /api/v1/sessions/{sessionId}/timeline:
+    get:
+      tags: [sessions]
+      summary: Guard event timeline for one session
+      operationId: getSessionTimeline
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Ordered guard events for the session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionTimeline"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/policy-packs:
+    get:
+      tags: [policies]
+      summary: List policy packs
+      operationId: listPolicyPacks
+      responses:
+        "200":
+          description: All policy packs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PolicyPack"
+  /api/v1/policy-packs/{packId}:
+    put:
+      tags: [policies]
+      summary: Enable or disable a policy pack
+      operationId: updatePolicyPack
+      parameters:
+        - name: packId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated pack with a bumped version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyPack"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/policies:
+    get:
+      tags: [policies]
+      summary: List policies in priority order
+      operationId: listPolicies
+      responses:
+        "200":
+          description: All policies sorted by priority
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Policy"
+  /api/v1/policies/{policyId}:
+    put:
+      tags: [policies]
+      summary: Update a policy's action, severity, or priority
+      operationId: updatePolicy
+      parameters:
+        - name: policyId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  $ref: "#/components/schemas/GuardAction"
+                severity:
+                  $ref: "#/components/schemas/Severity"
+                priority:
+                  type: integer
+                  minimum: 1
+      responses:
+        "200":
+          description: Updated policy; the owning pack version is bumped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/approvals:
+    get:
+      tags: [approvals]
+      summary: List approval cards
+      operationId: listApprovals
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ApprovalStatus"
+      responses:
+        "200":
+          description: Approval cards ordered by request time
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Approval"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    post:
+      tags: [approvals]
+      summary: Register a tool call held for human approval
+      description: >-
+        Called by the gateway when a policy verdict is require_approval. The
+        approval fails closed 120 seconds after registration if no decision
+        arrives.
+      operationId: createApproval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApprovalCreateRequest"
+      responses:
+        "201":
+          description: Pending approval card
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Approval"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/approvals/{approvalId}/decision:
+    post:
+      tags: [approvals]
+      summary: Resolve a pending approval
+      operationId: decideApproval
+      parameters:
+        - name: approvalId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision:
+                  $ref: "#/components/schemas/ApprovalDecision"
+                decidedBy:
+                  type: string
+      responses:
+        "200":
+          description: Approval with its terminal status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Approval"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The approval was already decided or expired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/detect/preview:
+    post:
+      tags: [detect]
+      summary: Preview how the seeded policy pack judges a text
+      description: >-
+        Deterministic preview limited to the seeded policies
+        (block_env_file_read, mask_korean_phone, approve_external_email).
+        The full detector engine lives in packages/policy-engine; verdict
+        aggregation here is fail-closed (strongest matched action wins).
+      operationId: previewDetection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+      responses:
+        "200":
+          description: Findings, aggregate verdict, and masked text
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetectionPreview"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /api/v1/attacklab/run/{scenarioId}:
+    post:
+      tags: [attack-lab]
+      summary: Queue an attack-lab scenario run
+      description: >-
+        Records the run request. Execution is owned by the Attack Lab runner
+        (GMCP-55); this endpoint only validates the scenario and queues it.
+      operationId: runAttackLabScenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^T-0[1-8]$"
+      responses:
+        "202":
+          description: Queued run record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttackLabRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+components:
+  responses:
+    BadRequest:
+      description: The request is malformed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    NotFound:
+      description: The referenced resource does not exist
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+  schemas:
+    GuardAction:
+      type: string
+      enum: [allow, mask_then_allow, require_approval, block]
+    Severity:
+      type: string
+      enum: [low, medium, high, critical]
+    ApprovalStatus:
+      type: string
+      enum: [pending, approved, approved_masked, blocked, expired]
+    ApprovalDecision:
+      type: string
+      enum: [block, approve_masked, approve]
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable reason code
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties:
+            type: string
+    Overview:
+      type: object
+      required:
+        - protected
+        - gatewayCount
+        - activePolicyPacks
+        - blockedToday
+        - maskedToday
+        - pendingApprovals
+        - generatedAt
+      properties:
+        protected:
+          type: boolean
+        gatewayCount:
+          type: integer
+        activePolicyPacks:
+          type: array
+          items:
+            type: string
+        blockedToday:
+          type: integer
+        maskedToday:
+          type: integer
+        pendingApprovals:
+          type: integer
+        generatedAt:
+          type: string
+          format: date-time
+    GuardEvent:
+      type: object
+      required: [id, sessionId, sequenceNo, verdict, toolName, riskScore, occurredAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        sequenceNo:
+          type: integer
+        verdict:
+          $ref: "#/components/schemas/GuardAction"
+        toolName:
+          type: string
+        policyId:
+          type: [string, "null"]
+        riskScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+        occurredAt:
+          type: string
+          format: date-time
+    SessionTimeline:
+      type: object
+      required: [sessionId, scenarioId, title, createdAt, events]
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        scenarioId:
+          type: string
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/GuardEvent"
+    PolicyPack:
+      type: object
+      required: [id, version, enabled, description, updatedAt]
+      properties:
+        id:
+          type: string
+        version:
+          type: integer
+        enabled:
+          type: boolean
+        description:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    Policy:
+      type: object
+      required: [id, packId, priority, action, severity, description]
+      properties:
+        id:
+          type: string
+        packId:
+          type: string
+        priority:
+          type: integer
+        action:
+          $ref: "#/components/schemas/GuardAction"
+        severity:
+          $ref: "#/components/schemas/Severity"
+        description:
+          type: string
+    ApprovalCreateRequest:
+      type: object
+      required: [sessionId, toolName, riskReason]
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        toolName:
+          type: string
+        arguments:
+          type: object
+          additionalProperties:
+            type: string
+        riskReason:
+          type: string
+        policyId:
+          type: [string, "null"]
+    Approval:
+      type: object
+      required: [id, sessionId, status, toolName, arguments, riskReason, requestedAt, expiresAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/ApprovalStatus"
+        toolName:
+          type: string
+        arguments:
+          type: object
+          additionalProperties:
+            type: string
+        riskReason:
+          type: string
+        policyId:
+          type: [string, "null"]
+        requestedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        decision:
+          oneOf:
+            - $ref: "#/components/schemas/ApprovalDecision"
+            - type: "null"
+        decidedBy:
+          type: [string, "null"]
+        decidedAt:
+          type: [string, "null"]
+          format: date-time
+    DetectionFinding:
+      type: object
+      required: [policyId, action, severity, matchedText, start, end]
+      properties:
+        policyId:
+          type: string
+        action:
+          $ref: "#/components/schemas/GuardAction"
+        severity:
+          $ref: "#/components/schemas/Severity"
+        matchedText:
+          type: string
+        start:
+          type: integer
+        end:
+          type: integer
+    DetectionPreview:
+      type: object
+      required: [verdict, findings, maskedText]
+      properties:
+        verdict:
+          $ref: "#/components/schemas/GuardAction"
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/DetectionFinding"
+        maskedText:
+          type: string
+    AttackLabRun:
+      type: object
+      required: [runId, scenarioId, status, requestedAt]
+      properties:
+        runId:
+          type: string
+          format: uuid
+        scenarioId:
+          type: string
+        status:
+          type: string
+          enum: [queued]
+        requestedAt:
+          type: string
+          format: date-time
