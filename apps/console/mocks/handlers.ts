@@ -31,19 +31,33 @@ export const handlers = [
   // consumes `guard.event`, so that is all the mock pushes. A named event maps onto the
   // client's `addEventListener("guard.event", …)`, and objects are JSON-serialised for it.
   sse<{ "guard.event": SecurityEvent }>("*/api/v1/events/stream", ({ client, request }) => {
-    // A down gateway drops the stream the same way it fails the polls.
     if (readScenario() === "offline") return void client.error();
+
+    // request.signal never aborts for an intercepted EventSource in the browser, so the only
+    // reliable disconnect signal is the client's own "close"/"error" event (fired when the
+    // stream is cancelled). Without stopping on it the interval leaks and, once the underlying
+    // controller is torn down, throws "enqueue into a closed stream" on every tick.
+    let live = true;
+    const stop = () => {
+      live = false;
+      clearInterval(timer);
+    };
+    const emitter = (client as unknown as Record<symbol, { on?: (type: string, fn: () => void) => void }>)[
+      Symbol.for("kClientEmitter")
+    ];
+    emitter?.on?.("close", stop);
+    emitter?.on?.("error", stop);
+    request.signal.addEventListener("abort", stop);
 
     let seq = 0;
     const timer = setInterval(() => {
+      if (!live) return;
       // The scenario can flip to offline while connected; mirror a gateway going down.
       if (readScenario() === "offline") {
-        clearInterval(timer);
+        stop();
         return client.error();
       }
       client.send({ event: "guard.event", data: liveEvent(seq++) });
     }, STREAM_INTERVAL_MS);
-
-    request.signal.addEventListener("abort", () => clearInterval(timer));
   })
 ];
