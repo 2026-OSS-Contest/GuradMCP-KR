@@ -15,7 +15,7 @@ import {
   RiskLowIcon,
   RiskMediumIcon,
   SnapshotChangedIcon
-} from "@/components/icons/scr-101";
+} from "@/components/icons";
 import { Tag, type TagTone } from "@/components/ui/tag";
 import { INVENTORY_ANCHOR } from "./kpi-cards";
 import { cn } from "@/lib/utils";

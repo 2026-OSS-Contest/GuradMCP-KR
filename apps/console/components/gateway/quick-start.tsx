@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { CtaChevronIcon, QuickStartFlowArrowIcon, QuickStartShieldIcon } from "@/components/icons/scr-101";
+import { CtaChevronIcon, QuickStartFlowArrowIcon, QuickStartShieldIcon } from "@/components/icons";
 import { Tag } from "@/components/ui/tag";
 
 /**

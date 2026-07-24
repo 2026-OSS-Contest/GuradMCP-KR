@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import type { GatewayStatus } from "@/lib/api/types";
 import { isOffline, useOverview } from "@/components/providers/overview-provider";
-import { DropdownChevronIcon, StatusDisconnectedIcon, StatusProtectedIcon } from "@/components/icons/scr-101";
+import { DropdownChevronIcon, StatusDisconnectedIcon, StatusProtectedIcon } from "@/components/icons";
 import { VerdictBadge } from "@/components/verdict-badge";
 import { Tag } from "@/components/ui/tag";
 import { cn } from "@/lib/utils";

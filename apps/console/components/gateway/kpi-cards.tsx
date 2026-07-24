@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import type { ComponentType, SVGProps } from "react";
 import type { Overview } from "@/lib/api/types";
-import { KpiBlockedIcon, KpiPoliciesIcon, KpiServersIcon, KpiToolsIcon } from "@/components/icons/scr-101";
+import { KpiBlockedIcon, KpiPoliciesIcon, KpiServersIcon, KpiToolsIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 /** Where the inventory panel anchors the two counts that scroll rather than navigate. */

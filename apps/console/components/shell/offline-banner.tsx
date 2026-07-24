@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { isOffline, useOverview } from "@/components/providers/overview-provider";
-import { BannerInfoIcon } from "@/components/icons/scr-101";
+import { BannerInfoIcon } from "@/components/icons";
 
 /**
  * Global banner pinned under the status bar whenever the gateway is unreachable

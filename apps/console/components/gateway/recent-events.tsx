@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import type { SecurityEvent } from "@/lib/api/types";
 import { createSseClient, type SseStatus } from "@/lib/sse";
-import { CtaChevronIcon } from "@/components/icons/scr-101";
+import { CtaChevronIcon } from "@/components/icons";
 import { RelativeTime } from "@/components/relative-time";
 import { VerdictBadge } from "@/components/verdict-badge";
 import { MOCK_API } from "@/mocks/scenario";

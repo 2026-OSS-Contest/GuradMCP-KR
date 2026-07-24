@@ -1,8 +1,9 @@
-// AUTO-GENERATED from the SCR-101 Figma export — do not edit by hand.
+// AUTO-GENERATED from the Figma export — do not edit by hand.
 // Regenerate with `node temp/gen-icons.mjs` after re-exporting (see tools/figma-export/).
 //
-// These are the design's own vectors, not a substitute icon set: colours are baked in exactly
-// as Figma drew them, and each icon's ids are namespaced so several can share one document.
+// Shared console icons: the design's own vectors, not a substitute icon set. Colours are baked
+// in exactly as Figma drew them, and each icon's ids are namespaced so several can share one
+// document. First extracted from the SCR-101 frames; add screens as they are built.
 import type { SVGProps } from "react";
 
 type P = SVGProps<SVGSVGElement>;

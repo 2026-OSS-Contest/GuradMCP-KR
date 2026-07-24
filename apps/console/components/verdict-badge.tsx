@@ -7,7 +7,7 @@ import {
   VerdictBlockIcon,
   VerdictRequireApprovalIcon,
   VerdictWarnIcon
-} from "@/components/icons/scr-101";
+} from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 /**
