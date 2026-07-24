@@ -23,6 +23,12 @@ describe("Korean privacy detector", () => {
     expect(detect("릴리스 2026-07-18, 주문번호 1234567890")).toEqual([]);
   });
 
+  it("detects addresses with nested 시/군/구 segments", () => {
+    const detections = detect("배송지 경기도 성남시 분당구 판교로 10");
+    expect(detections.map(({ subtype }) => subtype)).toContain("ADDRESS");
+    expect(mask("배송지 경기도 성남시 분당구 판교로 10", detections)).toBe("배송지 [ADDRESS]");
+  });
+
   it("emits a catalog confidence with every detection span", () => {
     const [phone] = detect("연락처 010-1234-5678");
     expect(phone?.subtype).toBe("PHONE");

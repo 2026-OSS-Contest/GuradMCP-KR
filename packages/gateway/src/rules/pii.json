@@ -63,8 +63,8 @@
     },
     {
       "subtype": "ADDRESS",
-      "description": "Korean street address led by an administrative division",
-      "pattern": "(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)(?:특별시|광역시|특별자치시|특별자치도|도)?\\s+[가-힣]+(?:시|군|구)\\s+[가-힣0-9-]+(?:로|길|동)\\s*\\d*",
+      "description": "Korean street address led by an administrative division, allowing nested 시/군/구 segments",
+      "pattern": "(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)(?:특별시|광역시|특별자치시|특별자치도|도)?(?:\\s+[가-힣]+(?:시|군|구))+\\s+[가-힣0-9-]+(?:로|길|동)\\s*\\d*",
       "flags": "g",
       "maskedAs": "[ADDRESS]",
       "confidence": 0.85
