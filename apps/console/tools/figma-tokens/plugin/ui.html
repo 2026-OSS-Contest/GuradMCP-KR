@@ -3,15 +3,35 @@
   <head>
     <meta charset="utf-8" />
     <style>
-      :root { color-scheme: light dark; font: 12px/1.5 ui-sans-serif, system-ui, sans-serif; }
-      body { margin: 0; padding: 16px; }
+      /* Figma injects --figma-color-* into the plugin iframe and swaps them with the editor
+         theme. Hard-coding colours here (white buttons, light code block) leaves invisible
+         labels in dark mode, because the inherited text colour is light too. */
+      :root {
+        color-scheme: light dark;
+        font: 12px/1.5 ui-sans-serif, system-ui, sans-serif;
+        --bg: var(--figma-color-bg, #fff);
+        --bg-alt: var(--figma-color-bg-secondary, #f5f5f5);
+        --fg: var(--figma-color-text, #111);
+        --fg-dim: var(--figma-color-text-secondary, #666);
+        --line: var(--figma-color-border, #ccc);
+        --brand: var(--figma-color-bg-brand, #0d99ff);
+        --on-brand: var(--figma-color-text-onbrand, #fff);
+      }
+      body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); }
       h1 { font-size: 13px; margin: 0 0 8px; }
-      #summary { margin: 0 0 12px; color: #666; }
+      #summary { margin: 0 0 12px; color: var(--fg-dim); }
       .row { display: flex; gap: 8px; }
-      button { font: inherit; padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; cursor: pointer; background: #fff; }
-      button#sync { background: #0d99ff; color: #fff; border-color: #0d99ff; font-weight: 600; }
+      button {
+        font: inherit; padding: 8px 12px; border-radius: 6px; cursor: pointer;
+        border: 1px solid var(--line); background: transparent; color: var(--fg);
+      }
+      button:hover:not(:disabled) { background: var(--bg-alt); }
+      button#sync { background: var(--brand); color: var(--on-brand); border-color: var(--brand); font-weight: 600; }
       button:disabled { opacity: .5; cursor: default; }
-      pre { margin: 12px 0 0; white-space: pre-wrap; word-break: break-word; color: #333; background: #f5f5f5; padding: 8px; border-radius: 6px; min-height: 40px; }
+      pre {
+        margin: 12px 0 0; white-space: pre-wrap; word-break: break-word; min-height: 40px;
+        background: var(--bg-alt); color: var(--fg); padding: 8px; border-radius: 6px;
+      }
     </style>
   </head>
   <body>
