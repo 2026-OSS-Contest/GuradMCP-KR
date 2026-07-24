@@ -1,3 +1,7 @@
+import injectionCatalog from "./rules/injection.json" with { type: "json" };
+import piiCatalog from "./rules/pii.json" with { type: "json" };
+import secretCatalog from "./rules/secret.json" with { type: "json" };
+
 export type DetectionKind = "PII" | "SECRET" | "INJECTION";
 
 export interface Detection {
@@ -6,6 +10,7 @@ export interface Detection {
   maskedAs: string;
   start: number;
   end: number;
+  confidence: number;
 }
 
 interface Rule {
@@ -13,7 +18,8 @@ interface Rule {
   subtype: string;
   pattern: RegExp;
   maskedAs: string;
-  validate?: (value: string, input: string) => boolean;
+  confidence: number;
+  validate?: (value: string) => boolean;
 }
 
 interface NormalizedInput {
@@ -22,37 +28,20 @@ interface NormalizedInput {
   identity: boolean;
 }
 
-const piiRules: Rule[] = [
-  { type: "PII", subtype: "PHONE", pattern: /(?<!\d)01[016789][- ]?\d{3,4}[- ]?\d{4}(?!\d)/g, maskedAs: "[PHONE]" },
-  { type: "PII", subtype: "RRN_LIKE", pattern: /(?<!\d)\d{6}[- ]?[1-8]\d{6}(?!\d)/g, maskedAs: "[RRN_LIKE]", validate: validRrnLike },
-  { type: "PII", subtype: "BIZ_NO", pattern: /(?<!\d)\d{3}[- ]?\d{2}[- ]?\d{5}(?!\d)/g, maskedAs: "[BIZ_NO]", validate: validBizNo },
-  { type: "PII", subtype: "CARD", pattern: /(?<!\d)(?:\d[ -]?){13,19}(?!\d)/g, maskedAs: "[CARD]", validate: validLuhn },
-  { type: "PII", subtype: "EMAIL", pattern: /\b[A-Za-z0-9][\w.+-]{0,63}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}\.)+[A-Za-z]{2,63}\b/g, maskedAs: "[EMAIL]" },
-  { type: "PII", subtype: "PASSPORT", pattern: /(?<![A-Z0-9])[MS][0-9]{8}(?![A-Z0-9])/gi, maskedAs: "[PASSPORT]" },
-  { type: "PII", subtype: "DL_NO", pattern: /(?<!\d)(?:11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|28)[- ]?\d{2}[- ]?\d{6}[- ]?\d{2}(?!\d)/g, maskedAs: "[DL_NO]" },
-  { type: "PII", subtype: "ADDRESS", pattern: /(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)(?:특별시|광역시|특별자치시|특별자치도|도)?\s+[가-힣]+(?:시|군|구)\s+[가-힣0-9-]+(?:로|길|동)\s*\d*/g, maskedAs: "[ADDRESS]" },
-  { type: "PII", subtype: "BANK_ACCOUNT", pattern: /(?:계좌|통장|입금)\s*(?:번호)?\s*[:：]?\s*(\d{2,6}(?:-\d{2,6}){2,4})/g, maskedAs: "[BANK_ACCOUNT]" }
-];
+const detectionKinds: readonly DetectionKind[] = ["PII", "SECRET", "INJECTION"];
 
-const secretRules: Rule[] = [
-  { type: "SECRET", subtype: "LLM_API_KEY", pattern: /\b(?:sk-ant-|sk-)[A-Za-z0-9_-]{16,}\b/g, maskedAs: "[SECRET]" },
-  { type: "SECRET", subtype: "GITHUB_TOKEN", pattern: /\b(?:ghp_|github_pat_)[A-Za-z0-9_]{20,}\b/g, maskedAs: "[SECRET]" },
-  { type: "SECRET", subtype: "AWS_ACCESS_KEY", pattern: /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g, maskedAs: "[SECRET]" },
-  { type: "SECRET", subtype: "JWT", pattern: /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, maskedAs: "[SECRET]" },
-  { type: "SECRET", subtype: "PRIVATE_KEY", pattern: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g, maskedAs: "[SECRET]" },
-  { type: "SECRET", subtype: "KOREAN_SERVICE_TOKEN", pattern: /\b(?:kakao|naver|toss)[_-]?(?:api[_-]?)?(?:key|token)[=:][A-Za-z0-9_-]{16,}\b/gi, maskedAs: "[SECRET]" }
-];
+/** Checksum helpers stay in code; the catalog references them by name. */
+const validators: Record<string, (value: string) => boolean> = {
+  luhn: validLuhn,
+  koreanRrn: validRrnLike,
+  koreanBizNo: validBizNo
+};
 
-const injectionRules: Rule[] = [
-  { type: "INJECTION", subtype: "IGNORE_INSTRUCTIONS", pattern: /(?:ignore|disregard)\s+(?:all\s+)?(?:previous|prior)\s+instructions?/gi, maskedAs: "[INJECTION]" },
-  { type: "INJECTION", subtype: "KO_IGNORE_INSTRUCTIONS", pattern: /(?:이전|앞선)\s*(?:의\s*)?(?:지시|명령)(?:를|은|는)?\s*(?:모두\s*)?(?:무시|잊어)/g, maskedAs: "[INJECTION]" },
-  { type: "INJECTION", subtype: "ROLE_OVERRIDE", pattern: /(?:지금부터\s*너는|you\s+are\s+now)\s*(?:관리자|admin|developer)/gi, maskedAs: "[INJECTION]" },
-  { type: "INJECTION", subtype: "EXFILTRATION", pattern: /(?:\.env|id_rsa|credentials).{0,80}(?:send|전송|메일)/gi, maskedAs: "[INJECTION]" }
-];
+const rules: Rule[] = [piiCatalog, secretCatalog, injectionCatalog].flatMap(parseCatalog);
 
 export function detect(input: string): Detection[] {
   const normalized = normalizeInput(input);
-  return [...piiRules, ...secretRules, ...injectionRules].flatMap((rule) => findRule(rule, normalized));
+  return rules.flatMap((rule) => findRule(rule, normalized));
 }
 
 export function mask(input: string, detections = detect(input)): string {
@@ -61,17 +50,63 @@ export function mask(input: string, detections = detect(input)): string {
     .reduce((result, detection) => `${result.slice(0, detection.start)}${detection.maskedAs}${result.slice(detection.end)}`, input);
 }
 
+/**
+ * Parses one shipped rule catalog. Every failure throws at module load so a malformed
+ * catalog stops the gateway instead of silently narrowing what the detector inspects.
+ */
+function parseCatalog(source: unknown): Rule[] {
+  if (!isRecord(source)) throw new Error("Rule catalog must be an object.");
+  const type = source.type;
+  if (!isDetectionKind(type)) throw new Error(`Rule catalog declares an unknown type: ${String(type)}`);
+  if (!Array.isArray(source.rules) || source.rules.length === 0) throw new Error(`${type} catalog must list at least one rule.`);
+  const parsed = source.rules.map((entry) => parseRule(type, entry));
+  const subtypes = new Set<string>();
+  for (const { subtype } of parsed) {
+    if (subtypes.has(subtype)) throw new Error(`${type} catalog repeats subtype ${subtype}.`);
+    subtypes.add(subtype);
+  }
+  return parsed;
+}
+
+function parseRule(type: DetectionKind, entry: unknown): Rule {
+  if (!isRecord(entry)) throw new Error(`${type} rule must be an object.`);
+  const { subtype, description, pattern, flags, maskedAs, confidence, validate } = entry;
+  if (!isNonEmptyString(subtype)) throw new Error(`${type} rule must declare a subtype.`);
+  const label = `${type}.${subtype}`;
+  if (!isNonEmptyString(description)) throw new Error(`${label} must document why it exists.`);
+  if (!isNonEmptyString(pattern)) throw new Error(`${label} must declare a pattern.`);
+  if (!isNonEmptyString(maskedAs)) throw new Error(`${label} must declare a mask tag.`);
+  if (typeof flags !== "string" || !flags.includes("g")) throw new Error(`${label} must use the global flag.`);
+  if (typeof confidence !== "number" || !(confidence > 0 && confidence <= 1)) throw new Error(`${label} must declare a confidence in (0, 1].`);
+  const compiled = compilePattern(label, pattern, flags);
+  const base = { type, subtype, pattern: compiled, maskedAs, confidence };
+  if (validate === undefined) return base;
+  if (!isNonEmptyString(validate)) throw new Error(`${label} declares a non-string validator.`);
+  const validator = validators[validate];
+  if (!validator) throw new Error(`${label} references an unknown validator: ${validate}`);
+  return { ...base, validate: validator };
+}
+
+function compilePattern(label: string, pattern: string, flags: string): RegExp {
+  try {
+    return new RegExp(pattern, flags);
+  } catch {
+    throw new Error(`${label} declares a pattern that does not compile.`);
+  }
+}
+
 function findRule(rule: Rule, input: NormalizedInput): Detection[] {
   const pattern = new RegExp(rule.pattern.source, rule.pattern.flags);
   return [...input.text.matchAll(pattern)]
-    .filter((match) => match.index !== undefined && (!rule.validate || rule.validate(match[0], input.text)))
+    .filter((match) => match.index !== undefined && (!rule.validate || rule.validate(match[0])))
     .flatMap((match) => {
       if (input.identity) return [{
         type: rule.type,
         subtype: rule.subtype,
         maskedAs: rule.maskedAs,
         start: match.index,
-        end: match.index + match[0].length
+        end: match.index + match[0].length,
+        confidence: rule.confidence
       }];
       const first = input.sourceSpans[match.index];
       const last = input.sourceSpans[match.index + match[0].length - 1];
@@ -80,7 +115,8 @@ function findRule(rule: Rule, input: NormalizedInput): Detection[] {
         subtype: rule.subtype,
         maskedAs: rule.maskedAs,
         start: first.start,
-        end: last.end
+        end: last.end,
+        confidence: rule.confidence
       }] : [];
     });
 }
@@ -100,6 +136,18 @@ function normalizeInput(input: string): NormalizedInput {
     sourceOffset = sourceEnd;
   }
   return { text, sourceSpans, identity: false };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function isDetectionKind(value: unknown): value is DetectionKind {
+  return detectionKinds.some((kind) => kind === value);
 }
 
 function isAscii(input: string): boolean {

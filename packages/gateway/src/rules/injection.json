@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "type": "INJECTION",
+  "rules": [
+    {
+      "subtype": "IGNORE_INSTRUCTIONS",
+      "description": "English instruction-override phrasing",
+      "pattern": "(?:ignore|disregard)\\s+(?:all\\s+)?(?:previous|prior)\\s+instructions?",
+      "flags": "gi",
+      "maskedAs": "[INJECTION]",
+      "confidence": 0.9
+    },
+    {
+      "subtype": "KO_IGNORE_INSTRUCTIONS",
+      "description": "Korean instruction-override phrasing",
+      "pattern": "(?:이전|앞선)\\s*(?:의\\s*)?(?:지시|명령)(?:를|은|는)?\\s*(?:모두\\s*)?(?:무시|잊어)",
+      "flags": "g",
+      "maskedAs": "[INJECTION]",
+      "confidence": 0.9
+    },
+    {
+      "subtype": "ROLE_OVERRIDE",
+      "description": "Role hijack phrasing in Korean or English",
+      "pattern": "(?:지금부터\\s*너는|you\\s+are\\s+now)\\s*(?:관리자|admin|developer)",
+      "flags": "gi",
+      "maskedAs": "[INJECTION]",
+      "confidence": 0.85
+    },
+    {
+      "subtype": "EXFILTRATION",
+      "description": "Credential file named next to an outbound-transfer verb",
+      "pattern": "(?:\\.env|id_rsa|credentials).{0,80}(?:send|전송|메일)",
+      "flags": "gi",
+      "maskedAs": "[INJECTION]",
+      "confidence": 0.75
+    }
+  ]
+}

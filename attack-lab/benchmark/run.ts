@@ -6,7 +6,7 @@ import { parse } from "yaml";
 import { detect } from "../../packages/gateway/src/detect.js";
 import { evaluate, type Action, type Detection, type Direction, type EvaluationStrategy, type Policy, type ServerTrust } from "../../packages/policy-engine/src/index.js";
 
-interface Sample { id: string; label: boolean; text: string }
+interface Sample { id: string; label: boolean; text: string; type?: string }
 interface Scenario { id: string; text: string; expectBlocked: boolean }
 interface AuthorFixture {
   id: string;
@@ -51,12 +51,24 @@ validateFixtures(authorFixtures, policies);
 let truePositive = 0;
 let falsePositive = 0;
 let falseNegative = 0;
+const perTypeTotals = new Map<string, { total: number; detected: number }>();
 for (const sample of samples) {
-  const positive = detect(sample.text).some(({ type }) => type === "PII");
+  const subtypes = new Set(detect(sample.text).filter(({ type }) => type === "PII").map(({ subtype }) => subtype));
+  const positive = subtypes.size > 0;
   if (sample.label && positive) truePositive += 1;
   if (!sample.label && positive) falsePositive += 1;
   if (sample.label && !positive) falseNegative += 1;
+  if (sample.label && sample.type) {
+    const entry = perTypeTotals.get(sample.type) ?? { total: 0, detected: 0 };
+    entry.total += 1;
+    if (subtypes.has(sample.type)) entry.detected += 1;
+    perTypeTotals.set(sample.type, entry);
+  }
 }
+const perTypeRecall = [...perTypeTotals.entries()]
+  .sort(([left], [right]) => left.localeCompare(right))
+  .map(([type, { total, detected }]) => ({ type, total, detected, recall: detected / total }));
+const labeledTypeCount = perTypeRecall.length;
 
 const marker = " 010-1234-5678";
 const targetPayloadBytes = 10 * 1024;
@@ -133,6 +145,7 @@ const metrics = {
   samples: samples.length,
   positives,
   negatives,
+  labeledTypeCount,
   threats: scenarios.length,
   authorFixtures: fixtureResults.length,
   policyCount: policies.length
@@ -144,7 +157,7 @@ const passed = metrics.recall >= thresholds.recall
   && metrics.scenarioPassRate >= thresholds.scenarioPassRate
   && metrics.fixturePassRate >= thresholds.fixturePassRate
   && metrics.fixtureCoverageRate >= thresholds.fixtureCoverageRate;
-const report = { generatedAt: new Date().toISOString(), metrics, thresholds, scenarios: scenarioResults, fixtures: fixtureResults, fixtureCoverage, passed };
+const report = { generatedAt: new Date().toISOString(), metrics, thresholds, perTypeRecall, scenarios: scenarioResults, fixtures: fixtureResults, fixtureCoverage, passed };
 
 await mkdir(dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`);

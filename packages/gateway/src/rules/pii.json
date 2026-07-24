@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "type": "PII",
+  "rules": [
+    {
+      "subtype": "PHONE",
+      "description": "Korean mobile number",
+      "pattern": "(?<!\\d)01[016789][- ]?\\d{3,4}[- ]?\\d{4}(?!\\d)",
+      "flags": "g",
+      "maskedAs": "[PHONE]",
+      "confidence": 0.9
+    },
+    {
+      "subtype": "RRN_LIKE",
+      "description": "Resident registration number shape, checksum validated",
+      "pattern": "(?<!\\d)\\d{6}[- ]?[1-8]\\d{6}(?!\\d)",
+      "flags": "g",
+      "maskedAs": "[RRN_LIKE]",
+      "confidence": 0.95,
+      "validate": "koreanRrn"
+    },
+    {
+      "subtype": "BIZ_NO",
+      "description": "Business registration number, checksum validated",
+      "pattern": "(?<!\\d)\\d{3}[- ]?\\d{2}[- ]?\\d{5}(?!\\d)",
+      "flags": "g",
+      "maskedAs": "[BIZ_NO]",
+      "confidence": 0.9,
+      "validate": "koreanBizNo"
+    },
+    {
+      "subtype": "CARD",
+      "description": "Payment card number, Luhn validated",
+      "pattern": "(?<!\\d)(?:\\d[ -]?){13,19}(?!\\d)",
+      "flags": "g",
+      "maskedAs": "[CARD]",
+      "confidence": 0.95,
+      "validate": "luhn"
+    },
+    {
+      "subtype": "EMAIL",
+      "description": "Email address",
+      "pattern": "\\b[A-Za-z0-9][\\w.+-]{0,63}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}\\.)+[A-Za-z]{2,63}\\b",
+      "flags": "g",
+      "maskedAs": "[EMAIL]",
+      "confidence": 0.95
+    },
+    {
+      "subtype": "PASSPORT",
+      "description": "Korean passport number",
+      "pattern": "(?<![A-Z0-9])[MS][0-9]{8}(?![A-Z0-9])",
+      "flags": "gi",
+      "maskedAs": "[PASSPORT]",
+      "confidence": 0.6
+    },
+    {
+      "subtype": "DL_NO",
+      "description": "Driver licence number with a regional issuing code",
+      "pattern": "(?<!\\d)(?:11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|28)[- ]?\\d{2}[- ]?\\d{6}[- ]?\\d{2}(?!\\d)",
+      "flags": "g",
+      "maskedAs": "[DL_NO]",
+      "confidence": 0.7
+    },
+    {
+      "subtype": "ADDRESS",
+      "description": "Korean street address led by an administrative division, allowing nested 시/군/구 segments",
+      "pattern": "(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)(?:특별시|광역시|특별자치시|특별자치도|도)?(?:\\s+[가-힣]+(?:시|군|구))+\\s+[가-힣0-9-]+(?:로|길|동)\\s*\\d*",
+      "flags": "g",
+      "maskedAs": "[ADDRESS]",
+      "confidence": 0.85
+    },
+    {
+      "subtype": "BANK_ACCOUNT",
+      "description": "Bank account number introduced by a Korean banking keyword",
+      "pattern": "(?:계좌|통장|입금)\\s*(?:번호)?\\s*[:：]?\\s*(\\d{2,6}(?:-\\d{2,6}){2,4})",
+      "flags": "g",
+      "maskedAs": "[BANK_ACCOUNT]",
+      "confidence": 0.9
+    }
+  ]
+}
