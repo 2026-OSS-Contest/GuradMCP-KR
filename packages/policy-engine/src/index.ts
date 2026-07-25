@@ -1,58 +1,34 @@
-export const actions = ["allow", "mask_then_allow", "warn", "require_approval", "block"] as const;
-export const severities = ["info", "low", "medium", "high", "critical"] as const;
+// Public entry point for @guardmcp/policy-engine.
+//
+// Shared types live in ./types.ts and are re-exported here so consumers keep
+// importing them from `@guardmcp/policy-engine`.
 
-export type Action = (typeof actions)[number];
-export type Severity = (typeof severities)[number];
-export type Direction = "request" | "response";
-export type ServerTrust = "trusted" | "limited" | "untrusted";
-export type EvaluationStrategy = "severity-max" | "first-match";
+export type {
+  Action,
+  Severity,
+  Direction,
+  ServerTrust,
+  EvaluationStrategy,
+  DetectionType,
+  Detection,
+  PolicyContext,
+  ToolCallContext,
+  MatchDefinition,
+  PolicyMatch,
+  Policy,
+  EvaluationResult
+} from "./types.js";
+export { actions, severities } from "./types.js";
 
-export interface Detection {
-  type: string;
-  subtype?: string;
-}
-
-export interface PolicyContext {
-  direction: Direction;
-  tool: string;
-  serverTrust: ServerTrust;
-  args: Record<string, unknown>;
-  detections: Detection[];
-  riskScore: number;
-}
-
-export interface MatchDefinition {
-  direction?: Direction | "any";
-  tool?: string;
-  server_trust?: ServerTrust | "any";
-  args?: Record<string, unknown>;
-  detections?: { any_of?: string[]; all_of?: string[]; none_of?: string[] };
-  risk_score?: { gte?: number; lte?: number };
-}
-
-export interface Policy {
-  id: string;
-  pack: string;
-  version?: number;
-  description?: string;
-  priority: number;
-  match: MatchDefinition;
-  action: Action;
-  severity: Severity;
-  message?: string;
-  enabled?: boolean;
-  approval?: {
-    timeout_seconds: number;
-    on_timeout: "block";
-    allow_masked_approval?: boolean;
-  };
-}
-
-export interface EvaluationResult {
-  action: Action;
-  matchedPolicyIds: string[];
-  policies: Policy[];
-}
+import type {
+  Action,
+  Detection,
+  EvaluationResult,
+  EvaluationStrategy,
+  MatchDefinition,
+  Policy,
+  PolicyContext
+} from "./types.js";
 
 const actionWeight: Record<Action, number> = {
   allow: 0,
