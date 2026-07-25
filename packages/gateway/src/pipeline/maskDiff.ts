@@ -1,0 +1,19 @@
+// FR-PII-03: masking events must be able to reference a before/after diff.
+// NFR-04 keeps that diff opt-in — by default only a stable reference id
+// (a digest, not the text) is handed back; the raw before/after pair is only
+// kept in memory when an operator explicitly opts in via env var, standing
+// in for the audit-log-gated storage described in §4.4.
+import { createHash } from "node:crypto";
+
+const persistRawDiff = process.env.GUARDMCP_PERSIST_MASK_DIFF === "true";
+const diffs = new Map<string, { before: string; after: string }>();
+
+export function recordMaskDiff(before: string, after: string): string {
+  const ref = createHash("sha256").update(before).update(":").update(after).digest("hex").slice(0, 16);
+  if (persistRawDiff) diffs.set(ref, { before, after });
+  return ref;
+}
+
+export function getMaskDiff(ref: string): { before: string; after: string } | undefined {
+  return diffs.get(ref);
+}

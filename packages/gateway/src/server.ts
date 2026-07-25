@@ -1,11 +1,18 @@
+import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { connect } from "node:net";
-import { evaluate, type Policy, type PolicyContext } from "@guardmcp/policy-engine";
+import { evaluate, type Action, type Policy, type PolicyContext } from "@guardmcp/policy-engine";
+import { createAutoExpireApprovalBackend } from "./approval/backend.js";
 import { detect, mask, type Detection } from "./detect.js";
+import { routeByVerdict, type RouterDeps } from "./pipeline/actionRouter.js";
+import type { PolicyDecision } from "./pipeline/types.js";
 import { runtimePolicyPacks } from "./policies.generated.js";
 
 const port = Number(process.env.PORT ?? 3001);
 const maxBodyBytes = 1024 * 1024;
+
+// No approval console is wired up yet (GMCP-82); see ./approval/backend.ts.
+const routerDeps: RouterDeps = { approvalBackend: createAutoExpireApprovalBackend() };
 
 class PayloadTooLargeError extends Error {}
 class UpstreamError extends Error {
@@ -27,7 +34,14 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     try {
       const body = await readJson(request);
       const text = typeof body.text === "string" ? body.text : JSON.stringify(body);
-      send(response, 200, inspection(text));
+      const decision = evaluatePayload(text, { direction: "response", tool: "inspect", serverTrust: "untrusted", args: {} });
+      send(response, 200, {
+        verdict: decision.verdict,
+        riskScore: decision.riskScore,
+        policyIds: decision.matchedPolicyIds,
+        detections: decision.detections,
+        masked: mask(text, decision.detections)
+      });
     } catch (error) {
       sendReadError(response, error, false);
     }
@@ -55,14 +69,21 @@ async function handleMcp(body: Record<string, unknown>, response: ServerResponse
     send(response, 200, { jsonrpc: "2.0", id, result: { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "guardmcp-kr", version: "0.1.0" } } });
     return;
   }
+  const sessionId = sessionIdOf(body);
   if (body.method === "tools/list") {
     const upstream = await upstreamJson("/tools/list");
-    const metadataInspection = inspection(JSON.stringify(upstream), { direction: "response", tool: "tools/list", serverTrust: "untrusted", args: {} });
-    if (failClosed(metadataInspection.verdict)) {
-      send(response, 200, rpcError(id, -32002, "GuardMCP blocked unsafe tool metadata", metadataInspection));
+    const payload = JSON.stringify(upstream);
+    const decision = evaluatePayload(payload, { direction: "response", tool: "tools/list", serverTrust: "untrusted", args: {} });
+    const routed = await routeByVerdict(
+      { direction: "response", toolName: "tools/list", payload, sessionId, serverTrust: "untrusted" },
+      decision,
+      routerDeps
+    );
+    if (routed.verdict === "block") {
+      send(response, 200, rpcError(id, -32002, "GuardMCP blocked unsafe tool metadata", routed.error.error));
       return;
     }
-    send(response, 200, { jsonrpc: "2.0", id, result: deepMask(upstream), _guardmcp: metadataInspection });
+    send(response, 200, { jsonrpc: "2.0", id, result: JSON.parse(routed.payload), _guardmcp: legacySummary(decision) });
     return;
   }
   if (body.method === "tools/call") {
@@ -73,29 +94,45 @@ async function handleMcp(body: Record<string, unknown>, response: ServerResponse
       return;
     }
     const argumentsValue = params.arguments ?? {};
-    const requestInspection = inspection(JSON.stringify(argumentsValue), { direction: "request", tool, serverTrust: "untrusted", args: isRecord(argumentsValue) ? argumentsValue : {} });
-    if (failClosed(requestInspection.verdict)) {
-      const message = requestInspection.verdict === "require_approval"
+    const requestPayload = JSON.stringify(argumentsValue);
+    const requestDecision = evaluatePayload(requestPayload, {
+      direction: "request", tool, serverTrust: "untrusted", args: isRecord(argumentsValue) ? argumentsValue : {}
+    });
+    const requestRouted = await routeByVerdict(
+      { direction: "request", toolName: tool, payload: requestPayload, sessionId, serverTrust: "untrusted" },
+      requestDecision,
+      routerDeps
+    );
+    if (requestRouted.verdict === "block") {
+      // require_approval auto-expires to block (no console attached, §4.5) but keeps its own RPC code/message.
+      const code = requestDecision.verdict === "require_approval" ? -32003 : -32001;
+      const message = requestDecision.verdict === "require_approval"
         ? "Human approval required; the demo gateway fails closed"
         : "GuardMCP blocked unsafe tool arguments";
-      send(response, 200, rpcError(id, requestInspection.verdict === "require_approval" ? -32003 : -32001, message, requestInspection));
+      send(response, 200, rpcError(id, code, message, requestRouted.error.error));
       return;
     }
     const upstream = await upstreamJson(`/tools/call/${encodeURIComponent(tool)}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(deepMask(argumentsValue))
+      body: requestRouted.payload
     });
-    const responseInspection = inspection(JSON.stringify(upstream), { direction: "response", tool, serverTrust: "untrusted", args: {} });
-    if (failClosed(responseInspection.verdict)) {
-      send(response, 200, rpcError(id, -32002, "GuardMCP blocked unsafe tool output", responseInspection));
+    const responsePayload = JSON.stringify(upstream);
+    const responseDecision = evaluatePayload(responsePayload, { direction: "response", tool, serverTrust: "untrusted", args: {} });
+    const responseRouted = await routeByVerdict(
+      { direction: "response", toolName: tool, payload: responsePayload, sessionId, serverTrust: "untrusted" },
+      responseDecision,
+      routerDeps
+    );
+    if (responseRouted.verdict === "block") {
+      send(response, 200, rpcError(id, -32002, "GuardMCP blocked unsafe tool output", responseRouted.error.error));
       return;
     }
     send(response, 200, {
       jsonrpc: "2.0",
       id,
-      result: deepMask(upstream),
-      _guardmcp: responseInspection
+      result: JSON.parse(responseRouted.payload),
+      _guardmcp: legacySummary(responseDecision)
     });
     return;
   }
@@ -134,15 +171,16 @@ async function upstreamJson(path: string, init?: RequestInit): Promise<unknown> 
   catch { throw new UpstreamError("Upstream MCP response is invalid JSON", -32052); }
 }
 
-function inspection(text: string, context: Pick<PolicyContext, "direction" | "tool" | "serverTrust" | "args"> = {
-  direction: "response", tool: "inspect", serverTrust: "untrusted", args: {}
-}): {
-  verdict: ReturnType<typeof evaluate>["action"];
-  riskScore: number;
-  policyIds: string[];
-  detections: Detection[];
-  masked: string;
-} {
+const actionWeight: Record<Action, number> = {
+  allow: 0,
+  mask_then_allow: 1,
+  warn: 2,
+  require_approval: 3,
+  block: 4
+};
+
+/** Runs Detector Core (②-④) + Policy Engine (⑥) and adapts the result into the ⑦ action-router's input contract. */
+function evaluatePayload(text: string, context: Pick<PolicyContext, "direction" | "tool" | "serverTrust" | "args">): PolicyDecision {
   const detections = detect(text);
   const riskScore = detections.reduce((score, detection) => Math.max(score, detection.type === "INJECTION" ? 95 : detection.type === "SECRET" ? 85 : 75), 0);
   const activePack = runtimePolicyPacks["korean-pii"];
@@ -152,13 +190,44 @@ function inspection(text: string, context: Pick<PolicyContext, "direction" | "to
     detections: detections.map(({ type, subtype }) => ({ type, subtype })),
     riskScore
   }, activePack.defaultAction, activePack.evaluationStrategy);
+  return toPolicyDecision(result, detections, riskScore);
+}
+
+/**
+ * `evaluate()` (GMCP-7) returns matched policies but not which one decided the
+ * verdict (that's GMCP-12's `decide()`, not yet on this branch). Recompute
+ * the severity-max winner here so the router has a policy to source
+ * severity/message/reasonCode/approval config from.
+ */
+function toPolicyDecision(result: ReturnType<typeof evaluate>, detections: Detection[], riskScore: number): PolicyDecision {
+  const deciding = result.policies.reduce<Policy | undefined>(
+    (strongest, policy) => (!strongest || actionWeight[policy.action] > actionWeight[strongest.action]) ? policy : strongest,
+    undefined
+  );
   return {
     verdict: result.action,
+    matchedPolicyIds: result.matchedPolicyIds,
     riskScore,
-    policyIds: result.matchedPolicyIds,
+    severity: deciding?.severity ?? "info",
+    reasonCode: deciding ? deciding.id.toUpperCase() : "NO_POLICY_MATCH",
+    message: deciding?.message ?? "No policy matched; the pack's default action was applied.",
     detections,
-    masked: mask(text, detections)
+    ...(deciding?.approval ? {
+      approval: {
+        timeoutSeconds: deciding.approval.timeout_seconds,
+        onTimeout: deciding.approval.on_timeout,
+        allowMaskedApproval: deciding.approval.allow_masked_approval ?? false
+      }
+    } : {})
   };
+}
+
+function legacySummary(decision: PolicyDecision): { verdict: Action; riskScore: number; policyIds: string[] } {
+  return { verdict: decision.verdict, riskScore: decision.riskScore, policyIds: decision.matchedPolicyIds };
+}
+
+function sessionIdOf(body: Record<string, unknown>): string {
+  return typeof body.sessionId === "string" ? body.sessionId : `req-${String(body.id ?? randomUUID())}`;
 }
 
 function resolveRuntimePolicies(packName: string, resolving = new Set<string>()): Policy[] {
@@ -168,17 +237,6 @@ function resolveRuntimePolicies(packName: string, resolving = new Set<string>())
   const next = new Set(resolving).add(packName);
   const inherited = pack.extends.flatMap((reference) => resolveRuntimePolicies(reference.split("@")[0] ?? reference, next));
   return [...new Map([...inherited, ...pack.policies].map((policy) => [policy.id, policy])).values()];
-}
-
-function failClosed(action: ReturnType<typeof evaluate>["action"]): boolean {
-  return action === "block" || action === "require_approval";
-}
-
-function deepMask(value: unknown): unknown {
-  if (typeof value === "string") return mask(value);
-  if (Array.isArray(value)) return value.map(deepMask);
-  if (isRecord(value)) return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, deepMask(nested)]));
-  return value;
 }
 
 async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {

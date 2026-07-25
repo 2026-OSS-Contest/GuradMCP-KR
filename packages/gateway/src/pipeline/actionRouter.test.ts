@@ -1,0 +1,236 @@
+import { describe, expect, it } from "vitest";
+import { InMemoryApprovalBackend, type ApprovalBackend, type ApprovalDecision, type ApprovalRequestId } from "../approval/backend.js";
+import type { Detection } from "../detect.js";
+import { routeByVerdict, type RouterDeps } from "./actionRouter.js";
+import { onGuardBusMessage } from "./events.js";
+import type { PolicyDecision, ToolCallContext } from "./types.js";
+
+const baseCtx: ToolCallContext = {
+  direction: "request",
+  toolName: "read_file",
+  payload: JSON.stringify({ path: ".env" }),
+  sessionId: "s-1",
+  serverTrust: "untrusted"
+};
+
+function stubBackend(overrides: Partial<ApprovalBackend> = {}): ApprovalBackend {
+  return {
+    async submit(): Promise<ApprovalRequestId> { return "req-stub"; },
+    async awaitDecision(): Promise<ApprovalDecision> { return "expired"; },
+    ...overrides
+  };
+}
+
+function deps(overrides: Partial<ApprovalBackend> = {}): RouterDeps {
+  return { approvalBackend: stubBackend(overrides) };
+}
+
+describe("blockWithStandardError (§4.3, FR-GW-05)", () => {
+  const secret = "sk-ant-super-secret-token-should-never-leak";
+  const payload = JSON.stringify({ note: secret });
+  const decision: PolicyDecision = {
+    verdict: "block",
+    matchedPolicyIds: ["block_env_file_read", "block_untrusted_injection_response"],
+    riskScore: 96,
+    severity: "critical",
+    reasonCode: "BLOCK_ENV_FILE_READ",
+    message: "Credential-file access was blocked by policy.",
+    detections: [{ type: "SECRET", subtype: "LLM_API_KEY", maskedAs: "[SECRET]", start: payload.indexOf(secret), end: payload.indexOf(secret) + secret.length, confidence: 0.95 }]
+  };
+
+  it("returns the standard error shape with no payload to forward", async () => {
+    const routed = await routeByVerdict({ ...baseCtx, payload }, decision, deps());
+    expect(routed.verdict).toBe("block");
+    if (routed.verdict !== "block") throw new Error("expected block");
+    expect(routed.error.error).toEqual({
+      code: "GUARD_BLOCKED",
+      policyId: "block_env_file_read",
+      policyIds: ["block_env_file_read", "block_untrusted_injection_response"],
+      reasonCode: "BLOCK_ENV_FILE_READ",
+      severity: "critical",
+      message: "Credential-file access was blocked by policy."
+    });
+    expect("payload" in routed).toBe(false);
+  });
+
+  it("never includes the raw detected text anywhere in the response (FR-GW-05)", async () => {
+    const routed = await routeByVerdict({ ...baseCtx, payload }, decision, deps());
+    expect(JSON.stringify(routed)).not.toContain(secret);
+  });
+
+  it("falls back to a placeholder policyId when nothing matched", async () => {
+    const routed = await routeByVerdict({ ...baseCtx, payload }, { ...decision, matchedPolicyIds: [] }, deps());
+    if (routed.verdict !== "block") throw new Error("expected block");
+    expect(routed.error.error.policyId).toBe("unknown_policy");
+    expect(routed.error.error.policyIds).toEqual([]);
+  });
+});
+
+describe("maskThenAllow (§4.4)", () => {
+  it("replaces multiple spans back-to-front without offset drift", async () => {
+    const payload = JSON.stringify({ a: "SECRET_AAAA", b: "SECRET_BBBB" });
+    const spanOf = (needle: string) => ({ start: payload.indexOf(needle), end: payload.indexOf(needle) + needle.length });
+    // Ascending order on purpose: the router (not the caller) is responsible for masking back-to-front.
+    const detections: Detection[] = [
+      { type: "SECRET", subtype: "GENERIC", maskedAs: "[SECRET]", confidence: 0.9, ...spanOf("SECRET_AAAA") },
+      { type: "SECRET", subtype: "GENERIC", maskedAs: "[SECRET]", confidence: 0.9, ...spanOf("SECRET_BBBB") }
+    ];
+    const decision: PolicyDecision = {
+      verdict: "mask_then_allow",
+      matchedPolicyIds: ["mask_secrets"],
+      riskScore: 80,
+      severity: "high",
+      reasonCode: "MASK_SECRETS",
+      message: "Secrets were masked before delivery.",
+      detections
+    };
+
+    const routed = await routeByVerdict({ ...baseCtx, direction: "response", payload }, decision, deps());
+    expect(routed.verdict).toBe("mask_then_allow");
+    if (routed.verdict !== "mask_then_allow") throw new Error("expected mask_then_allow");
+    expect(routed.payload).not.toContain("SECRET_AAAA");
+    expect(routed.payload).not.toContain("SECRET_BBBB");
+    expect(JSON.parse(routed.payload)).toEqual({ a: "[SECRET]", b: "[SECRET]" });
+  });
+});
+
+describe("awaitApproval (§4.5, FR-APR-03)", () => {
+  const decision: PolicyDecision = {
+    verdict: "require_approval",
+    matchedPolicyIds: ["approve_external_email_with_secret"],
+    riskScore: 88,
+    severity: "high",
+    reasonCode: "APPROVE_EXTERNAL_EMAIL_WITH_SECRET",
+    message: "External transmission is waiting for human approval.",
+    detections: [],
+    approval: { timeoutSeconds: 0.01, onTimeout: "block", allowMaskedApproval: true }
+  };
+
+  it("auto-blocks (fail-closed) once the timeout elapses unresolved, using the reference InMemoryApprovalBackend", async () => {
+    const routed = await routeByVerdict(baseCtx, decision, { approvalBackend: new InMemoryApprovalBackend() });
+    expect(routed.verdict).toBe("block");
+  });
+
+  it("delegates to the masking path on approve_masked", async () => {
+    const payload = JSON.stringify({ body: "call 010-1234-5678" });
+    const start = payload.indexOf("010-1234-5678");
+    const withDetections: PolicyDecision = {
+      ...decision,
+      detections: [{ type: "PII", subtype: "PHONE", maskedAs: "[PHONE]", start, end: start + "010-1234-5678".length, confidence: 0.9 }]
+    };
+    const routed = await routeByVerdict({ ...baseCtx, payload }, withDetections, deps({ awaitDecision: async () => "approve_masked" }));
+    expect(routed.verdict).toBe("mask_then_allow");
+    if (routed.verdict !== "mask_then_allow") throw new Error("expected mask_then_allow");
+    expect(routed.payload).toContain("[PHONE]");
+    expect(routed.payload).not.toContain("010-1234-5678");
+  });
+
+  it("reuses the passthrough path on approve", async () => {
+    const routed = await routeByVerdict(baseCtx, decision, deps({ awaitDecision: async () => "approve" }));
+    expect(routed.verdict).toBe("allow");
+    if (routed.verdict !== "allow") throw new Error("expected allow");
+    expect(routed.payload).toBe(baseCtx.payload);
+  });
+
+  it("fails closed when approve_masked is returned but the policy disallows masked approval", async () => {
+    const noMasking: PolicyDecision = { ...decision, approval: { ...decision.approval!, allowMaskedApproval: false } };
+    const routed = await routeByVerdict(baseCtx, noMasking, deps({ awaitDecision: async () => "approve_masked" }));
+    expect(routed.verdict).toBe("block");
+  });
+});
+
+describe("GuardEvent emission (§4.1, §8.4 contract)", () => {
+  it("emits a guard.event message shaped for the SSE bridge on every branch", async () => {
+    const seen: unknown[] = [];
+    const unsubscribe = onGuardBusMessage((message) => { if (message.type === "guard.event") seen.push(message.data); });
+    try {
+      const decision: PolicyDecision = {
+        verdict: "allow",
+        matchedPolicyIds: [],
+        riskScore: 0,
+        severity: "info",
+        reasonCode: "NO_POLICY_MATCH",
+        message: "No policy matched.",
+        detections: []
+      };
+      await routeByVerdict(baseCtx, decision, deps());
+    } finally {
+      unsubscribe();
+    }
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({
+      sessionId: baseCtx.sessionId,
+      direction: baseCtx.direction,
+      toolName: baseCtx.toolName,
+      verdict: "allow",
+      matchedPolicyIds: []
+    });
+    const event = seen[0] as { eventId: string; ts: string; argsDigest: string };
+    expect(event.eventId).toEqual(expect.any(String));
+    expect(new Date(event.ts).toString()).not.toBe("Invalid Date");
+    expect(event.argsDigest).not.toBe(baseCtx.payload);
+  });
+
+  it("emits require_approval (pending) then the resolved verdict as a follow-up event", async () => {
+    const messages: Array<{ type: string; data: unknown }> = [];
+    const unsubscribe = onGuardBusMessage((message) => messages.push(message));
+    try {
+      const decision: PolicyDecision = {
+        verdict: "require_approval",
+        matchedPolicyIds: ["approve_external_email_with_secret"],
+        riskScore: 88,
+        severity: "high",
+        reasonCode: "APPROVE_EXTERNAL_EMAIL_WITH_SECRET",
+        message: "waiting",
+        detections: [],
+        approval: { timeoutSeconds: 5, onTimeout: "block", allowMaskedApproval: false }
+      };
+      await routeByVerdict(baseCtx, decision, deps({ awaitDecision: async () => "block" }));
+    } finally {
+      unsubscribe();
+    }
+    const guardEvents = messages.filter((message) => message.type === "guard.event").map((message) => message.data as { verdict: string; decidedBy?: string });
+    expect(guardEvents).toHaveLength(2);
+    expect(guardEvents[0]?.verdict).toBe("require_approval");
+    expect(guardEvents[0]?.decidedBy).toBeUndefined();
+    expect(guardEvents[1]?.verdict).toBe("block");
+    expect(guardEvents[1]?.decidedBy).toBe("approval-backend");
+    expect(messages.map((message) => message.type)).toEqual(["guard.event", "approval.created", "approval.resolved", "guard.event"]);
+  });
+});
+
+describe("NFR-01 latency smoke test (rule pipeline, ≤50ms p95 target)", () => {
+  // Not a benchmark (that's M4's Benchmark Runner) — just a sanity check that
+  // routing a 10KB payload stays well inside the p95 budget, so a gross
+  // regression (e.g. an accidental deep clone) fails fast in CI.
+  const payload = JSON.stringify({ note: "a".repeat(10 * 1024) });
+
+  async function p95(run: () => Promise<unknown>): Promise<number> {
+    const samples: number[] = [];
+    for (let i = 0; i < 200; i += 1) {
+      const start = performance.now();
+      await run();
+      samples.push(performance.now() - start);
+    }
+    samples.sort((a, b) => a - b);
+    return samples[Math.floor(samples.length * 0.95)] ?? 0;
+  }
+
+  it("keeps the allow path fast", async () => {
+    const decision: PolicyDecision = {
+      verdict: "allow", matchedPolicyIds: [], riskScore: 0, severity: "info",
+      reasonCode: "NO_POLICY_MATCH", message: "No policy matched.", detections: []
+    };
+    const latency = await p95(() => routeByVerdict({ ...baseCtx, payload }, decision, deps()));
+    expect(latency).toBeLessThan(50);
+  });
+
+  it("keeps the block path fast", async () => {
+    const decision: PolicyDecision = {
+      verdict: "block", matchedPolicyIds: ["block_env_file_read"], riskScore: 96, severity: "critical",
+      reasonCode: "BLOCK_ENV_FILE_READ", message: "Credential-file access was blocked by policy.", detections: []
+    };
+    const latency = await p95(() => routeByVerdict({ ...baseCtx, payload }, decision, deps()));
+    expect(latency).toBeLessThan(50);
+  });
+});
