@@ -126,18 +126,16 @@ curl -sX POST localhost:3001/mcp -H 'content-type: application/json' -d '{"jsonr
   "params":{"name":"list_all_tickets","arguments":{"limit":2}}}'
 # -> _guardmcp.verdict "mask_then_allow"; phone numbers come back as "[PHONE]"
 ```
-Both were run against this implementation while building it, with the two
-services started directly via `node dist/server.js` — not through
-`docker compose up`. `docker compose config` was checked (the merged env,
-including `DEMO_OUTBOX_DIR`, resolves correctly for both the `demo` and `dev`
-profiles) and the compiled `dist/` was run from a directory shaped like the
-Docker runtime image (`dist/` next to `sandbox/`, `seed/`, `pages/`) to confirm
-fixture paths resolve — but the image itself has not been built in this
-environment (no Docker daemon available), so `docker compose --profile demo up`
-is unverified. The `.dockerignore` negation for `sandbox/.env` and the three new
-`COPY` lines in the Dockerfile are the parts a real build would exercise that
-this couldn't.
+Both were also run against `COMPOSE_PROFILES=demo docker compose up -d --build
+demo-mcp-tools`: the image builds, `docker compose ps` reports the container
+`(healthy)` via its `/health` healthcheck, and the tool calls above (including
+`send_email` writing under `/tmp/outbox`) work identically through the
+compose-managed container — running `--read-only` with `/tmp` as the only
+writable (tmpfs) mount, `cap_drop: ALL`, and as the non-root `node` user, all
+exactly as `x-service-defaults` specifies. A write attempt outside `/tmp`
+(`echo test > /app/should-fail.txt`) fails with "Read-only file system", and
+`sandbox/.env` is present in the built image at `/app/sandbox/.env`, confirming
+the `.dockerignore` negation takes effect in a real build.
 
-See the DoD checklist in the spec doc: everything passes except the two items
-called out above (Kotlin agent wiring; four-service compose layout) and the
-`docker compose up` step just described.
+See the DoD checklist in the spec doc: everything passes except the four-
+service compose layout and the Kotlin agent wiring called out above.
