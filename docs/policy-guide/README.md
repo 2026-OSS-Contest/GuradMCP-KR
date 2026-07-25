@@ -141,6 +141,8 @@ detections:
 
 하나 또는 둘을 쓸 수 있습니다. 둘을 쓰면 닫힌 구간이며 `gte <= lte`여야 합니다. 점수가 아직 계산되지 않은 이벤트는 risk 조건과 매칭하지 않습니다.
 
+점수를 만드는 가중치와 밴드(warn 40 / approval 70 / block 90)는 [위험 점수 산식](../risk-scoring.md)에 있습니다.
+
 ```yaml
 risk_score:
   gte: 70

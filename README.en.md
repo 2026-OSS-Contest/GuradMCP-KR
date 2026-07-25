@@ -77,6 +77,7 @@ Do not disclose vulnerabilities in public issues. [SECURITY.md](SECURITY.md#engl
 | --- | --- | --- |
 | Quick Start | [Open](docs/quickstart.en.md) | [열기](docs/quickstart.md) |
 | Policy Authoring Guide | [Open](docs/policy-guide/README.en.md) | [열기](docs/policy-guide/README.md) |
+| Risk score formula | [Open](docs/risk-scoring.en.md) | [열기](docs/risk-scoring.md) |
 | Benchmark gate | [Open](docs/benchmark-gate.en.md) | [열기](docs/benchmark-gate.md) |
 | Contribution guide | [Open](CONTRIBUTING.md#english) | [열기](CONTRIBUTING.md#한국어) |
 | Development workflow | [Open](docs/contributing/development-workflow.en.md) | [열기](docs/contributing/development-workflow.md) |

@@ -6,6 +6,7 @@ import { createAutoExpireApprovalBackend } from "./approval/backend.js";
 import { detect, mask, type Detection } from "./detect.js";
 import { routeByVerdict, type RouterDeps } from "./pipeline/actionRouter.js";
 import type { PolicyDecision } from "./pipeline/types.js";
+import { scoreRisk } from "./risk.js";
 import { runtimePolicyPacks } from "./policies.generated.js";
 
 const port = Number(process.env.PORT ?? 3001);
@@ -182,7 +183,7 @@ const actionWeight: Record<Action, number> = {
 /** Runs Detector Core (②-④) + Policy Engine (⑥) and adapts the result into the ⑦ action-router's input contract. */
 function evaluatePayload(text: string, context: Pick<PolicyContext, "direction" | "tool" | "serverTrust" | "args">): PolicyDecision {
   const detections = detect(text);
-  const riskScore = detections.reduce((score, detection) => Math.max(score, detection.type === "INJECTION" ? 95 : detection.type === "SECRET" ? 85 : 75), 0);
+  const { score: riskScore } = scoreRisk(detections, context.tool, context.serverTrust);
   const activePack = runtimePolicyPacks["korean-pii"];
   if (!activePack) throw new Error("Active policy pack is unavailable");
   const result = evaluate(resolveRuntimePolicies("korean-pii"), {

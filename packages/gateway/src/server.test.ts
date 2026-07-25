@@ -116,6 +116,24 @@ describe("gateway HTTP boundary", () => {
     expect(body.error.data.policyIds).toContain("approve_external_email_with_korean_pii");
   });
 
+  it("routes an external secret transfer to human approval (Appendix A.2)", async () => {
+    const url = await listen(createServer(handler));
+    const response = await fetch(`${url}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", id: 6, method: "tools/call",
+        params: { name: "send_email", arguments: { to: "outside@example.net", body: "key sk-ant-demo0000000000000000demo" } }
+      })
+    });
+    // The block error is the standardized GuardBlockError (FR-GW-05): policy id, reason
+    // code, severity, message — no riskScore. That the risk score reaches the approval
+    // band is asserted directly on scoreRisk in risk.test.ts.
+    const body = await response.json() as { error: { code: number; data: { policyIds: string[] } } };
+    expect(body.error.code).toBe(-32003);
+    expect(body.error.data.policyIds).toContain("approve_external_email_with_secret");
+  });
+
   it("inspects tool metadata before returning tools/list", async () => {
     const upstream = createServer((_request, response) => {
       response.setHeader("content-type", "application/json");

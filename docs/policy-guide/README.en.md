@@ -141,6 +141,8 @@ Compares a normalized integer score from 0 through 100.
 
 Use either or both. Together they form a closed range and require `gte <= lte`. An event whose score has not been computed does not match.
 
+The weights behind the score and its bands (warn 40 / approval 70 / block 90) are documented in [Risk score formula](../risk-scoring.en.md).
+
 ```yaml
 risk_score:
   gte: 70
