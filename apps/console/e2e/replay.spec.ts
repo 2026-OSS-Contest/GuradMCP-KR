@@ -32,12 +32,20 @@ test("SCR-301 policy chip opens a YAML popover", async ({ page }) => {
   await expect(popover.getByRole("link", { name: "정책으로 이동" })).toHaveAttribute("href", "/policies/block_env_file_read");
 });
 
-test("SCR-301 reveal-original asks for confirmation with an audit warning", async ({ page }) => {
+test("SCR-301 reveal-original confirms, then shows the raw vs masked content", async ({ page }) => {
   await page.goto("/replay");
+  // Step 1: the audit-log confirmation.
   await page.getByRole("button", { name: /원문 열람/ }).click();
-  const modal = page.getByRole("alertdialog");
-  await expect(modal).toBeVisible();
-  await expect(modal.getByText(/감사 로그에 남습니다/)).toBeVisible();
-  await modal.getByRole("button", { name: "계속" }).click();
-  await expect(modal).toBeHidden();
+  const confirm = page.getByRole("alertdialog");
+  await expect(confirm).toBeVisible();
+  await expect(confirm.getByText(/감사 로그에 남습니다/)).toBeVisible();
+  await confirm.getByRole("button", { name: "계속" }).click();
+  await expect(confirm).toBeHidden();
+  // Step 2: the reveal modal with the unmasked source next to its masked form.
+  const reveal = page.getByRole("dialog", { name: "Mask Diff" });
+  await expect(reveal).toBeVisible();
+  await expect(reveal.getByText("010-4728-1953")).toBeVisible();
+  await expect(reveal.getByText("PHONE")).toBeVisible();
+  await reveal.getByRole("button", { name: "열람 중지" }).click();
+  await expect(reveal).toBeHidden();
 });

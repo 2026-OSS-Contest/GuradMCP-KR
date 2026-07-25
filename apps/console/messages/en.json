@@ -107,7 +107,11 @@
       "chainFailed": "Chain verification failed",
       "reveal": "Reveal original",
       "revealed": "Original revealed. The access is recorded in the audit log.",
-      "noSelection": "Select an event on the timeline."
+      "noSelection": "Select an event on the timeline.",
+      "target": "Target",
+      "args": "Arguments",
+      "argsCount": "{count}",
+      "morePolicies": "+{count}"
     },
     "policy": {
       "goToPolicy": "Go to policy",
@@ -117,7 +121,13 @@
       "title": "Reveal-original notice",
       "body": "Revealing the original records this access in the audit log. Continue?",
       "cancel": "Cancel",
-      "continue": "Continue"
+      "continue": "Continue",
+      "revealing": "Revealing",
+      "close": "Close",
+      "notice": "This access is recorded, and the panel re-masks automatically when you leave.",
+      "raw": "Original (Raw)",
+      "masked": "Masked",
+      "stop": "Stop revealing"
     }
   },
   "screens": {

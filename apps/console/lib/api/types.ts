@@ -107,22 +107,69 @@ export interface MaskDiff {
 
 export type ChainStatus = "verified" | "failed";
 
-/** Right panel for a selected event (spec §5.3 no.4). */
+/** A run of text, or a masked token rendered as a chip (e.g. PHONE, BANK_ACCOUNT). */
+export type ContentPart = { text: string } | { mask: string };
+
+/** One numbered line of masked content in the input/return sections and the reveal modal. */
+export interface ContentLine {
+  no: string;
+  parts: ContentPart[];
+}
+
+/** The direction verdict a tool-call / tool-result node carries (요청/응답 방향 판정). */
+export interface DirectionVerdict {
+  heading: string;
+  verdict: Verdict;
+  policy: string;
+  /** "외 N" when more than one policy matched. */
+  morePolicies?: number;
+}
+
+/**
+ * Reveal-original payload (spec §5.3 no.5, `POST /events/{id}/reveal`): the raw source next to
+ * its masked form, shown in the reveal modal. Loaded only after the operator confirms.
+ */
+export interface RevealContent {
+  /** Source line, e.g. "e-000  get_log  #C-20260712-142". */
+  source: string;
+  caseId: string;
+  raw: string;
+  masked: ContentLine[];
+}
+
+/**
+ * Right panel for a selected event (spec §5.3 no.4). The header (verdict, tool) is always
+ * present; the remaining sections are node-type specific, so a user, agent, tool-call, verdict
+ * or result event each renders a different body. Unset sections fold away.
+ */
 export interface EventDetail {
   id: string;
   sessionId: string;
   at: string;
+  kind: TimelineNodeType;
   verdict: Verdict;
   tool: string;
-  /** Matching policies (Policy Chip list). */
-  policies: string[];
-  /** 0–100; shown red for a block. */
-  threatScore: number;
-  detections: Detection[];
-  maskDiff: MaskDiff | null;
-  chain: { status: ChainStatus; hash: string };
+
+  // Verdict node (§5.3 no.4).
+  policies?: string[];
+  threatScore?: number;
+  detections?: Detection[];
+  maskDiff?: MaskDiff | null;
+  chain?: { status: ChainStatus; hash: string };
+
+  // Agent node: the agent's own summary of what it decided.
+  summary?: { heading: string; text: string };
+  // User-input / tool-result node: numbered, masked content.
+  body?: { heading: string; lines: ContentLine[] };
+  // Tool-call node: the target and the JSON arguments.
+  call?: { target: string; argsCount: number; argsJson: string };
+  // Tool-call / tool-result node: the direction verdict.
+  direction?: DirectionVerdict;
+
   /** Whether the reveal-original action is available to this operator (spec §5.3 no.5). */
-  canReveal: boolean;
+  canReveal?: boolean;
+  /** Present when canReveal — the raw/masked content for the reveal modal. */
+  reveal?: RevealContent;
 }
 
 /** Policy Chip popover payload (spec §3): the read-only YAML behind a policy id. */

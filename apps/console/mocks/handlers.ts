@@ -8,7 +8,7 @@ import type {
   TimelineResponse
 } from "@/lib/api/types";
 import { EMPTY_OVERVIEW, SERVERS, liveEvent, overviewOf, recentEvents } from "./data";
-import { SESSIONS, policyDetail, timelineOf } from "./replay";
+import { SESSIONS, policyDetail, revealOf, timelineOf } from "./replay";
 import { readScenario } from "./scenario";
 
 // Long enough that a slow render is visible, short enough that the 500ms skeleton rule
@@ -48,6 +48,12 @@ export const handlers = [
   http.get("*/api/v1/policies/:id", async ({ params }) => {
     await delay(LATENCY_MS);
     return HttpResponse.json(policyDetail(String(params.id)));
+  }),
+
+  // Reveal-original (spec §5.3 no.5). POST — the real endpoint writes an audit record.
+  http.post("*/api/v1/events/:id/reveal", async () => {
+    await delay(LATENCY_MS);
+    return HttpResponse.json(revealOf());
   }),
 
   // The gateway event stream (spec §6.3). Real backends emit several event types; SCR-101 only

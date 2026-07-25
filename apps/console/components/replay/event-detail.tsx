@@ -3,15 +3,22 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Lock } from "lucide-react";
-import type { EventDetail } from "@/lib/api/types";
+import { revealEvent } from "@/lib/api/client";
+import type { DirectionVerdict, EventDetail, RevealContent } from "@/lib/api/types";
 import { VerdictBadge } from "@/components/verdict-badge";
 import { VerdictAllowIcon, VerdictWarnIcon } from "@/components/icons";
 import { PolicyChip } from "./policy-chip";
 import { MaskDiffView } from "./mask-diff";
+import { MaskedContent } from "./masked-content";
+import { RevealModal } from "./reveal-modal";
 import { cn } from "@/lib/utils";
 
 function hhmm(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return <h3 className="text-body-text-b3-md text-grayscale-300">{children}</h3>;
 }
 
 /** 위협 점수 / 탐지 count panels. */
@@ -27,8 +34,25 @@ function StatPanel({ label, value, suffix, danger }: { label: string; value: num
   );
 }
 
+/** The direction verdict a tool-call / result carries: a verdict badge + policy chip. */
+function Direction({ direction }: { direction: DirectionVerdict }) {
+  const t = useTranslations("replay.detail");
+  return (
+    <section className="flex flex-col gap-2">
+      <SectionHeading>{direction.heading}</SectionHeading>
+      <div className="flex flex-wrap items-center gap-3">
+        <VerdictBadge verdict={direction.verdict} size="sm" />
+        <PolicyChip id={direction.policy} />
+        {direction.morePolicies ? (
+          <span className="text-body-text-b3-rg text-grayscale-100">{t("morePolicies", { count: direction.morePolicies })}</span>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 /** Chain Status Pill (spec §5.3 no.4⑤): verified is green, a hash-chain mismatch turns it yellow. */
-function ChainPill({ status, hash }: EventDetail["chain"]) {
+function ChainPill({ status, hash }: NonNullable<EventDetail["chain"]>) {
   const t = useTranslations("replay.detail");
   const verified = status === "verified";
   const Icon = verified ? VerdictAllowIcon : VerdictWarnIcon;
@@ -48,10 +72,9 @@ function ChainPill({ status, hash }: EventDetail["chain"]) {
   );
 }
 
-function RevealModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
+/** Step 1 of reveal-original: the audit-log confirmation (spec §5.3 no.5). */
+function ConfirmRevealModal({ onCancel, onConfirm, pending }: { onCancel: () => void; onConfirm: () => void; pending: boolean }) {
   const t = useTranslations("replay.reveal");
-
-  // Focus trap-lite: Escape cancels.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && onCancel();
     document.addEventListener("keydown", onKey);
@@ -62,15 +85,15 @@ function RevealModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm:
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={onCancel}>
       <div
         role="alertdialog"
-        aria-labelledby="reveal-title"
-        aria-describedby="reveal-body"
+        aria-labelledby="confirm-reveal-title"
+        aria-describedby="confirm-reveal-body"
         className="w-96 max-w-full rounded-lg bg-grayscale-900 p-6 shadow-xl shadow-black/50"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <h2 id="reveal-title" className="text-body-text-b1-bd text-grayscale-white">
+        <h2 id="confirm-reveal-title" className="text-body-text-b1-bd text-grayscale-white">
           {t("title")}
         </h2>
-        <p id="reveal-body" className="mt-2 text-body-text-b3-md text-grayscale-300">
+        <p id="confirm-reveal-body" className="mt-2 text-body-text-b3-md text-grayscale-300">
           {t("body")}
         </p>
         <div className="mt-6 flex justify-end gap-2">
@@ -84,7 +107,8 @@ function RevealModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm:
           <button
             type="button"
             onClick={onConfirm}
-            className="flex h-9 items-center rounded-lg bg-blue-800 px-4 text-body-text-b3-md transition-colors hover:bg-blue-700"
+            disabled={pending}
+            className="flex h-9 items-center rounded-lg bg-blue-800 px-4 text-body-text-b3-md transition-colors hover:bg-blue-700 disabled:opacity-50"
           >
             {t("continue")}
           </button>
@@ -95,18 +119,40 @@ function RevealModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm:
 }
 
 /**
- * SCR-301 event detail panel (spec §5.3 no.4), fixed order: Verdict Badge → matching policies →
- * threat/detection → detection list → Mask Diff → Chain Status Pill, with the reveal-original
- * action pinned to the bottom. Sections with no data (a non-block event) fold away.
+ * SCR-301 event detail panel (spec §5.3 no.4). The header (verdict, tool) is always shown; the
+ * body is node-type specific — the user's input, the agent's summary, the tool call, the block
+ * verdict's fixed-order breakdown, or the tool result — so each timeline node reads differently.
  */
 export function EventDetailPanel({ detail }: { detail: EventDetail }) {
   const t = useTranslations("replay.detail");
   const [maskExpanded, setMaskExpanded] = useState(false);
-  const [revealOpen, setRevealOpen] = useState(false);
-  const [revealed, setRevealed] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [revealed, setRevealed] = useState<RevealContent | null>(null);
+
+  // Reset any open reveal when the selected event changes.
+  useEffect(() => {
+    setConfirmOpen(false);
+    setRevealed(null);
+    setMaskExpanded(false);
+  }, [detail.id]);
+
+  const confirmReveal = async () => {
+    setPending(true);
+    try {
+      // The real endpoint records the access; here MSW returns the raw content.
+      setRevealed(await revealEvent(detail.id));
+      setConfirmOpen(false);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const isVerdict = detail.kind === "verdict";
+  const monoTitle = detail.kind === "tool_call" || detail.kind === "result";
 
   return (
-    <div className="flex h-full flex-col justify-between gap-4 px-4 py-6">
+    <div data-testid="event-detail" className="flex h-full flex-col justify-between gap-4 px-4 py-6">
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
         <header className="flex flex-col gap-3 pb-3 shadow-[inset_0_-1px_0_0_var(--primitive-opacity-white-alpha-10)]">
           <div className="flex items-center justify-between gap-3">
@@ -116,14 +162,50 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
             </time>
           </div>
           <div className="flex items-center gap-3">
-            <VerdictBadge verdict={detail.verdict} size="sm" />
-            <span className="truncate font-mono text-title-mono-t1-rg text-grayscale-white">{detail.tool}</span>
+            {isVerdict && <VerdictBadge verdict={detail.verdict} size="sm" />}
+            <span
+              className={cn(
+                "min-w-0 break-words text-grayscale-white",
+                monoTitle || isVerdict ? "font-mono text-title-mono-t1-rg" : "text-title-text-t2-bd"
+              )}
+            >
+              {detail.tool}
+            </span>
           </div>
         </header>
 
-        {detail.policies.length > 0 && (
+        {/* Agent — its own summary of the decision. */}
+        {detail.summary && (
           <section className="flex flex-col gap-2">
-            <h3 className="text-body-text-b3-md text-grayscale-300">{t("matchingPolicies")}</h3>
+            <SectionHeading>{detail.summary.heading}</SectionHeading>
+            <p className="text-body-text-b3-rg text-grayscale-100">{detail.summary.text}</p>
+          </section>
+        )}
+
+        {/* Tool call — target and JSON arguments. */}
+        {detail.call && (
+          <>
+            <section className="flex flex-col gap-2">
+              <SectionHeading>{t("target")}</SectionHeading>
+              <span className="w-fit max-w-full truncate rounded-[4px] bg-grayscale-800 px-[7px] py-px font-mono text-caption-mono-c-rg text-grayscale-white shadow-[inset_0_0_0_1px_var(--primitive-color-grayscale-700)]">
+                {detail.call.target}
+              </span>
+            </section>
+            <section className="flex flex-col gap-2">
+              <SectionHeading>
+                {t("args")} <span className="text-grayscale-300">{t("argsCount", { count: detail.call.argsCount })}</span>
+              </SectionHeading>
+              <pre className="overflow-x-auto rounded-lg bg-(--primitive-opacity-black-alpha-75) p-3 font-mono text-caption-mono-c-rg text-grayscale-200">
+                {detail.call.argsJson}
+              </pre>
+            </section>
+          </>
+        )}
+
+        {/* Verdict — matching policies. */}
+        {detail.policies && detail.policies.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <SectionHeading>{t("matchingPolicies")}</SectionHeading>
             <div className="flex flex-wrap items-center gap-2">
               {detail.policies.map((id) => (
                 <PolicyChip key={id} id={id} />
@@ -132,16 +214,18 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
           </section>
         )}
 
-        {(detail.threatScore > 0 || detail.detections.length > 0) && (
+        {/* Verdict — threat score and detection count. */}
+        {(detail.threatScore !== undefined || (detail.detections && detail.detections.length > 0)) && (
           <div className="flex gap-4">
-            <StatPanel label={t("threatScore")} value={detail.threatScore} suffix="/100" danger />
-            <StatPanel label={t("detections")} value={detail.detections.length} suffix={t("detectionUnit")} />
+            <StatPanel label={t("threatScore")} value={detail.threatScore ?? 0} suffix="/100" danger />
+            <StatPanel label={t("detections")} value={detail.detections?.length ?? 0} suffix={t("detectionUnit")} />
           </div>
         )}
 
-        {detail.detections.length > 0 && (
+        {/* Verdict — detection list. */}
+        {detail.detections && detail.detections.length > 0 && (
           <section className="flex flex-col gap-2">
-            <h3 className="text-body-text-b3-md text-grayscale-300">{t("detectionList")}</h3>
+            <SectionHeading>{t("detectionList")}</SectionHeading>
             <div className="flex flex-col">
               {detail.detections.map((d) => (
                 <div
@@ -159,10 +243,24 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
           </section>
         )}
 
+        {/* User input / tool result — numbered, masked content. */}
+        {detail.body && (
+          <section className="flex flex-col gap-2">
+            <SectionHeading>{detail.body.heading}</SectionHeading>
+            <div className="rounded-lg bg-(--primitive-opacity-black-alpha-75) p-3">
+              <MaskedContent lines={detail.body.lines} />
+            </div>
+          </section>
+        )}
+
+        {/* Tool call / result — direction verdict. */}
+        {detail.direction && <Direction direction={detail.direction} />}
+
+        {/* Verdict — mask diff. */}
         {detail.maskDiff && (
           <section className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-body-text-b3-md text-grayscale-300">Mask Diff</h3>
+              <SectionHeading>Mask Diff</SectionHeading>
               <button
                 type="button"
                 onClick={() => setMaskExpanded((previous) => !previous)}
@@ -173,17 +271,17 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
               </button>
             </div>
             <MaskDiffView diff={detail.maskDiff} expanded={maskExpanded} />
-            {revealed && <p className="text-caption-text-c-rg text-(--primitive-opacity-white-alpha-75)">{t("revealed")}</p>}
           </section>
         )}
 
-        <ChainPill status={detail.chain.status} hash={detail.chain.hash} />
+        {/* Verdict — chain status. */}
+        {detail.chain && <ChainPill status={detail.chain.status} hash={detail.chain.hash} />}
       </div>
 
       {detail.canReveal && (
         <button
           type="button"
-          onClick={() => setRevealOpen(true)}
+          onClick={() => setConfirmOpen(true)}
           className="flex h-12 flex-none items-center justify-center gap-2 rounded-lg bg-blue-800 text-body-text-b2-md transition-colors hover:bg-blue-700"
         >
           <Lock className="size-5 flex-none" aria-hidden />
@@ -191,15 +289,8 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
         </button>
       )}
 
-      {revealOpen && (
-        <RevealModal
-          onCancel={() => setRevealOpen(false)}
-          onConfirm={() => {
-            setRevealOpen(false);
-            setRevealed(true);
-          }}
-        />
-      )}
+      {confirmOpen && <ConfirmRevealModal onCancel={() => setConfirmOpen(false)} onConfirm={confirmReveal} pending={pending} />}
+      {revealed && <RevealModal content={revealed} onClose={() => setRevealed(null)} />}
     </div>
   );
 }
