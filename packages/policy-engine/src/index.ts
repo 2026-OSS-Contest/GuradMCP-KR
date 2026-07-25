@@ -1,7 +1,8 @@
 // Public entry point for @guardmcp/policy-engine.
 //
-// Shared types live in ./types.ts and are re-exported here so consumers keep
-// importing them from `@guardmcp/policy-engine`.
+// Types live in ./types.ts (GMCP-7 DoD) and match evaluation in ./matcher.ts
+// (GMCP-7, FR-POL-01). This module re-exports both and adds the pipeline
+// wrapper `evaluate` (priority sort + strategy adoption, FR-POL-02).
 
 export type {
   Action,
@@ -20,15 +21,20 @@ export type {
 } from "./types.js";
 export { actions, severities } from "./types.js";
 
-import type {
-  Action,
-  Detection,
-  EvaluationResult,
-  EvaluationStrategy,
-  MatchDefinition,
-  Policy,
-  PolicyContext
-} from "./types.js";
+export {
+  matchesPolicy,
+  matches,
+  matchDirection,
+  matchTool,
+  matchServerTrust,
+  matchRiskScore,
+  matchDetections,
+  matchArgs,
+  isSafePolicyRegex
+} from "./matcher.js";
+
+import type { Action, EvaluationResult, EvaluationStrategy, Policy, PolicyContext } from "./types.js";
+import { matchesPolicy } from "./matcher.js";
 
 const actionWeight: Record<Action, number> = {
   allow: 0,
@@ -47,7 +53,7 @@ export function evaluate(
   const matched = [...policies]
     .filter((policy) => policy.enabled !== false)
     .sort((left, right) => left.priority - right.priority || left.id.localeCompare(right.id))
-    .filter((policy) => matches(policy.match, context));
+    .filter((policy) => matchesPolicy(policy, context));
 
   const action = strategy === "first-match"
     ? matched[0]?.action ?? defaultAction
@@ -57,94 +63,4 @@ export function evaluate(
     );
 
   return { action, matchedPolicyIds: matched.map(({ id }) => id), policies: matched };
-}
-
-export function matches(match: MatchDefinition, context: PolicyContext): boolean {
-  if (match.direction && match.direction !== "any" && match.direction !== context.direction) return false;
-  if (match.server_trust && match.server_trust !== "any" && match.server_trust !== context.serverTrust) return false;
-  if (match.tool && !matchesGlob(match.tool, context.tool)) return false;
-  if (match.args && !matchesArgs(match.args, context.args)) return false;
-  if (match.detections && !matchesDetections(match.detections, context.detections)) return false;
-  if (match.risk_score?.gte !== undefined && context.riskScore < match.risk_score.gte) return false;
-  if (match.risk_score?.lte !== undefined && context.riskScore > match.risk_score.lte) return false;
-  return true;
-}
-
-function matchesGlob(pattern: string, value: string): boolean {
-  const expression = [...pattern].map((character) => {
-    if (character === "*") return ".*";
-    if (character === "?") return ".";
-    return /[.+^${}()|[\]\\]/.test(character) ? `\\${character}` : character;
-  }).join("");
-  return new RegExp(`^${expression}$`).test(value);
-}
-
-function matchesArgs(expected: Record<string, unknown>, actual: Record<string, unknown>): boolean {
-  return Object.entries(expected).every(([condition, value]) => {
-    if (condition.endsWith("_exists")) {
-      const key = condition.slice(0, -"_exists".length);
-      return typeof value === "boolean" && Object.hasOwn(actual, key) === value;
-    }
-    if (condition.endsWith("_regex")) {
-      const key = condition.slice(0, -"_regex".length);
-      return actual[key] !== undefined && typeof value === "string" && isSafePolicyRegex(value) && new RegExp(value).test(String(actual[key]));
-    }
-    if (condition.endsWith("_glob")) {
-      const key = condition.slice(0, -"_glob".length);
-      return actual[key] !== undefined && typeof value === "string" && matchesGlob(value, String(actual[key]));
-    }
-    if (condition.endsWith("_not_domain")) {
-      const key = condition.slice(0, -"_not_domain".length);
-      const domains = Array.isArray(value) ? value : [value];
-      const target = actual[key];
-      return typeof target === "string" && splitTargets(target).some((candidate) => !domains.some((domain) => domainMatches(candidate, String(domain))));
-    }
-    if (condition.endsWith("_domain")) {
-      const key = condition.slice(0, -"_domain".length);
-      const domains = Array.isArray(value) ? value : [value];
-      const target = actual[key];
-      const targets = typeof target === "string" ? splitTargets(target) : [];
-      return targets.length > 0 && targets.every((candidate) => domains.some((domain) => domainMatches(candidate, String(domain))));
-    }
-    if (condition.endsWith("_not_in")) {
-      const key = condition.slice(0, -"_not_in".length);
-      return Array.isArray(value) && !value.includes(actual[key]);
-    }
-    if (condition.endsWith("_in")) {
-      const key = condition.slice(0, -"_in".length);
-      return Array.isArray(value) && value.includes(actual[key]);
-    }
-    return actual[condition] === value;
-  });
-}
-
-export function isSafePolicyRegex(pattern: string): boolean {
-  if (pattern.length === 0 || pattern.length > 512) return false;
-  if (/\\[1-9]/.test(pattern) || pattern.includes("(?<=") || pattern.includes("(?<!")) return false;
-  if (/(?:\([^)]*[|+*{][^)]*\))[+*{]/.test(pattern)) return false;
-  try { new RegExp(pattern); return true; } catch { return false; }
-}
-
-function domainMatches(target: string, allowedDomain: string): boolean {
-  const normalizedAllowed = allowedDomain.toLowerCase().replace(/\.$/, "");
-  const emailSeparator = target.lastIndexOf("@");
-  let host = emailSeparator >= 0 ? target.slice(emailSeparator + 1) : target;
-  try { host = new URL(target).hostname; } catch { /* Target may be an email address or bare host. */ }
-  const normalizedHost = host.toLowerCase().replace(/\.$/, "");
-  return normalizedHost === normalizedAllowed || normalizedHost.endsWith(`.${normalizedAllowed}`);
-}
-
-function splitTargets(target: string): string[] {
-  return target.split(/[,;]/).map((value) => value.trim()).filter(Boolean);
-}
-
-function matchesDetections(
-  expected: NonNullable<MatchDefinition["detections"]>,
-  detections: Detection[]
-): boolean {
-  const found = new Set(detections.flatMap(({ type, subtype }) => subtype ? [type, `${type}.${subtype}`] : [type]));
-  if (expected.any_of && !expected.any_of.some((type) => found.has(type))) return false;
-  if (expected.all_of && !expected.all_of.every((type) => found.has(type))) return false;
-  if (expected.none_of && expected.none_of.some((type) => found.has(type))) return false;
-  return true;
 }
