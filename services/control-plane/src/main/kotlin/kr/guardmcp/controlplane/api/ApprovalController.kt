@@ -4,6 +4,7 @@ import kr.guardmcp.controlplane.domain.Approval
 import kr.guardmcp.controlplane.domain.ApprovalDecision
 import kr.guardmcp.controlplane.domain.ApprovalStatus
 import kr.guardmcp.controlplane.domain.ApprovalStore
+import kr.guardmcp.controlplane.domain.EventStreamHub
 import kr.guardmcp.controlplane.domain.GuardEventStore
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.GetMapping
@@ -36,6 +37,7 @@ data class ApprovalDecisionRequest(
 class ApprovalController(
     private val approvalStore: ApprovalStore,
     private val eventStore: GuardEventStore,
+    private val eventStreamHub: EventStreamHub,
 ) {
     @GetMapping("/approvals")
     fun approvals(@RequestParam(required = false) status: String?): List<Approval> {
@@ -58,7 +60,7 @@ class ApprovalController(
         if (request.riskReason.isBlank()) {
             throw ApiException(HttpStatus.BAD_REQUEST, "invalid_risk_reason", "riskReason must not be blank")
         }
-        return approvalStore.create(
+        val approval = approvalStore.create(
             sessionId = request.sessionId,
             toolName = request.toolName,
             arguments = request.arguments ?: emptyMap(),
@@ -66,6 +68,8 @@ class ApprovalController(
             policyId = request.policyId,
             ttl = APPROVAL_TTL,
         )
+        eventStreamHub.publishApprovalCreated(approval)
+        return approval
     }
 
     @PostMapping("/approvals/{approvalId}/decision")
@@ -76,7 +80,9 @@ class ApprovalController(
                 "invalid_approval_decision",
                 "decision must be one of block, approve_masked, approve",
             )
-        return approvalStore.decide(approvalId, decision, request.decidedBy ?: "console")
+        val decided = approvalStore.decide(approvalId, decision, request.decidedBy ?: "console")
+        eventStreamHub.publishApprovalResolved(decided)
+        return decided
     }
 
     companion object {
