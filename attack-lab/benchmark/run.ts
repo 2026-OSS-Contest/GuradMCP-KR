@@ -51,10 +51,15 @@ validateFixtures(authorFixtures, policies);
 let truePositive = 0;
 let falsePositive = 0;
 let falseNegative = 0;
+/** FR-PII-02: how many benign samples the format validators keep out of the results. */
+let falsePositiveWithoutValidation = 0;
 const perTypeTotals = new Map<string, { total: number; detected: number }>();
 for (const sample of samples) {
   const subtypes = new Set(detect(sample.text).filter(({ type }) => type === "PII").map(({ subtype }) => subtype));
   const positive = subtypes.size > 0;
+  if (!sample.label && detect(sample.text, { skipValidation: true }).some(({ type }) => type === "PII")) {
+    falsePositiveWithoutValidation += 1;
+  }
   if (sample.label && positive) truePositive += 1;
   if (!sample.label && positive) falsePositive += 1;
   if (sample.label && !positive) falseNegative += 1;
@@ -157,7 +162,14 @@ const passed = metrics.recall >= thresholds.recall
   && metrics.scenarioPassRate >= thresholds.scenarioPassRate
   && metrics.fixturePassRate >= thresholds.fixturePassRate
   && metrics.fixtureCoverageRate >= thresholds.fixtureCoverageRate;
-const report = { generatedAt: new Date().toISOString(), metrics, thresholds, perTypeRecall, scenarios: scenarioResults, fixtures: fixtureResults, fixtureCoverage, passed };
+const fprWithoutValidation = negatives === 0 ? 0 : falsePositiveWithoutValidation / negatives;
+const validationImpact = {
+  fprWithoutValidation,
+  fprWithValidation: fpr,
+  falsePositivesPrevented: falsePositiveWithoutValidation - falsePositive,
+  fprReduction: fprWithoutValidation - fpr
+};
+const report = { generatedAt: new Date().toISOString(), metrics, thresholds, perTypeRecall, validationImpact, scenarios: scenarioResults, fixtures: fixtureResults, fixtureCoverage, passed };
 
 await mkdir(dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`);

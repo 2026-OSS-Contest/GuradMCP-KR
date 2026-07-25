@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
  * the detector would reject at start-up.
  */
 const catalogNames = ["pii", "secret", "injection"] as const;
-const knownValidators = ["luhn", "koreanRrn", "koreanBizNo"];
+const knownValidators = ["luhn", "koreanRrn", "koreanBizNo", "koreanBankAccount"];
 const declaredTypes: Record<(typeof catalogNames)[number], string> = {
   pii: "PII",
   secret: "SECRET",

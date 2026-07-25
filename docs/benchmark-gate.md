@@ -27,6 +27,20 @@ npm run bench -- --output reports/benchmark.json
 | 정책 fixture 커버리지 | `= 1.00` | 배포 정책마다 match/not_match fixture를 각각 한 건 이상 보유 |
 | Precision | report-only | 탐지로 분류한 샘플 중 실제 positive 비율 |
 | 유형별 Recall | report-only | `type` 라벨이 붙은 positive 샘플의 유형별 탐지 비율 (`perTypeRecall`) |
+| 형식 검증 효과 | report-only | 형식 검증을 끄고 측정한 FPR과의 차이 (`validationImpact`) |
+
+### 형식 검증 효과 (`validationImpact`)
+
+runner는 음성 샘플을 두 번 평가합니다. 한 번은 그대로, 한 번은 형식 검증(주민등록번호 체크섬·사업자등록번호 검증식·카드 Luhn·계좌 자릿수)을 끈 상태입니다. 두 FPR의 차이가 패턴 매칭만 쓸 때와 형식 검증을 더했을 때의 실제 차이이며, report의 `validationImpact`에 남습니다.
+
+| 필드 | 의미 |
+| --- | --- |
+| `fprWithoutValidation` | 형식 검증을 끄고 측정한 오탐률 |
+| `fprWithValidation` | 실제 배포 구성의 오탐률(`metrics.fpr`와 동일) |
+| `falsePositivesPrevented` | 형식 검증이 걸러낸 음성 샘플 수 |
+| `fprReduction` | 두 오탐률의 차이(퍼센트포인트) |
+
+이 값을 유지하려면 **패턴에는 일치하지만 형식 검증에서 걸러지는 음성 샘플**이 데이터셋에 필요합니다(예: 형식은 맞고 체크섬이 틀린 번호). 검증 계층을 약화시키는 변경은 이 수치가 먼저 떨어지므로, PR에서 값이 낮아졌다면 원인을 설명해야 합니다.
 
 `attack-lab/datasets/`의 각 positive 샘플은 기대 PII 유형을 `type` 필드로 라벨합니다. runner는 이를 모아 유형별 recall과 라벨된 유형 수(`labeledTypeCount`)를 report에 남기지만, 합격 판정은 위 절대 기준으로만 합니다.
 

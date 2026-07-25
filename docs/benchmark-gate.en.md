@@ -27,6 +27,20 @@ npm run bench -- --output reports/benchmark.json
 | Policy-fixture coverage | `= 1.00` | every shipped policy has at least one match and one not-match fixture |
 | Precision | report-only | actual positives among detected samples |
 | Per-type recall | report-only | detected fraction per PII type for `type`-labeled positives (`perTypeRecall`) |
+| Format-validation impact | report-only | difference against the FPR measured with validation off (`validationImpact`) |
+
+### Format-validation impact (`validationImpact`)
+
+The runner evaluates the negative samples twice: once as shipped, and once with format validation disabled (resident-registration checksum, business-number check digit, card Luhn, and account digit counts). The gap between the two false-positive rates is the measured difference between pattern matching alone and pattern matching plus format validation, and it is recorded in the report under `validationImpact`.
+
+| Field | Meaning |
+| --- | --- |
+| `fprWithoutValidation` | false-positive rate with validation disabled |
+| `fprWithValidation` | false-positive rate of the shipped configuration (same as `metrics.fpr`) |
+| `falsePositivesPrevented` | number of negative samples validation kept out |
+| `fprReduction` | difference between the two rates, in percentage points |
+
+Keeping this number meaningful requires negative samples that **match a pattern but fail format validation** — for example a correctly shaped number with a wrong checksum. Any change that weakens the validation layer shows up here first, so a pull request that lowers the figure has to explain why.
 
 Every positive sample under `attack-lab/datasets/` labels its expected PII type with a `type` field. The runner aggregates these into per-type recall and a labeled-type count (`labeledTypeCount`) in the report, while the pass decision still uses only the absolute thresholds above.
 
