@@ -51,6 +51,8 @@ x-demo-mcp-tools: &demo-mcp-tools
     SERVICE_NAME: demo-mcp-tools
     GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
     DEMO_SEED_ID: guardmcp-demo-v1
+    # /tmp is the only writable path under read_only:true (tmpfs, see service-defaults above).
+    DEMO_OUTBOX_DIR: /tmp/outbox
   healthcheck:
     <<: *node-healthcheck
     test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3003/health"]
@@ -243,6 +245,7 @@ services:
       APP_MODE: demo
       GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
       DEMO_SEED_ID: guardmcp-demo-v1
+      DEMO_OUTBOX_DIR: /tmp/outbox
     ports:
       - "127.0.0.1:${DEMO_MCP_TOOLS_PORT:-3003}:3003"
 
@@ -282,6 +285,7 @@ services:
       APP_MODE: development
       GUARDMCP_VERSION: ${GUARDMCP_VERSION:-dev}
       DEMO_SEED_ID: guardmcp-demo-v1
+      DEMO_OUTBOX_DIR: /tmp/outbox
     ports:
       - "127.0.0.1:${DEMO_MCP_TOOLS_PORT:-3003}:3003"
     volumes:

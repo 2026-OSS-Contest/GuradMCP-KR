@@ -27,6 +27,9 @@ ENV NODE_ENV=production \
     GUARDMCP_VERSION=${GUARDMCP_VERSION}
 WORKDIR /app
 COPY --from=build --chown=node:node /workspace/apps/demo-mcp-tools/dist ./dist
+COPY --from=build --chown=node:node /workspace/apps/demo-mcp-tools/sandbox ./sandbox
+COPY --from=build --chown=node:node /workspace/apps/demo-mcp-tools/seed ./seed
+COPY --from=build --chown=node:node /workspace/apps/demo-mcp-tools/pages ./pages
 USER node
 EXPOSE 3003
 CMD ["node", "dist/server.js"]

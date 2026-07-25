@@ -12,3 +12,6 @@ reports
 *.log
 .DS_Store
 
+# Synthetic demo fixture — not a real secret, deliberately part of the build context.
+!apps/demo-mcp-tools/sandbox/.env
+
