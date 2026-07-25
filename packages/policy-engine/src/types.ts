@@ -112,3 +112,39 @@ export interface EvaluationResult {
   matchedPolicyIds: string[];
   policies: Policy[];
 }
+
+/**
+ * GMCP-12 (Decision Engine, FR-POL-02) input/output contract.
+ *
+ * `decide()` (decide.ts) is the pipeline-stage-⑥ entry point: it takes the
+ * Risk Scorer's output (stage ⑤) plus the already loaded/activated policy
+ * list and produces a single verdict. Field names mirror the task spec
+ * (`docs/task-docs/GMCP-12/decision-engine.md` §4) rather than
+ * {@link PolicyContext}/{@link EvaluationResult} above, because
+ * `DecisionResult` maps directly onto `GuardEvent` (§4.2):
+ *   GuardEvent.verdict          = DecisionResult.verdict
+ *   GuardEvent.matchedPolicyIds = DecisionResult.matchedPolicyIds
+ */
+export interface DecisionEvent {
+  direction: Direction;
+  toolName: string;
+  serverTrust: ServerTrust;
+  args: Record<string, unknown>;
+}
+
+export interface DecisionInput {
+  event: DecisionEvent;
+  detections: Detection[];
+  riskScore: number; // 0-100
+  activePolicies: Policy[];
+  strategy?: EvaluationStrategy; // default: severity-max
+  defaultAction?: Action; // policy-pack default_action, default: allow
+  strictMode?: boolean; // true: unmatched events resolve to warn regardless of defaultAction
+}
+
+export interface DecisionResult {
+  verdict: Action;
+  matchedPolicyIds: string[]; // all matched policies, in priority-ascending order
+  decidingPolicyId: string | null; // policy that decided verdict; null when unmatched
+  reason: string;
+}

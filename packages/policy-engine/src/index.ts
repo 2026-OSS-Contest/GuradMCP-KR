@@ -17,7 +17,10 @@ export type {
   MatchDefinition,
   PolicyMatch,
   Policy,
-  EvaluationResult
+  EvaluationResult,
+  DecisionEvent,
+  DecisionInput,
+  DecisionResult
 } from "./types.js";
 export { actions, severities } from "./types.js";
 
@@ -32,6 +35,8 @@ export {
   matchArgs,
   isSafePolicyRegex
 } from "./matcher.js";
+
+export { decide } from "./decide.js";
 
 import type { Action, EvaluationResult, EvaluationStrategy, Policy, PolicyContext } from "./types.js";
 import { matchesPolicy } from "./matcher.js";
