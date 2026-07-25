@@ -62,12 +62,20 @@ export function RevealModal({ content, onClose }: { content: RevealContent; onCl
               <span aria-hidden>○–</span>
               {t("raw")}
             </h3>
-            <pre className="overflow-x-auto rounded-lg bg-(--primitive-opacity-black-alpha-75) p-3 font-mono text-caption-mono-c-rg whitespace-pre-wrap text-grayscale-200">
-              {content.raw
-                .split("\n")
-                .map((l, i) => `${String(i + 1).padStart(2, "0")}  ${l}`)
-                .join("\n")}
-            </pre>
+            {/* Same numbered-line layout as MaskedContent so a raw line and its masked
+                counterpart share a row height and stay aligned across the two columns. */}
+            <div className="rounded-lg bg-(--primitive-opacity-black-alpha-75) p-3">
+              <div className="flex flex-col gap-1 font-mono text-caption-mono-c-rg text-grayscale-200">
+                {content.raw.split("\n").map((text, index) => (
+                  <div key={index} className="flex gap-2">
+                    <span className="flex-none text-(--primitive-opacity-white-alpha-50)">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <span className="min-w-0 break-words whitespace-pre-wrap">{text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </section>
           <section className="flex flex-col gap-2">
             <h3 className="flex items-center gap-2 text-body-text-b3-md text-green-500">
