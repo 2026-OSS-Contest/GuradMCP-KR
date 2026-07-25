@@ -123,4 +123,20 @@ class ApprovalStore(private val clock: Clock) {
     }
 
     fun countPending(): Int = synchronized(lock) { approvals.values.count { it.status == ApprovalStatus.PENDING } }
+
+    /** FR-APR-03 fail-closed: overdue pending approvals become expired with a system block decision. */
+    fun expireOverdue(now: Instant): List<Approval> = synchronized(lock) {
+        approvals.values
+            .filter { it.status == ApprovalStatus.PENDING && !it.expiresAt.isAfter(now) }
+            .map { current ->
+                val expired = current.copy(
+                    status = ApprovalStatus.EXPIRED,
+                    decision = ApprovalDecision.BLOCK,
+                    decidedBy = "system:timeout",
+                    decidedAt = now,
+                )
+                approvals[current.id] = expired
+                expired
+            }
+    }
 }

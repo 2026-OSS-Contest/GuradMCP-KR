@@ -15,3 +15,8 @@ management:
     health:
       probes:
         enabled: true
+  health:
+    redis:
+      # Redis backs the approval queue only under the compose profile; keep the
+      # default profile's aggregate health independent of an unused dependency.
+      enabled: false
