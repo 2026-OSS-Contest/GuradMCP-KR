@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "fallback": {
+    "minDigits": 10,
+    "maxDigits": 14,
+    "description": "Digit-count range every Korean bank account falls into; used when no prefix below matches"
+  },
+  "banks": [
+    {
+      "bank": "신한은행 / Shinhan",
+      "prefix": "110",
+      "digits": [12],
+      "description": "110-XXX-XXXXXX"
+    },
+    {
+      "bank": "농협은행 / NH",
+      "prefix": "302",
+      "digits": [13],
+      "description": "302-XXXX-XXXX-XX"
+    },
+    {
+      "bank": "우리은행 / Woori",
+      "prefix": "1002",
+      "digits": [13],
+      "description": "1002-XXX-XXXXXX"
+    },
+    {
+      "bank": "카카오뱅크 / KakaoBank",
+      "prefix": "3333",
+      "digits": [13],
+      "description": "3333-XX-XXXXXXX"
+    }
+  ]
+}

@@ -17,7 +17,8 @@
       "flags": "g",
       "maskedAs": "[RRN_LIKE]",
       "confidence": 0.95,
-      "validate": "koreanRrn"
+      "validate": "koreanRrn",
+      "onValidationFailure": "reject"
     },
     {
       "subtype": "BIZ_NO",
@@ -26,7 +27,8 @@
       "flags": "g",
       "maskedAs": "[BIZ_NO]",
       "confidence": 0.9,
-      "validate": "koreanBizNo"
+      "validate": "koreanBizNo",
+      "onValidationFailure": "reject"
     },
     {
       "subtype": "CARD",
@@ -35,7 +37,8 @@
       "flags": "g",
       "maskedAs": "[CARD]",
       "confidence": 0.95,
-      "validate": "luhn"
+      "validate": "luhn",
+      "onValidationFailure": "reject"
     },
     {
       "subtype": "EMAIL",
@@ -72,10 +75,13 @@
     {
       "subtype": "BANK_ACCOUNT",
       "description": "Bank account number introduced by a Korean banking keyword",
-      "pattern": "(?:계좌|통장|입금)\\s*(?:번호)?\\s*[:：]?\\s*(\\d{2,6}(?:-\\d{2,6}){2,4})",
+      "pattern": "(?:계좌|통장|입금)\\s*(?:번호)?\\s*[:：]?\\s*(\\d{2,7}(?:-\\d{2,7}){2,4})",
       "flags": "g",
       "maskedAs": "[BANK_ACCOUNT]",
-      "confidence": 0.9
+      "confidence": 0.9,
+      "validate": "koreanBankAccount",
+      "onValidationFailure": "downgrade",
+      "unvalidatedConfidence": 0.45
     }
   ]
 }

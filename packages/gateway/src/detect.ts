@@ -1,3 +1,4 @@
+import bankAccountTable from "./rules/bank-accounts.json" with { type: "json" };
 import injectionCatalog from "./rules/injection.json" with { type: "json" };
 import piiCatalog from "./rules/pii.json" with { type: "json" };
 import secretCatalog from "./rules/secret.json" with { type: "json" };
@@ -13,6 +14,9 @@ export interface Detection {
   confidence: number;
 }
 
+/** What a rule does when its format validator rejects a candidate span. */
+type ValidationFailure = "reject" | "downgrade";
+
 interface Rule {
   type: DetectionKind;
   subtype: string;
@@ -20,6 +24,15 @@ interface Rule {
   maskedAs: string;
   confidence: number;
   validate?: (value: string) => boolean;
+  onValidationFailure: ValidationFailure;
+  /** Confidence kept when a `downgrade` rule fails validation. */
+  unvalidatedConfidence: number;
+}
+
+/** Options for a single detection pass. */
+export interface DetectOptions {
+  /** Skips format validators; used to measure how much they reduce false positives. */
+  skipValidation?: boolean;
 }
 
 interface NormalizedInput {
@@ -34,14 +47,16 @@ const detectionKinds: readonly DetectionKind[] = ["PII", "SECRET", "INJECTION"];
 const validators: Record<string, (value: string) => boolean> = {
   luhn: validLuhn,
   koreanRrn: validRrnLike,
-  koreanBizNo: validBizNo
+  koreanBizNo: validBizNo,
+  koreanBankAccount: validBankAccount
 };
 
 const rules: Rule[] = [piiCatalog, secretCatalog, injectionCatalog].flatMap(parseCatalog);
+const bankAccounts = parseBankAccountTable(bankAccountTable);
 
-export function detect(input: string): Detection[] {
+export function detect(input: string, options: DetectOptions = {}): Detection[] {
   const normalized = normalizeInput(input);
-  return rules.flatMap((rule) => findRule(rule, normalized));
+  return rules.flatMap((rule) => findRule(rule, normalized, options.skipValidation === true));
 }
 
 export function mask(input: string, detections = detect(input)): string {
@@ -70,7 +85,7 @@ function parseCatalog(source: unknown): Rule[] {
 
 function parseRule(type: DetectionKind, entry: unknown): Rule {
   if (!isRecord(entry)) throw new Error(`${type} rule must be an object.`);
-  const { subtype, description, pattern, flags, maskedAs, confidence, validate } = entry;
+  const { subtype, description, pattern, flags, maskedAs, confidence, validate, onValidationFailure, unvalidatedConfidence } = entry;
   if (!isNonEmptyString(subtype)) throw new Error(`${type} rule must declare a subtype.`);
   const label = `${type}.${subtype}`;
   if (!isNonEmptyString(description)) throw new Error(`${label} must document why it exists.`);
@@ -79,12 +94,49 @@ function parseRule(type: DetectionKind, entry: unknown): Rule {
   if (typeof flags !== "string" || !flags.includes("g")) throw new Error(`${label} must use the global flag.`);
   if (typeof confidence !== "number" || !(confidence > 0 && confidence <= 1)) throw new Error(`${label} must declare a confidence in (0, 1].`);
   const compiled = compilePattern(label, pattern, flags);
-  const base = { type, subtype, pattern: compiled, maskedAs, confidence };
-  if (validate === undefined) return base;
+  const base = { type, subtype, pattern: compiled, maskedAs, confidence, onValidationFailure: "reject" as ValidationFailure, unvalidatedConfidence: confidence };
+  if (validate === undefined) {
+    if (onValidationFailure !== undefined) throw new Error(`${label} sets onValidationFailure without a validator.`);
+    return base;
+  }
   if (!isNonEmptyString(validate)) throw new Error(`${label} declares a non-string validator.`);
   const validator = validators[validate];
   if (!validator) throw new Error(`${label} references an unknown validator: ${validate}`);
-  return { ...base, validate: validator };
+  if (onValidationFailure === undefined) return { ...base, validate: validator };
+  if (onValidationFailure !== "reject" && onValidationFailure !== "downgrade") {
+    throw new Error(`${label} must set onValidationFailure to reject or downgrade.`);
+  }
+  if (onValidationFailure === "reject") return { ...base, validate: validator };
+  if (typeof unvalidatedConfidence !== "number" || !(unvalidatedConfidence > 0 && unvalidatedConfidence < confidence)) {
+    throw new Error(`${label} must declare an unvalidatedConfidence in (0, ${confidence}).`);
+  }
+  return { ...base, validate: validator, onValidationFailure, unvalidatedConfidence };
+}
+
+/**
+ * Korean bank accounts have no checksum, so the format check is a digit-count
+ * table: a listed issuer prefix must match its own length, and anything else
+ * has to land in the range every domestic account falls into.
+ */
+function parseBankAccountTable(source: unknown): { banks: Array<{ prefix: string; digits: number[] }>; minDigits: number; maxDigits: number } {
+  if (!isRecord(source) || source.version !== 1) throw new Error("Bank-account table must declare version 1.");
+  const fallback = source.fallback;
+  if (!isRecord(fallback) || typeof fallback.minDigits !== "number" || typeof fallback.maxDigits !== "number") {
+    throw new Error("Bank-account table must declare a fallback digit range.");
+  }
+  if (!Array.isArray(source.banks) || source.banks.length === 0) throw new Error("Bank-account table must list at least one bank.");
+  const banks = source.banks.map((entry) => {
+    if (!isRecord(entry)) throw new Error("Bank-account entry must be an object.");
+    const { bank, prefix, digits: lengths, description } = entry;
+    if (!isNonEmptyString(bank)) throw new Error("Bank-account entry must name its bank.");
+    if (!isNonEmptyString(prefix) || !/^\d+$/.test(prefix)) throw new Error(`${bank} must declare a numeric prefix.`);
+    if (!isNonEmptyString(description)) throw new Error(`${bank} must document its account shape.`);
+    if (!Array.isArray(lengths) || lengths.length === 0 || !lengths.every((value) => typeof value === "number" && Number.isInteger(value) && value > 0)) {
+      throw new Error(`${bank} must list at least one digit count.`);
+    }
+    return { prefix, digits: lengths as number[] };
+  });
+  return { banks, minDigits: fallback.minDigits, maxDigits: fallback.maxDigits };
 }
 
 function compilePattern(label: string, pattern: string, flags: string): RegExp {
@@ -95,30 +147,36 @@ function compilePattern(label: string, pattern: string, flags: string): RegExp {
   }
 }
 
-function findRule(rule: Rule, input: NormalizedInput): Detection[] {
+function findRule(rule: Rule, input: NormalizedInput, skipValidation: boolean): Detection[] {
   const pattern = new RegExp(rule.pattern.source, rule.pattern.flags);
-  return [...input.text.matchAll(pattern)]
-    .filter((match) => match.index !== undefined && (!rule.validate || rule.validate(match[0])))
-    .flatMap((match) => {
-      if (input.identity) return [{
-        type: rule.type,
-        subtype: rule.subtype,
-        maskedAs: rule.maskedAs,
-        start: match.index,
-        end: match.index + match[0].length,
-        confidence: rule.confidence
-      }];
-      const first = input.sourceSpans[match.index];
-      const last = input.sourceSpans[match.index + match[0].length - 1];
-      return first && last ? [{
-        type: rule.type,
-        subtype: rule.subtype,
-        maskedAs: rule.maskedAs,
-        start: first.start,
-        end: last.end,
-        confidence: rule.confidence
-      }] : [];
-    });
+  return [...input.text.matchAll(pattern)].flatMap((match) => {
+    if (match.index === undefined) return [];
+    // A failed format check either removes the span or keeps it at a lower
+    // confidence. Masking rules prefer downgrade so a real identifier from an
+    // unlisted issuer is never dropped outright.
+    let confidence = rule.confidence;
+    if (!skipValidation && rule.validate && !rule.validate(match[0])) {
+      if (rule.onValidationFailure === "reject") return [];
+      confidence = rule.unvalidatedConfidence;
+    }
+    const span = input.identity
+      ? { start: match.index, end: match.index + match[0].length }
+      : resolveSourceSpan(input, match.index, match[0].length);
+    return span ? [{
+      type: rule.type,
+      subtype: rule.subtype,
+      maskedAs: rule.maskedAs,
+      start: span.start,
+      end: span.end,
+      confidence
+    }] : [];
+  });
+}
+
+function resolveSourceSpan(input: NormalizedInput, index: number, length: number): { start: number; end: number } | undefined {
+  const first = input.sourceSpans[index];
+  const last = input.sourceSpans[index + length - 1];
+  return first && last ? { start: first.start, end: last.end } : undefined;
 }
 
 function normalizeInput(input: string): NormalizedInput {
@@ -188,6 +246,14 @@ function validRrnLike(value: string): boolean {
   const weights = [2, 3, 4, 5, 6, 7, 8, 9, 2, 3, 4, 5];
   const checksum = weights.reduce((sum, weight, index) => sum + Number(number[index]) * weight, 0);
   return (11 - (checksum % 11)) % 10 === Number(number[12]);
+}
+
+function validBankAccount(value: string): boolean {
+  const number = digits(value);
+  if (/^(\d)\1+$/.test(number)) return false;
+  const issuer = bankAccounts.banks.find(({ prefix }) => number.startsWith(prefix));
+  if (issuer) return issuer.digits.includes(number.length);
+  return number.length >= bankAccounts.minDigits && number.length <= bankAccounts.maxDigits;
 }
 
 function validBizNo(value: string): boolean {

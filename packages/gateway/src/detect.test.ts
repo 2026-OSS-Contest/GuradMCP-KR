@@ -37,6 +37,46 @@ describe("Korean privacy detector", () => {
   });
 });
 
+describe("PII format validation", () => {
+  it("does not flag digit strings that only look like a resident registration number", () => {
+    // Correct shape and a valid birth date, but the checksum digit is wrong.
+    const lookalikes = ["940512-1234560", "940512-1234568", "010101-3000009", "881231-2000008"];
+    for (const value of lookalikes) {
+      expect(detect(`주문번호 ${value}`).map(({ subtype }) => subtype), value).not.toContain("RRN_LIKE");
+    }
+    // Positive control: a checksum-valid value is still detected.
+    expect(detect("주민번호 940512-1234567").map(({ subtype }) => subtype)).toContain("RRN_LIKE");
+  });
+
+  it("rejects card and business numbers that fail their checksum", () => {
+    expect(detect("송장번호 4111-1111-1111-1112").map(({ subtype }) => subtype)).not.toContain("CARD");
+    expect(detect("관리번호 123-45-67801").map(({ subtype }) => subtype)).not.toContain("BIZ_NO");
+    expect(detect("카드 4111-1111-1111-1111").map(({ subtype }) => subtype)).toContain("CARD");
+  });
+
+  it("keeps an implausible account number but lowers its confidence", () => {
+    const [listed] = detect("계좌번호 110-123-456789").filter(({ subtype }) => subtype === "BANK_ACCOUNT");
+    const [implausible] = detect("계좌번호 12-34-56").filter(({ subtype }) => subtype === "BANK_ACCOUNT");
+    expect(listed?.confidence).toBe(0.9);
+    // Downgrade rather than reject: an unfamiliar account must not be missed.
+    expect(implausible?.confidence).toBe(0.45);
+  });
+
+  it("checks a listed bank against its own digit count", () => {
+    // 13 digits sits inside the generic 10-14 range but is wrong for this issuer.
+    const wrongLengthForIssuer = detect("계좌번호 110-1234-567890").filter(({ subtype }) => subtype === "BANK_ACCOUNT");
+    expect(wrongLengthForIssuer[0]?.confidence).toBe(0.45);
+    // A 13-digit KakaoBank account matches its own entry.
+    expect(detect("입금 3333-01-1234567").filter(({ subtype }) => subtype === "BANK_ACCOUNT")[0]?.confidence).toBe(0.9);
+  });
+
+  it("reports what validation prevents when it is skipped", () => {
+    const text = "주문번호 940512-1234560";
+    expect(detect(text)).toHaveLength(0);
+    expect(detect(text, { skipValidation: true }).map(({ subtype }) => subtype)).toContain("RRN_LIKE");
+  });
+});
+
 describe("Prompt injection rule set v1", () => {
   it("detects the intent categories in Korean and English", () => {
     const cases: Array<[string, string]> = [
