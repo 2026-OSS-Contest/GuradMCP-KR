@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>Redis 캐싱 101 - GuardMCP Tech Blog</title></head>
+<body>
+<article>
+<h1>Redis 캐싱 101</h1>
+<p>대부분의 백엔드 서비스는 읽기 트래픽이 쓰기보다 훨씬 많습니다. 이런 워크로드에서
+캐시 계층을 어디에 둘지 결정하는 것이 성능에 가장 큰 영향을 미칩니다.</p>
+<h2>TTL 전략</h2>
+<p>고정 TTL보다는 지터(jitter)를 섞은 TTL을 사용하는 편이 캐시 스탬피드를 줄이는 데
+효과적입니다. 예를 들어 기본 TTL이 300초라면 ±30초 범위에서 무작위로 조정합니다.</p>
+<h2>무효화</h2>
+<p>쓰기 시점에 즉시 무효화하는 방식과, 짧은 TTL에 의존해 자연 만료를 기다리는 방식
+사이에는 트레이드오프가 있습니다. 일관성 요구 수준에 따라 선택하세요.</p>
+</article>
+</body>
+</html>

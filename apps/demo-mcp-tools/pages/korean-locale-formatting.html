@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>한국어 로케일 포맷팅 체크리스트 - GuardMCP Tech Blog</title></head>
+<body>
+<article>
+<h1>한국어 로케일 포맷팅 체크리스트</h1>
+<p>날짜, 통화, 전화번호 표기는 로케일마다 규칙이 다릅니다. 국내 서비스를 만들 때
+흔히 놓치는 부분을 정리했습니다.</p>
+<ul>
+<li>날짜는 <code>YYYY.MM.DD</code> 또는 <code>YYYY년 MM월 DD일</code> 두 표기를
+모두 지원하는 것이 사용자 기대에 부합합니다.</li>
+<li>금액은 천 단위 구분 쉼표와 함께 "원" 접미사를 붙입니다.</li>
+<li>전화번호는 하이픈 유무를 모두 허용하는 입력 파서를 두는 편이 안전합니다.</li>
+</ul>
+<p>이 체크리스트는 실제 프로덕션에서 발견된 버그 리포트를 기반으로 작성했습니다.</p>
+</article>
+</body>
+</html>
