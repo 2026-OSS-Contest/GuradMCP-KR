@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { dbTools } from "./tools/db.js";
 import { emailTools } from "./tools/email.js";
 import { fileTools } from "./tools/file.js";
+import { legacyTools } from "./tools/legacy.js";
 import { webTools } from "./tools/web.js";
 import { ToolError, type ToolDefinition, type ToolDescriptor } from "./types.js";
 
@@ -10,7 +11,7 @@ const maxBodyBytes = 256 * 1024;
 
 class PayloadTooLargeError extends Error {}
 
-export const tools: ToolDefinition[] = [...fileTools, ...dbTools, ...webTools, ...emailTools];
+export const tools: ToolDefinition[] = [...fileTools, ...dbTools, ...webTools, ...emailTools, ...legacyTools];
 const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
 
 export function handler(request: IncomingMessage, response: ServerResponse): void {

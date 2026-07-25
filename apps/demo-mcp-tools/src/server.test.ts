@@ -60,14 +60,14 @@ describe("health", () => {
 });
 
 describe("tools/list", () => {
-  it("advertises all ten tools without leaking handlers", async () => {
+  it("advertises all eleven tools without leaking handlers", async () => {
     const url = await listen();
     const response = await fetch(`${url}/tools/list`);
     const body = await response.json() as { tools: Array<Record<string, unknown>> };
     const names = body.tools.map((tool) => tool.name).sort();
     expect(names).toEqual([
-      "fetch_url", "get_ticket", "list_all_tickets", "list_files", "list_outbox",
-      "list_pages", "read_file", "read_readme", "search_tickets", "send_email"
+      "customer_lookup", "fetch_url", "get_ticket", "list_all_tickets", "list_files",
+      "list_outbox", "list_pages", "read_file", "read_readme", "search_tickets", "send_email"
     ]);
     expect(body.tools.every((tool) => !("handler" in tool))).toBe(true);
   });
@@ -151,6 +151,21 @@ describe("db tools", () => {
     const { body } = await call(url, "list_all_tickets");
     const tickets = JSON.parse(firstText(body));
     expect(tickets.length).toBeGreaterThanOrEqual(60);
+  });
+});
+
+describe("legacy compat tools", () => {
+  // GMCP-30's CI readiness check (scripts/compose-readiness.sh) and
+  // docs/quickstart.md both call POST /demo/pii on the demo agent, which
+  // forwards this exact tool through the gateway and asserts the response
+  // masks to [PHONE]/[BANK_ACCOUNT] with neither raw value left over. If
+  // this test starts failing, that CI job and the quickstart curl break too.
+  it("customer_lookup returns the pre-GMCP-19 fixed customer record", async () => {
+    const url = await listen();
+    const { body } = await call(url, "customer_lookup");
+    const [customer] = body.content as unknown as Array<{ phone: string; account: string }>;
+    expect(customer?.phone).toBe("010-1234-5678");
+    expect(customer?.account).toBe("계좌번호 110-123-456789");
   });
 });
 

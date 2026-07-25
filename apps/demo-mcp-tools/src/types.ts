@@ -36,6 +36,15 @@ export function errorResult(message: string): ToolResult {
   return { content: [{ type: "text", text: message }], isError: true };
 }
 
+/**
+ * Bypasses the {type:"text",text} content-block convention used everywhere
+ * else. Exists only for the `customer_lookup` legacy-compat tool, which must
+ * return its content array verbatim (see src/tools/legacy.ts for why).
+ */
+export function rawContent(value: unknown): ToolResult {
+  return { content: [value] as unknown as ToolContent[] };
+}
+
 export class ToolError extends Error {
   constructor(message: string, readonly status = 400) {
     super(message);
