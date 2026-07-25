@@ -1,5 +1,6 @@
 import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
+import { onGuardBusMessage } from "./pipeline/events.js";
 import { handler } from "./server.js";
 
 const servers: Server[] = [];
@@ -44,19 +45,34 @@ describe("gateway HTTP boundary", () => {
     const body = await response.json() as { result: { content: Array<{ phone: string }> }; _guardmcp: { verdict: string } };
     expect(body.result.content[0]?.phone).toBe("[PHONE]");
     expect(body._guardmcp.verdict).toBe("mask_then_allow");
-    expect(receivedBody).toContain("[PHONE]");
-    expect(receivedBody).not.toContain("010-9999-8888");
+    // No request-direction policy matches a bare phone number in `query`, so the
+    // `allow` verdict passes the request through unmodified (§4.2) — only the
+    // response direction has a mask_then_allow policy for Korean PII.
+    expect(receivedBody).toContain("010-9999-8888");
   });
 
-  it("applies the credential-file request policy before forwarding", async () => {
+  it("blocks .env reads without ever calling upstream, and pushes the block as a GuardEvent (M2 DoD, DoD-15 §5.1/§5.3)", async () => {
+    let upstreamHits = 0;
+    const upstream = createServer((_request, response) => { upstreamHits += 1; response.end(JSON.stringify({})); });
+    process.env.DEMO_MCP_TOOLS_URL = await listen(upstream);
+
+    const guardEvents: Array<{ verdict: string; matchedPolicyIds: string[] }> = [];
+    const unsubscribe = onGuardBusMessage((message) => {
+      if (message.type === "guard.event") guardEvents.push(message.data as { verdict: string; matchedPolicyIds: string[] });
+    });
+
     const url = await listen(createServer(handler));
     const response = await fetch(`${url}/mcp`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "read_file", arguments: { path: "/app/.env" } } })
     });
+    unsubscribe();
+
     const body = await response.json() as { error: { data: { policyIds: string[] } } };
     expect(body.error.data.policyIds).toEqual(["block_env_file_read"]);
+    expect(upstreamHits).toBe(0);
+    expect(guardEvents).toContainEqual(expect.objectContaining({ verdict: "block", matchedPolicyIds: ["block_env_file_read"] }));
   });
 
   it("fails closed when a request requires human approval", async () => {
