@@ -19,3 +19,6 @@ reports/*.html
 
 # Playwright MCP scratch (created at repo root during dev)
 .playwright-mcp/
+
+# Synthetic demo fixture — not a real secret, deliberately tracked (GMCP-19).
+!apps/demo-mcp-tools/sandbox/.env
