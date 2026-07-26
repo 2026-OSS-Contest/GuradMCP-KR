@@ -1,13 +1,15 @@
 import { expect, test } from "@playwright/test";
 
-// SCR-301 Replay right panel (GMCP-34). The dev server mocks /api/v1/sessions and
-// /sessions/{id}/timeline, so this exercises the same contracts the control plane will serve.
+// SCR-301 Replay. The dev server mocks /api/v1/sessions, /sessions/{id}/timeline and
+// /policies/{id}, so these exercise the same contracts the control plane will serve.
+// The timeline and the detail panel share text (a tool name, a policy id), so detail
+// assertions are scoped to the `event-detail` region and timeline ones to the `log`.
+
+// ── GMCP-34 event detail ────────────────────────────────────────────────────
 
 test("GMCP-34 SCR-301 shows the block event detail in fixed order", async ({ page }) => {
   await page.goto("/replay");
-
-  const detail = page.locator('[data-scr="SCR-301"]');
-  // Verdict badge + tool, then the matching policies, threat score and detections (spec §5.3).
+  const detail = page.getByTestId("event-detail");
   await expect(detail.getByText("read_file")).toBeVisible();
   await expect(detail.getByRole("button", { name: "block_env_file_read" })).toBeVisible();
   await expect(detail.getByText("위협 점수")).toBeVisible();
@@ -25,7 +27,7 @@ test("SCR-301 session list selects a session", async ({ page }) => {
 
 test("SCR-301 policy chip opens a YAML popover", async ({ page }) => {
   await page.goto("/replay");
-  await page.getByRole("button", { name: "block_env_file_read" }).click();
+  await page.getByTestId("event-detail").getByRole("button", { name: "block_env_file_read" }).click();
   const popover = page.getByRole("dialog", { name: "block_env_file_read" });
   await expect(popover).toBeVisible();
   await expect(popover.getByText(/action: block/)).toBeVisible();
@@ -35,7 +37,7 @@ test("SCR-301 policy chip opens a YAML popover", async ({ page }) => {
 test("SCR-301 reveal-original confirms, then shows the raw vs masked content", async ({ page }) => {
   await page.goto("/replay");
   // Step 1: the audit-log confirmation.
-  await page.getByRole("button", { name: /원문 열람/ }).click();
+  await page.getByTestId("event-detail").getByRole("button", { name: /원문 열람/ }).click();
   const confirm = page.getByRole("alertdialog");
   await expect(confirm).toBeVisible();
   await expect(confirm.getByText(/감사 로그에 남습니다/)).toBeVisible();
@@ -48,4 +50,47 @@ test("SCR-301 reveal-original confirms, then shows the raw vs masked content", a
   await expect(reveal.getByText("PHONE")).toBeVisible();
   await reveal.getByRole("button", { name: "열람 중지" }).click();
   await expect(reveal).toBeHidden();
+});
+
+// ── GMCP-11 timeline ────────────────────────────────────────────────────────
+
+test("GMCP-11 timeline renders the session nodes and playback controls", async ({ page }) => {
+  await page.goto("/replay");
+  const timeline = page.getByRole("log");
+  await expect(timeline.getByText("README를 요약해줘")).toBeVisible();
+  await expect(timeline.getByText('read_file(".env")')).toBeVisible();
+  await expect(page.getByTestId("play-toggle")).toBeVisible();
+  await expect(page.getByRole("button", { name: "1x", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: /다음 판정/ })).toBeVisible();
+});
+
+test("clicking a timeline node swaps in that node's own detail", async ({ page }) => {
+  await page.goto("/replay");
+  const detail = page.getByTestId("event-detail");
+  // Default selection is the block verdict — its threat score is on screen.
+  await expect(detail.getByText("read_file")).toBeVisible();
+  await expect(detail.getByText("위협 점수")).toBeVisible();
+  // The user node reads differently: its input original, not a verdict breakdown.
+  await page.getByRole("log").getByRole("button", { name: /README를 요약해줘/ }).click();
+  await expect(detail.getByText("입력 원문")).toBeVisible();
+  await expect(detail.getByText("위협 점수")).toBeHidden();
+});
+
+test("next-verdict jump selects the verdict node", async ({ page }) => {
+  await page.goto("/replay");
+  const log = page.getByRole("log");
+  await log.getByRole("button", { name: /README를 요약해줘/ }).click();
+  await page.getByRole("button", { name: /다음 판정/ }).click();
+  await expect(log.getByRole("button", { name: /block_env_file_read/ })).toHaveAttribute("aria-current", "true");
+});
+
+test("play button toggles playback", async ({ page }) => {
+  await page.goto("/replay");
+  // Playback can only start once the timeline has loaded: with no events yet, the play
+  // effect sees the playhead already at the end and stops itself. Wait for the rail first.
+  await expect(page.getByRole("log").getByText("README를 요약해줘")).toBeVisible();
+  const play = page.getByTestId("play-toggle");
+  await expect(play).toHaveAttribute("aria-pressed", "false");
+  await play.click();
+  await expect(play).toHaveAttribute("aria-pressed", "true");
 });
