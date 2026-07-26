@@ -1,7 +1,7 @@
-import { getTranslations } from "next-intl/server";
-import { ScreenStub } from "@/components/screen-stub";
+import { ReplayScreen } from "@/components/replay/replay-screen";
 
-export default async function ReplayPage() {
-  const t = await getTranslations();
-  return <ScreenStub scr="SCR-301" title={t("screens.replay.title")} desc={t("screens.replay.desc")} note={t("common.scaffold")} />;
+/** SCR-301 Replay — FR-RPL-01/02, UI specification §5.3. */
+export default async function ReplayPage({ searchParams }: { searchParams: Promise<{ event?: string }> }) {
+  const { event } = await searchParams;
+  return <ReplayScreen eventId={event} />;
 }

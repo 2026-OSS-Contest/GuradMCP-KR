@@ -59,7 +59,9 @@
       "empty": "No security events recorded yet.",
       "reconnecting": "Live connection lost. Reconnecting…"
     },
-    "cta": { "demo": "Run the demo" },
+    "cta": {
+      "demo": "Run the demo"
+    },
     "error": {
       "unreachable": "Cannot reach the gateway. Check the gateway container with docker compose ps."
     },
@@ -81,14 +83,94 @@
       }
     }
   },
-  "screens": {
-    "gateway": { "title": "Gateway", "desc": "Overview of MCP servers, active policies and recent events" },
-    "liveConsole": { "title": "Demo & Live Console", "desc": "Run attack scenarios and watch the live verdict stream" },
-    "replay": { "title": "Replay", "desc": "Replay session timelines and inspect events" },
-    "detector": { "title": "Detector", "desc": "Preview PII, secret and injection detection" },
-    "approval": { "title": "Approval Console", "desc": "Approval queue and decision history" },
-    "policies": { "title": "Policies", "desc": "Browse policy packs and toggle policies" },
-    "settings": { "title": "Settings", "desc": "Upstream servers, failure policy and logging" }
+  "replay": {
+    "sessions": {
+      "title": "Sessions",
+      "searchPlaceholder": "Search session id or tool",
+      "eventCount": "{count} events",
+      "noResults": "No matching sessions."
+    },
+    "timeline": {
+      "title": "Timeline",
+      "play": "Play",
+      "pause": "Pause",
+      "toStart": "To start",
+      "nextVerdict": "Next verdict",
+      "blocked": "Block",
+      "empty": "This session has no recorded events.",
+      "node": {
+        "user": "User",
+        "agent": "Agent"
+      }
+    },
+    "detail": {
+      "title": "Event detail",
+      "matchingPolicies": "Matching policies",
+      "threatScore": "Threat score",
+      "detections": "Detections",
+      "detectionUnit": "",
+      "detectionList": "Detection list",
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "chainVerified": "Chain verified",
+      "chainFailed": "Chain verification failed",
+      "reveal": "Reveal original",
+      "revealed": "Original revealed. The access is recorded in the audit log.",
+      "noSelection": "Select an event on the timeline.",
+      "target": "Target",
+      "args": "Arguments",
+      "argsCount": "{count}",
+      "morePolicies": "+{count}"
+    },
+    "policy": {
+      "goToPolicy": "Go to policy",
+      "loadError": "Could not load the policy."
+    },
+    "reveal": {
+      "title": "Reveal-original notice",
+      "body": "Revealing the original records this access in the audit log. Continue?",
+      "cancel": "Cancel",
+      "continue": "Continue",
+      "revealing": "Revealing",
+      "close": "Close",
+      "notice": "This access is recorded, and the panel re-masks automatically when you leave.",
+      "raw": "Original (Raw)",
+      "masked": "Masked",
+      "stop": "Stop revealing"
+    }
   },
-  "common": { "comingSoon": "Coming soon", "scaffold": "This screen is a scaffold. The detailed UI ships in a follow-up issue." }
+  "screens": {
+    "gateway": {
+      "title": "Gateway",
+      "desc": "Overview of MCP servers, active policies and recent events"
+    },
+    "liveConsole": {
+      "title": "Demo & Live Console",
+      "desc": "Run attack scenarios and watch the live verdict stream"
+    },
+    "replay": {
+      "title": "Replay",
+      "desc": "Replay session timelines and inspect events"
+    },
+    "detector": {
+      "title": "Detector",
+      "desc": "Preview PII, secret and injection detection"
+    },
+    "approval": {
+      "title": "Approval Console",
+      "desc": "Approval queue and decision history"
+    },
+    "policies": {
+      "title": "Policies",
+      "desc": "Browse policy packs and toggle policies"
+    },
+    "settings": {
+      "title": "Settings",
+      "desc": "Upstream servers, failure policy and logging"
+    }
+  },
+  "common": {
+    "comingSoon": "Coming soon",
+    "scaffold": "This screen is a scaffold. The detailed UI ships in a follow-up issue."
+  }
 }
