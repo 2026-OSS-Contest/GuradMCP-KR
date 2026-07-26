@@ -7,6 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/server.js",
-    "dev": "tsx watch src/server.ts"
+    "dev": "tsx watch src/server.ts",
+    "seed:tickets": "tsx scripts/generate-tickets.ts"
   }
 }
