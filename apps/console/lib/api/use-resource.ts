@@ -14,11 +14,20 @@ export interface Resource<T> {
   fetchedAt: Date | undefined;
 }
 
+export interface ResourceOptions {
+  /** Re-fetch on this cadence (ms). */
+  intervalMs?: number;
+  /** Re-fetch whenever this changes — e.g. the selected session id for a timeline. */
+  key?: string;
+}
+
 /**
- * Fetch on mount, optionally re-fetch on an interval, and refetch whenever the scenario
- * switcher fires. A failed refresh keeps the previous payload and only sets `error`.
+ * Fetch on mount, optionally re-fetch on an interval or when `key` changes, and refetch
+ * whenever the scenario switcher fires. A failed refresh keeps the previous payload and only
+ * sets `error`.
  */
-export function useResource<T>(load: (signal: AbortSignal) => Promise<T>, intervalMs?: number): Resource<T> {
+export function useResource<T>(load: (signal: AbortSignal) => Promise<T>, options: ResourceOptions = {}): Resource<T> {
+  const { intervalMs, key } = options;
   const [state, setState] = useState<Resource<T>>({
     data: undefined,
     error: undefined,
@@ -54,7 +63,7 @@ export function useResource<T>(load: (signal: AbortSignal) => Promise<T>, interv
       if (timer) clearInterval(timer);
       window.removeEventListener(RESOURCE_REFRESH_EVENT, run);
     };
-  }, [intervalMs]);
+  }, [intervalMs, key]);
 
   return state;
 }

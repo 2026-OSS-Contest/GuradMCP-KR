@@ -16,7 +16,7 @@ const OverviewContext = createContext<Resource<Overview> | null>(null);
  * the gateway is reachable.
  */
 export function OverviewProvider({ children }: { children: ReactNode }) {
-  const overview = useResource((signal) => getOverview(signal), POLL_MS);
+  const overview = useResource((signal) => getOverview(signal), { intervalMs: POLL_MS });
   return <OverviewContext.Provider value={overview}>{children}</OverviewContext.Provider>;
 }
 

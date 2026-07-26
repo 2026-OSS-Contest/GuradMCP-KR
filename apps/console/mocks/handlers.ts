@@ -1,6 +1,14 @@
 import { HttpResponse, delay, http, sse } from "msw";
-import type { Overview, RecentEventsResponse, SecurityEvent, ServersResponse } from "@/lib/api/types";
+import type {
+  Overview,
+  RecentEventsResponse,
+  SecurityEvent,
+  ServersResponse,
+  SessionsResponse,
+  TimelineResponse
+} from "@/lib/api/types";
 import { EMPTY_OVERVIEW, SERVERS, liveEvent, overviewOf, recentEvents } from "./data";
+import { SESSIONS, policyDetail, revealOf, timelineOf } from "./replay";
 import { readScenario } from "./scenario";
 
 // Long enough that a slow render is visible, short enough that the 500ms skeleton rule
@@ -11,7 +19,9 @@ const LATENCY_MS = 250;
 const STREAM_INTERVAL_MS = 4_000;
 
 /** `offline` fails at the network level, which is what a down gateway looks like to fetch(). */
-async function respond(payload: Overview | ServersResponse | RecentEventsResponse) {
+async function respond(
+  payload: Overview | ServersResponse | RecentEventsResponse | SessionsResponse | TimelineResponse
+) {
   await delay(LATENCY_MS);
   if (readScenario() === "offline") return HttpResponse.error();
   return HttpResponse.json(payload);
@@ -26,6 +36,25 @@ export const handlers = [
   http.get("*/api/v1/servers", async () => respond({ servers: readScenario() === "empty" ? [] : SERVERS })),
 
   http.get("*/api/v1/events/recent", async () => respond({ events: readScenario() === "empty" ? [] : recentEvents() })),
+
+  // SCR-301 Replay (spec §5.3). Empty scenario has no recorded sessions.
+  http.get("*/api/v1/sessions", async () => respond({ sessions: readScenario() === "empty" ? [] : SESSIONS })),
+
+  http.get("*/api/v1/sessions/:id/timeline", async ({ params }) =>
+    respond(timelineOf(String(params.id)))
+  ),
+
+  // Policy Chip popover (spec §3). Not gated by scenario — a chip resolves even offline-ish.
+  http.get("*/api/v1/policies/:id", async ({ params }) => {
+    await delay(LATENCY_MS);
+    return HttpResponse.json(policyDetail(String(params.id)));
+  }),
+
+  // Reveal-original (spec §5.3 no.5). POST — the real endpoint writes an audit record.
+  http.post("*/api/v1/events/:id/reveal", async () => {
+    await delay(LATENCY_MS);
+    return HttpResponse.json(revealOf());
+  }),
 
   // The gateway event stream (spec §6.3). Real backends emit several event types; SCR-101 only
   // consumes `guard.event`, so that is all the mock pushes. A named event maps onto the
