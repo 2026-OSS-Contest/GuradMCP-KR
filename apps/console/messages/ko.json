@@ -16,7 +16,70 @@
     "pendingApprovals": "승인 대기",
     "session": "세션",
     "collapse": "레일 접기",
-    "expand": "레일 펼치기"
+    "expand": "레일 펼치기",
+    "offlineBanner": "게이트웨이 연결이 필요합니다.",
+    "lastFetched": "마지막 조회 시각"
+  },
+  "verdict": {
+    "allow": "허용",
+    "warn": "경고",
+    "requireApproval": "승인 대기",
+    "block": "차단"
+  },
+  "time": {
+    "justNow": "방금 전",
+    "minutesAgo": "{count}분 전",
+    "hoursAgo": "{count}시간 전",
+    "daysAgo": "{count}일 전"
+  },
+  "gateway": {
+    "kpi": {
+      "servers": "MCP 서버",
+      "serversDown": "{count}개 끊김",
+      "tools": "보호 Tool",
+      "policies": "활성 정책",
+      "packCount": "{count}개 팩",
+      "blocked": "24h 차단"
+    },
+    "inventory": {
+      "title": "MCP 서버 인벤토리",
+      "connected": "연결",
+      "disconnected": "끊김",
+      "toolCount": "Tool {count}",
+      "risk": "위험도",
+      "riskHigh": "높음",
+      "riskMedium": "중간",
+      "riskLow": "낮음",
+      "morePolicies": "외 {count}",
+      "noPolicies": "적용 정책 없음",
+      "snapshotChanged": "정의 변경 감지"
+    },
+    "events": {
+      "title": "최근 보안 이벤트",
+      "empty": "아직 기록된 보안 이벤트가 없습니다.",
+      "reconnecting": "실시간 연결이 끊겼습니다. 재연결 중…"
+    },
+    "cta": { "demo": "데모 실행" },
+    "error": {
+      "unreachable": "게이트웨이에 연결할 수 없습니다. docker compose ps로 gateway 컨테이너 상태를 확인하세요."
+    },
+    "quickStart": {
+      "title": "GuardMCP-KR 시작하기",
+      "desc": "아래의 3단계를 실행하여 MCP 서버를 등록하면 Gateway Home에 서버 인벤토리와 보안 이벤트가 표시됩니다.",
+      "policyPacks": "정책 팩",
+      "step1": {
+        "title": "MCP 엔드포인트를 게이트웨이로 교체",
+        "desc": "이후부터는 모든 Tool Call이 검사를 거칩니다."
+      },
+      "step2": {
+        "title": "정책팩 선택",
+        "desc": "탐지하려는 위협 유형에 맞는 정책팩을 활성화합니다. 이는 언제든 Policies 화면에서 변경할 수 있습니다."
+      },
+      "step3": {
+        "title": "데모 실행",
+        "desc": "공격 시나리오 하나를 골라 미적용 / 적용 실행을 나란히 비교하며 3분 안에 동작을 확인하세요."
+      }
+    }
   },
   "screens": {
     "gateway": { "title": "Gateway", "desc": "MCP 서버·활성 정책·최근 보안 이벤트 개요" },

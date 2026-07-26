@@ -32,7 +32,8 @@ export function RailNav({ defaultCollapsed = false }: { defaultCollapsed?: boole
   return (
     <aside
       className={cn(
-        "flex flex-none flex-col gap-4 bg-grayscale-black p-3 transition-[width] duration-200",
+        // The design gives the rail a right-hand rule, drawn inside its 240px width.
+        "flex flex-none flex-col gap-4 bg-grayscale-black p-3 shadow-[inset_-1px_0_0_0_var(--primitive-color-grayscale-800)] transition-[width] duration-200",
         collapsed ? "w-18" : "w-60"
       )}
     >

@@ -1,5 +1,6 @@
 tools/figma-export/out/
 tools/figma-tokens/.last-payload.json
+temp/
 
 # Vercel (local project link)
 .vercel

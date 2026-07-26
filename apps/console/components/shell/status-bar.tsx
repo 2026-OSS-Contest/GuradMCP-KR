@@ -1,44 +1,84 @@
-import { getTranslations } from "next-intl/server";
-import { ChevronDown, Pause } from "lucide-react";
+"use client";
 
-/** SCR-000 status bar — "보호 중" (protected) state, pixel-matched to Figma.
- *  Live protection state (GET /overview, SSE gateway.health) is wired in a follow-up issue. */
-export async function StatusBar() {
-  const t = await getTranslations("shell");
+import Link from "next/link";
+import { useTranslations } from "next-intl";
+import type { GatewayStatus } from "@/lib/api/types";
+import { isOffline, useOverview } from "@/components/providers/overview-provider";
+import { DropdownChevronIcon, StatusDisconnectedIcon, StatusProtectedIcon } from "@/components/icons";
+import { VerdictBadge } from "@/components/verdict-badge";
+import { Tag } from "@/components/ui/tag";
+import { cn } from "@/lib/utils";
+
+/**
+ * SCR-000 status bar, driven by the shared `/overview` poll.
+ *
+ * Colour is always paired with text (spec §4.1 no.3). The indicator dot is the design's own
+ * vector, which carries the halo and the fill together.
+ */
+const STATUS = {
+  protected: { Icon: StatusProtectedIcon, label: "protected", text: "text-verdict-allow" },
+  degraded: { Icon: StatusProtectedIcon, label: "degraded", text: "text-verdict-warn" },
+  disconnected: { Icon: StatusDisconnectedIcon, label: "disconnected", text: "text-verdict-block" }
+} as const;
+
+const Divider = () => <span className="h-5 w-px flex-none bg-(--primitive-opacity-white-alpha-25)" aria-hidden />;
+
+export function StatusBar() {
+  const t = useTranslations("shell");
+  const overview = useOverview();
+
+  const status: GatewayStatus = isOffline(overview) ? "disconnected" : (overview.data?.status ?? "protected");
+  const { Icon, label, text } = STATUS[status];
+  const packs = overview.data?.policies.packs ?? [];
+  const pending = overview.data?.pendingApprovals ?? 0;
 
   return (
-    <header className="flex h-15 flex-none items-center gap-4 bg-grayscale-950 px-8">
-      <div className="flex items-center gap-3">
-        <span className="flex items-center gap-2">
-          <span className="size-2.5 rounded-full bg-verdict-allow" aria-hidden />
-          <span className="text-sm font-semibold text-verdict-allow">{t("protected")}</span>
+    <header className="flex h-15 flex-none items-center gap-4 bg-grayscale-950 px-8 shadow-[inset_0_-1px_0_0_var(--primitive-color-grayscale-800)]">
+      {/* The design aligns this row to its bottom edge, not its centre. */}
+      <div className="flex flex-1 items-end gap-3 py-2">
+        <span className={cn("flex flex-none items-center gap-2 text-body-text-b3-md", text)}>
+          <Icon className="size-5 flex-none" aria-hidden />
+          {t(label)}
         </span>
 
-        <span className="h-5 w-px bg-white/15" aria-hidden />
+        {packs.length > 0 && (
+          <>
+            <Divider />
+            <span className="flex items-center gap-3">
+              <span className="text-body-text-b3-md text-grayscale-300">{t("policyPacks")}</span>
+              <span className="flex items-center gap-2">
+                {packs.map((pack) => (
+                  <Link key={pack} href="/policies" className="transition-opacity hover:opacity-80">
+                    <Tag className="text-caption-mono-c-rg">{pack}</Tag>
+                  </Link>
+                ))}
+              </span>
+            </span>
+          </>
+        )}
 
-        <span className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">{t("policyPacks")}</span>
-          <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 font-mono text-xs">default</span>
-          <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 font-mono text-xs">korean-pii</span>
-        </span>
-
-        <span className="h-5 w-px bg-white/15" aria-hidden />
-
-        <span className="flex items-center gap-1.5 rounded-full bg-(--primitive-opacity-require-approval-alpha-25) px-2 py-0.5 text-xs font-medium text-violet-200">
-          <Pause className="size-3 fill-current" aria-hidden />
-          {t("pendingApprovals")} 2
-        </span>
+        {pending > 0 && (
+          <>
+            <Divider />
+            <Link
+              href="/approvals"
+              aria-label={`${t("pendingApprovals")} ${pending}`}
+              className="transition-opacity hover:opacity-80"
+            >
+              <VerdictBadge verdict="require_approval" size="sm" count={pending} />
+            </Link>
+          </>
+        )}
       </div>
 
-      <div className="flex-1" />
-
+      {/* Session picker is inert until `GET /sessions` exists (spec §6.2). */}
       <button
         type="button"
-        className="flex h-8 items-center gap-2 rounded-lg bg-(--primitive-opacity-white-alpha-6) pr-1 pl-3 text-sm transition-colors hover:bg-white/10"
+        className="flex h-8 flex-none items-center gap-2 rounded-sm bg-(--primitive-opacity-white-alpha-6) py-1 pr-1 pl-3 transition-colors hover:bg-white/10"
       >
-        <span className="text-muted-foreground">{t("session")}</span>
-        <b className="font-mono font-semibold">#s-0712</b>
-        <ChevronDown className="size-4 opacity-70" aria-hidden />
+        <span className="text-body-text-b3-md text-grayscale-200">{t("session")}</span>
+        <span className="text-body-text-b3-md">#s-0712</span>
+        <DropdownChevronIcon className="size-6 flex-none" aria-hidden />
       </button>
     </header>
   );

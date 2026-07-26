@@ -1,8 +1,12 @@
 // Figma main-thread code: export the CURRENT SELECTION as an exact structure + PNG.
 // Selection-scoped (not a whole-document dump), so it stays small and precise.
 // Bound design tokens are resolved to their variable names so the output can use var(--...).
+//
+// Sections act as folders: selecting a section exports every frame/component inside it as its
+// own item, mirroring the section nesting as directories. Items are streamed to the bridge one
+// at a time (each waits for an ack) so a large section never builds one huge message.
 
-figma.showUI(__html__, { width: 380, height: 320, title: "GuardMCP Export" });
+figma.showUI(__html__, { width: 380, height: 360, title: "GuardMCP Export" });
 
 let VARREF = new Map(); // variable id -> "Collection/name"
 let STYLEREF = new Map(); // style id -> name
@@ -24,7 +28,9 @@ function boundVar(node, field) {
   return alias && alias.id ? VARREF.get(alias.id) : undefined;
 }
 
-function paintToObj(p, node, i) {
+// `field` is "fills" or "strokes" — reading the wrong one hands a stroke the fill's colour
+// variable, which is how a grey border ends up painted black.
+function paintToObj(p, node, i, field) {
   if (p.type === "SOLID") {
     const o = {
       type: "SOLID",
@@ -32,7 +38,7 @@ function paintToObj(p, node, i) {
       a: p.opacity === undefined ? 1 : p.opacity,
     };
     if (p.visible === false) o.hidden = true;
-    const bvs = node.boundVariables && node.boundVariables.fills;
+    const bvs = node.boundVariables && node.boundVariables[field];
     if (bvs && bvs[i] && VARREF.get(bvs[i].id))
       o.variable = VARREF.get(bvs[i].id);
     return o;
@@ -65,6 +71,28 @@ const VECTOR_TYPES = [
   "ELLIPSE",
   "POLYGON",
 ];
+
+// A wrapper whose whole subtree is artwork — an icon. Exporting it as ONE SVG keeps the masks,
+// boolean operations and relative alignment that Figma's own exporter resolves. Descending into
+// it instead yields a pile of separate SVGs that have to be re-stacked by hand, and they never
+// line up. Text or a raster fill anywhere inside means it is a layout frame, not an icon.
+function isIconLike(node) {
+  if (!("children" in node) || !node.children.length) return false;
+  let vectors = 0;
+  const visit = (n) => {
+    if (n.visible === false) return true;
+    if (n.type === "TEXT") return false;
+    if (Array.isArray(n.fills) && n.fills.some((p) => p.type === "IMAGE"))
+      return false;
+    if (VECTOR_TYPES.indexOf(n.type) >= 0) {
+      vectors++;
+      return true;
+    }
+    if (!("children" in n)) return false; // slices, embeds and anything else unknown
+    return n.children.every(visit);
+  };
+  return node.children.every(visit) && vectors > 0;
+}
 
 async function imageFillData(node) {
   if (!Array.isArray(node.fills)) return null;
@@ -144,15 +172,23 @@ async function describe(node) {
   if (rv) o.radiusVar = rv;
 
   if (Array.isArray(node.fills) && node.fills.length)
-    o.fills = node.fills.map((p, i) => paintToObj(p, node, i));
+    o.fills = node.fills.map((p, i) => paintToObj(p, node, i, "fills"));
   else if (node.fills === figma.mixed) o.fills = "MIXED";
   if (typeof node.fillStyleId === "string" && STYLEREF.get(node.fillStyleId))
     o.fillStyle = STYLEREF.get(node.fillStyleId);
 
   if (Array.isArray(node.strokes) && node.strokes.length) {
-    o.strokes = node.strokes.map((p, i) => paintToObj(p, node, i));
+    o.strokes = node.strokes.map((p, i) => paintToObj(p, node, i, "strokes"));
     if (typeof node.strokeWeight === "number")
       o.strokeWeight = node.strokeWeight;
+    // Figma reports strokeWeight as mixed when the sides differ. A bottom-only divider is the
+    // common case, and without the per-side values it comes out as a full box.
+    const sides = {};
+    for (const side of ["Top", "Right", "Bottom", "Left"]) {
+      const w = node["stroke" + side + "Weight"];
+      if (typeof w === "number") sides[side.toLowerCase()] = w;
+    }
+    if (Object.keys(sides).length) o.strokeSides = sides;
     o.strokeAlign = node.strokeAlign;
     const sv = boundVar(node, "strokes") || boundVar(node, "strokeWeight");
     if (sv) o.strokeVar = sv;
@@ -192,12 +228,26 @@ async function describe(node) {
       o.letterSpacing = node.letterSpacing;
     if (typeof node.textStyleId === "string" && STYLEREF.get(node.textStyleId))
       o.textStyle = STYLEREF.get(node.textStyleId);
+    // Per-character colour (a two-tone wordmark, a highlighted word). Without the segments the
+    // whole run is "MIXED", which carries no colour at all and renders in the inherited one.
+    if (node.fills === figma.mixed && node.getStyledTextSegments) {
+      try {
+        o.segments = node
+          .getStyledTextSegments(["fills"])
+          .map((seg) => ({
+            text: seg.characters,
+            fills: (seg.fills || []).map((p) => paintToObj(p, node, 0, "none")),
+          }));
+      } catch {
+        /* segment read can fail on unloaded fonts; the plain text still exports */
+      }
+    }
   }
 
   if (node.type === "INSTANCE") o.instanceOf = node.name;
 
-  // Vector-family nodes: inline as SVG (crisp, single-file), no children recursion.
-  if (VECTOR_TYPES.indexOf(node.type) >= 0) {
+  // Vector-family nodes and whole icons: inline as ONE SVG, no children recursion.
+  if (VECTOR_TYPES.indexOf(node.type) >= 0 || isIconLike(node)) {
     try {
       const bytes = await node.exportAsync({ format: "SVG" });
       o.image = { format: "svg", base64: figma.base64Encode(bytes) };
@@ -234,15 +284,69 @@ async function buildMaps() {
   STYLEREF = new Map([...ts, ...ps, ...es].map((s) => [s.id, s.name]));
 }
 
-async function run() {
-  const sel = figma.currentPage.selection;
-  if (!sel.length) {
-    figma.ui.postMessage({ type: "empty" });
+// Node types that become one exported item. Anything else found loose inside a section
+// (stray labels, annotation vectors) is skipped rather than turned into a file.
+const ITEM_TYPES = ["FRAME", "COMPONENT", "COMPONENT_SET", "INSTANCE", "GROUP"];
+
+// Sections map to directories; the first frame-like node on a branch ends the walk and becomes
+// an item (its own subtree still gets described in full inside that item's file).
+function planNode(node, dir, plan, isSelectionRoot) {
+  if (node.visible === false) return;
+  if (node.type === "SECTION") {
+    const nested = dir.concat([node.name]);
+    for (const child of node.children) planNode(child, nested, plan, false);
     return;
   }
+  if (!isSelectionRoot && ITEM_TYPES.indexOf(node.type) < 0) {
+    plan.skipped.push(node.name);
+    return;
+  }
+  plan.items.push({ id: node.id, name: node.name, path: dir });
+}
+
+function buildPlan() {
+  const plan = { items: [], skipped: [] };
+  for (const node of figma.currentPage.selection) planNode(node, [], plan, true);
+  return plan;
+}
+
+// The UI acks every item it has POSTed, which throttles us to one in-flight message.
+let ack = null;
+const waitForAck = () =>
+  new Promise((resolve) => {
+    ack = resolve;
+  });
+
+let PLAN = null;
+
+async function scan() {
+  PLAN = buildPlan();
+  if (!PLAN.items.length) {
+    figma.ui.postMessage({ type: "empty", skipped: PLAN.skipped });
+    return;
+  }
+  const roots = [];
+  for (const item of PLAN.items) {
+    const root = item.path[0];
+    if (root && roots.indexOf(root) < 0) roots.push(root);
+  }
+  figma.ui.postMessage({
+    type: "plan",
+    fileName: figma.root.name,
+    roots,
+    skipped: PLAN.skipped,
+    items: PLAN.items.map((i) => ({ name: i.name, path: i.path })),
+  });
+}
+
+async function stream() {
+  if (!PLAN || !PLAN.items.length) return;
   await buildMaps();
-  const nodes = [];
-  for (const node of sel) {
+  const total = PLAN.items.length;
+  for (let i = 0; i < total; i++) {
+    const entry = PLAN.items[i];
+    const node = await figma.getNodeByIdAsync(entry.id);
+    if (!node) continue;
     let png = null;
     try {
       const bytes = await node.exportAsync({
@@ -253,15 +357,40 @@ async function run() {
     } catch {
       /* export can fail on some node types; structure still useful */
     }
-    const structure = await describe(node);
-    nodes.push({ name: node.name, structure, png });
+    let structure = null;
+    try {
+      structure = await describe(node);
+    } catch (err) {
+      figma.ui.postMessage({
+        type: "item-failed",
+        index: i,
+        total,
+        name: entry.name,
+        error: String((err && err.message) || err),
+      });
+      continue;
+    }
+    figma.ui.postMessage({
+      type: "item",
+      index: i,
+      total,
+      item: { name: entry.name, path: entry.path, structure, png },
+    });
+    await waitForAck();
   }
-  figma.ui.postMessage({ type: "export", fileName: figma.root.name, nodes });
+  figma.ui.postMessage({ type: "finished", total });
 }
 
 figma.ui.onmessage = (msg) => {
-  if (msg && msg.type === "close") figma.closePlugin();
-  if (msg && msg.type === "rerun") run();
+  if (!msg) return;
+  if (msg.type === "close") figma.closePlugin();
+  if (msg.type === "rerun") scan();
+  if (msg.type === "start") stream();
+  if (msg.type === "ack" && ack) {
+    const resolve = ack;
+    ack = null;
+    resolve();
+  }
 };
 
-run();
+scan();

@@ -3,15 +3,35 @@
   <head>
     <meta charset="utf-8" />
     <style>
-      :root { color-scheme: light dark; font: 12px/1.5 ui-sans-serif, system-ui, sans-serif; }
-      body { margin: 0; padding: 16px; }
+      /* Figma injects --figma-color-* into the plugin iframe and swaps them with the editor
+         theme. Hard-coding colours here (white buttons, light code block) leaves invisible
+         labels in dark mode, because the inherited text colour is light too. */
+      :root {
+        color-scheme: light dark;
+        font: 12px/1.5 ui-sans-serif, system-ui, sans-serif;
+        --bg: var(--figma-color-bg, #fff);
+        --bg-alt: var(--figma-color-bg-secondary, #f5f5f5);
+        --fg: var(--figma-color-text, #111);
+        --fg-dim: var(--figma-color-text-secondary, #666);
+        --line: var(--figma-color-border, #ccc);
+        --brand: var(--figma-color-bg-brand, #0d99ff);
+        --on-brand: var(--figma-color-text-onbrand, #fff);
+      }
+      body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); }
       h1 { font-size: 13px; margin: 0 0 8px; }
-      #summary { margin: 0 0 12px; color: #666; }
+      #summary { margin: 0 0 12px; color: var(--fg-dim); white-space: pre-line; }
       .row { display: flex; gap: 8px; }
-      button { font: inherit; padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; cursor: pointer; background: #fff; }
-      button#send { background: #0d99ff; color: #fff; border-color: #0d99ff; font-weight: 600; }
+      button {
+        font: inherit; padding: 8px 12px; border-radius: 6px; cursor: pointer;
+        border: 1px solid var(--line); background: transparent; color: var(--fg);
+      }
+      button:hover:not(:disabled) { background: var(--bg-alt); }
+      button#send { background: var(--brand); color: var(--on-brand); border-color: var(--brand); font-weight: 600; }
       button:disabled { opacity: .5; cursor: default; }
-      pre { margin: 12px 0 0; white-space: pre-wrap; word-break: break-word; color: #333; background: #f5f5f5; padding: 8px; border-radius: 6px; min-height: 40px; }
+      pre {
+        margin: 12px 0 0; white-space: pre-wrap; word-break: break-word; min-height: 40px;
+        background: var(--bg-alt); color: var(--fg); padding: 8px; border-radius: 6px;
+      }
     </style>
   </head>
   <body>
@@ -25,36 +45,102 @@
     <pre id="status"></pre>
     <script>
       const BRIDGE = "http://localhost:3999/export";
-      let payload = null;
+      let plan = null;
+      let failures = [];
       const $ = (id) => document.getElementById(id);
+      const ack = () => parent.postMessage({ pluginMessage: { type: "ack" } }, "*");
 
-      onmessage = (e) => {
+      async function post(route, body) {
+        const res = await fetch(BRIDGE + route, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        return data;
+      }
+
+      function describePlan(msg) {
+        const folders = [...new Set(msg.items.filter((i) => i.path.length).map((i) => i.path.join("/")))];
+        const lines = [];
+        if (!folders.length) {
+          // Easy to hit by accident: clicking inside a section selects the child frame, not
+          // the section, and you quietly get one file instead of the whole screen set.
+          lines.push(`⚠ 섹션이 선택되지 않았습니다.`);
+          lines.push(`선택한 ${msg.items.length}개가 out/ 바로 아래에 저장됩니다.`);
+          lines.push(`섹션째로 뽑으려면 캔버스에서 섹션 이름(라벨)을 클릭하세요.`);
+        } else {
+          lines.push(`항목 ${msg.items.length}개 → 폴더 ${folders.length}개`);
+          for (const f of folders.slice(0, 6)) lines.push(`  ${f}/`);
+          if (folders.length > 6) lines.push(`  … 외 ${folders.length - 6}개`);
+        }
+        if (msg.skipped.length) lines.push(`건너뜀 ${msg.skipped.length}개 (섹션 안 텍스트/벡터)`);
+        return lines.join("\n");
+      }
+
+      onmessage = async (e) => {
         const msg = e.data.pluginMessage;
         if (!msg) return;
-        if (msg.type === "export") {
-          payload = msg;
-          const names = msg.nodes.map((n) => n.name).join(", ");
-          const withPng = msg.nodes.filter((n) => n.png).length;
-          $("summary").textContent = `선택 ${msg.nodes.length}개 (${names}) · PNG ${withPng}개`;
+
+        if (msg.type === "plan") {
+          plan = msg;
+          $("summary").textContent = describePlan(msg);
           $("send").disabled = false;
-        } else if (msg.type === "empty") {
-          payload = null;
-          $("summary").textContent = "선택된 노드가 없습니다. Figma에서 컴포넌트/프레임을 선택하고 '선택 다시읽기'.";
+          return;
+        }
+        if (msg.type === "empty") {
+          plan = null;
+          $("summary").textContent =
+            "내보낼 프레임/컴포넌트가 없습니다. 섹션이나 프레임을 선택하고 '선택 다시읽기'.";
           $("send").disabled = true;
+          return;
+        }
+        if (msg.type === "item") {
+          const at = `[${msg.index + 1}/${msg.total}]`;
+          try {
+            const data = await post("/item", msg.item);
+            $("status").textContent = `${at} ${data.path}`;
+          } catch (err) {
+            failures.push(`${msg.item.name}: ${err.message || err}`);
+            $("status").textContent = `${at} 실패 — ${msg.item.name}`;
+          }
+          ack();
+          return;
+        }
+        if (msg.type === "item-failed") {
+          failures.push(`${msg.name}: ${msg.error}`);
+          return;
+        }
+        if (msg.type === "finished") {
+          try {
+            const data = await post("/done", { total: msg.total });
+            $("status").textContent =
+              `완료 ✓  ${data.written}개 → ${data.dir}` +
+              (failures.length ? `\n실패 ${failures.length}개:\n- ` + failures.join("\n- ") : "");
+          } catch (err) {
+            $("status").textContent = "마무리 실패: " + (err.message || err);
+          }
+          $("send").disabled = false;
         }
       };
 
       $("send").onclick = async () => {
-        if (!payload) return;
-        $("status").textContent = "전송 중…";
+        if (!plan) return;
+        failures = [];
+        $("send").disabled = true;
+        $("status").textContent = "폴더 정리 중…";
         try {
-          const res = await fetch(BRIDGE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || res.statusText);
-          $("status").textContent = `완료 ✓  ${data.nodes.join(", ")}  → ${data.dir}`;
+          // Wipe only the section folders this run owns, so renamed/deleted frames leave no leftovers.
+          await post("/begin", { fileName: plan.fileName, roots: plan.roots });
         } catch (err) {
-          $("status").textContent = "실패: " + (err.message || err) + "\n브릿지 켜져 있나요?  npm run figma:bridge";
+          $("status").textContent =
+            "실패: " + (err.message || err) + "\n브릿지 켜져 있나요?  npm run figma:bridge";
+          $("send").disabled = false;
+          return;
         }
+        $("status").textContent = "전송 중…";
+        parent.postMessage({ pluginMessage: { type: "start" } }, "*");
       };
 
       $("rerun").onclick = () => parent.postMessage({ pluginMessage: { type: "rerun" } }, "*");

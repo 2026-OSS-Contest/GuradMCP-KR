@@ -11,7 +11,7 @@ export interface ScreenStubProps {
 /** Scaffold placeholder for a screen route. Detailed UI ships in follow-up issues. */
 export function ScreenStub({ scr, title, desc, note, children }: ScreenStubProps) {
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-8">
       <header className="flex flex-col gap-1">
         <span className="font-mono text-xs text-muted-foreground">{scr}</span>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">{title}</h1>
