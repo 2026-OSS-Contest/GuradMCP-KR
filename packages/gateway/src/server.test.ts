@@ -51,6 +51,32 @@ describe("gateway HTTP boundary", () => {
     expect(receivedBody).toContain("010-9999-8888");
   });
 
+  it("exposes detections in the MCP _guardmcp summary without leaking raw PII (GMCP-30 AC3)", async () => {
+    const upstream = createServer((request, response) => {
+      response.setHeader("content-type", "application/json");
+      if (request.url === "/tools/call/customer_lookup") {
+        return response.end(JSON.stringify({ content: [{ phone: "010-1234-5678", account: "계좌번호 110-123-456789" }] }));
+      }
+      response.statusCode = 404;
+      return response.end("{}");
+    });
+    process.env.DEMO_MCP_TOOLS_URL = await listen(upstream);
+    const url = await listen(createServer(handler));
+    const response = await fetch(`${url}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "customer_lookup", arguments: {} } })
+    });
+    const body = await response.json() as { _guardmcp: { detections: Array<{ subtype: string }>; policyIds: string[]; riskScore: number } };
+    // GMCP-30 readiness probe reads exactly these three off /demo/pii.
+    expect(body._guardmcp.detections.length).toBeGreaterThanOrEqual(2);
+    expect(body._guardmcp.policyIds).toContain("mask_korean_pii_response");
+    expect(Number.isFinite(body._guardmcp.riskScore)).toBe(true);
+    // NFR-04: the summary must not carry the raw personal data it describes.
+    expect(JSON.stringify(body._guardmcp)).not.toContain("010-1234-5678");
+    expect(JSON.stringify(body._guardmcp)).not.toContain("110-123-456789");
+  });
+
   it("blocks .env reads without ever calling upstream, and pushes the block as a GuardEvent (M2 DoD, DoD-15 §5.1/§5.3)", async () => {
     let upstreamHits = 0;
     const upstream = createServer((_request, response) => { upstreamHits += 1; response.end(JSON.stringify({})); });
