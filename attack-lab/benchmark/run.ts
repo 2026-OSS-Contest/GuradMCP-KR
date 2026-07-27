@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
 import { parse } from "yaml";
 import { detect } from "../../packages/gateway/src/detect.js";
+import { scoreRisk } from "../../packages/gateway/src/risk.js";
 import { evaluate, type Action, type Detection, type Direction, type EvaluationStrategy, type Policy, type ServerTrust } from "../../packages/policy-engine/src/index.js";
 
 interface Sample { id: string; label: boolean; text: string; type?: string }
@@ -87,7 +88,7 @@ const timings = Array.from({ length: 300 }, () => {
     serverTrust: "untrusted",
     args: {},
     detections: pipelineDetections.map(({ type, subtype }) => ({ type, subtype })),
-    riskScore: Math.min(100, pipelineDetections.length * 35)
+    riskScore: scoreRisk(pipelineDetections, "customer_lookup", "untrusted").score
   });
   return performance.now() - start;
 }).sort((left, right) => left - right);

@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "defaultRisk": "low",
+  "tools": [
+    {
+      "match": "send_*",
+      "risk": "high",
+      "description": "Outbound delivery can carry anything the agent has already read"
+    },
+    {
+      "match": "write_*",
+      "risk": "high",
+      "description": "File writes change system state outside the agent"
+    },
+    {
+      "match": "delete_*",
+      "risk": "high",
+      "description": "Deletions are destructive and rarely reversible"
+    },
+    {
+      "match": "exec_*",
+      "risk": "high",
+      "description": "Command execution grants arbitrary capability"
+    },
+    {
+      "match": "run_*",
+      "risk": "high",
+      "description": "Command execution grants arbitrary capability"
+    },
+    {
+      "match": "read_*",
+      "risk": "medium",
+      "description": "File reads can surface credentials and personal data"
+    },
+    {
+      "match": "fetch_*",
+      "risk": "medium",
+      "description": "Remote fetches pull untrusted data into the agent context"
+    },
+    {
+      "match": "http_*",
+      "risk": "medium",
+      "description": "Remote fetches pull untrusted data into the agent context"
+    },
+    {
+      "match": "*_lookup",
+      "risk": "medium",
+      "description": "Record lookups return stored personal data"
+    },
+    {
+      "match": "*_query",
+      "risk": "medium",
+      "description": "Datastore queries return stored personal data"
+    }
+  ]
+}
