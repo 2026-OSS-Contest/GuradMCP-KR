@@ -222,8 +222,13 @@ function toPolicyDecision(result: ReturnType<typeof evaluate>, detections: Detec
   };
 }
 
-function legacySummary(decision: PolicyDecision): { verdict: Action; riskScore: number; policyIds: string[] } {
-  return { verdict: decision.verdict, riskScore: decision.riskScore, policyIds: decision.matchedPolicyIds };
+// GMCP-30 acceptance criterion 3 requires the demo response to expose the policy id,
+// detections, and risk score; the readiness probe asserts detections.length >= 2. The
+// action-router refactor (GMCP-15) dropped detections from this summary, so restore
+// them. Detection carries only type/subtype/tag/offsets/confidence — never raw text
+// (NFR-04) — and mirrors the GuardEvent wire shape that already exposes spans.
+function legacySummary(decision: PolicyDecision): { verdict: Action; riskScore: number; policyIds: string[]; detections: Detection[] } {
+  return { verdict: decision.verdict, riskScore: decision.riskScore, policyIds: decision.matchedPolicyIds, detections: decision.detections };
 }
 
 function sessionIdOf(body: Record<string, unknown>): string {
