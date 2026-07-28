@@ -38,7 +38,7 @@ curl --fail --silent http://localhost:8080/actuator/health
 curl --fail --silent --request POST http://localhost:3002/demo/pii
 ```
 
-Demo Agent(LangChain4j)는 T-01 악성 README 시나리오도 재현합니다. 두 모드는 동일한 에이전트 로직으로 실행되며, 보호 모드는 요청을 게이트웨이(`/mcp`)로 라우팅해 정책으로 `.env` 읽기를 차단합니다. 미적용 모드는 현재 실제 MCP 엔드포인트가 아니라 격리된 로컬 샌드박스에서 유출을 재현합니다. 엔드포인트 URL 교체만으로 두 모드를 대비하는 완전한 형태는 데모 MCP 서버(GMCP-19)가 준비된 뒤 제공됩니다.
+Demo Agent(LangChain4j)는 T-01 악성 README 시나리오도 재현합니다. 두 모드는 **동일한 에이전트 로직으로 실행되고 대상 엔드포인트만 다릅니다.** 보호 모드는 게이트웨이(`/mcp`)를 경유해 정책으로 `.env` 읽기를 차단하고, 미적용 모드는 같은 도구 서버를 직접(`/tools/call/…`) 호출해 검사 없이 유출이 성립하는 과정을 보여줍니다. 도구 서버는 격리된 샌드박스이므로 `.env`는 합성 값이고 `send_email`은 실제 SMTP 대신 로컬 outbox에만 기록합니다.
 
 ```bash
 curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?mode=guarded"

@@ -17,7 +17,6 @@ import kr.guardmcp.demoagent.config.DemoAgentProperties
 import kr.guardmcp.demoagent.mcp.DemoMode
 import kr.guardmcp.demoagent.mcp.GatewayToolInvoker
 import kr.guardmcp.demoagent.mcp.McpCallResult
-import kr.guardmcp.demoagent.mcp.SandboxToolInvoker
 import kr.guardmcp.demoagent.mcp.ToolInvoker
 import kr.guardmcp.demoagent.support.GatewayStub
 import java.net.http.HttpClient
@@ -53,7 +52,7 @@ class DemoAgentServiceTest : StringSpec({
                 mapper,
                 HttpClient.newHttpClient(),
             )
-            val service = serviceWith(gateway, SandboxToolInvoker(), gateway = gateway)
+            val service = serviceWith(gateway, gateway = gateway)
 
             val run = service.runReadmeSummary(DemoMode.GUARDED)
 
@@ -153,7 +152,7 @@ class DemoAgentServiceTest : StringSpec({
                 mapper,
                 HttpClient.newHttpClient(),
             )
-            val service = serviceWith(gateway, SandboxToolInvoker(), gateway = gateway)
+            val service = serviceWith(gateway, gateway = gateway)
 
             val body = service.runPiiLookup()
 
