@@ -30,6 +30,8 @@ docker compose --profile demo up -d --build
 docker compose ps
 curl --fail --silent http://localhost:3001/health
 curl --fail --silent http://localhost:8080/actuator/health
+# 검사 파이프라인 계측: 판정 카운트와 지연 백분위만 (페이로드·탐지 값 미포함)
+curl --fail --silent http://localhost:3001/metrics
 ```
 
 `docker compose ps`에서 시작된 서비스가 `healthy`이고 health 요청이 성공하면 <http://localhost:3000>을 엽니다. 다음 고정 시나리오 호출로 정책 ID·탐지 항목·위험 점수가 포함된 판정을 확인합니다.

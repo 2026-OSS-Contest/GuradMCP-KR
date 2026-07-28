@@ -5,6 +5,7 @@ import { evaluate, type Action, type Policy, type PolicyContext } from "@guardmc
 import { createAutoExpireApprovalBackend } from "./approval/backend.js";
 import { detect, mask, type Detection } from "./detect.js";
 import { routeByVerdict, type RouterDeps } from "./pipeline/actionRouter.js";
+import { metricsSnapshot, recordInspection } from "./pipeline/metrics.js";
 import type { PolicyDecision } from "./pipeline/types.js";
 import { scoreRisk } from "./risk.js";
 import { runtimePolicyPacks } from "./policies.generated.js";
@@ -29,6 +30,12 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     const dependencies = await checkTcpDependencies();
     const up = dependencies.every(({ reachable }) => reachable);
     send(response, up ? 200 : 503, { status: up ? "UP" : "DOWN", service: "gateway", dependencies });
+    return;
+  }
+  if (request.method === "GET" && request.url === "/metrics") {
+    // Verdict counts and pipeline latency only (NFR-06). Never payloads or detected
+    // values — this endpoint must not become a second way to read protected data.
+    send(response, 200, { service: "gateway", ...metricsSnapshot() });
     return;
   }
   if (request.method === "POST" && request.url === "/inspect") {
@@ -180,8 +187,16 @@ const actionWeight: Record<Action, number> = {
   block: 4
 };
 
-/** Runs Detector Core (②-④) + Policy Engine (⑥) and adapts the result into the ⑦ action-router's input contract. */
+/**
+ * Runs Detector Core (②-④) + Policy Engine (⑥) and adapts the result into the ⑦
+ * action-router's input contract.
+ *
+ * Every inspection funnels through here, so this is where the rule pipeline is timed
+ * (GMCP-52, NFR-01): the measurement covers detection, risk scoring, and policy
+ * evaluation on the live gateway rather than in an offline benchmark.
+ */
 function evaluatePayload(text: string, context: Pick<PolicyContext, "direction" | "tool" | "serverTrust" | "args">): PolicyDecision {
+  const startedAt = performance.now();
   const detections = detect(text);
   const { score: riskScore } = scoreRisk(detections, context.tool, context.serverTrust);
   const activePack = runtimePolicyPacks["korean-pii"];
@@ -191,6 +206,7 @@ function evaluatePayload(text: string, context: Pick<PolicyContext, "direction" 
     detections: detections.map(({ type, subtype }) => ({ type, subtype })),
     riskScore
   }, activePack.defaultAction, activePack.evaluationStrategy);
+  recordInspection(result.action, performance.now() - startedAt);
   return toPolicyDecision(result, detections, riskScore);
 }
 

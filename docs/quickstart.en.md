@@ -30,6 +30,8 @@ The `demo` profile starts `demo-agent`, `demo-mcp-tools`, and deterministic seed
 docker compose ps
 curl --fail --silent http://localhost:3001/health
 curl --fail --silent http://localhost:8080/actuator/health
+# Pipeline instrumentation: verdict counts and latency percentiles only (no payloads or detected values)
+curl --fail --silent http://localhost:3001/metrics
 ```
 
 When the started services are `healthy` and the health request succeeds, open <http://localhost:3000>. Run the deterministic scenario below and confirm that its verdict includes policy IDs, detections, and a risk score.
