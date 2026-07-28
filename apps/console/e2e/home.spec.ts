@@ -45,6 +45,23 @@ test("SCR-101 recent events grow from the mocked SSE stream", async ({ page }) =
   await expect(rows.first().getByRole("link")).toHaveAttribute("href", /\/replay\/[^/]+\?event=/);
 });
 
+test("GMCP-86 recent events show the reconnect banner then recover", async ({ page }) => {
+  await page.goto("/");
+  const events = page.locator('[data-scr] section', { hasText: "최근 보안 이벤트" });
+  await expect(events.getByRole("link").first()).toBeVisible();
+
+  // Take the mocked gateway offline via the dev scenario switcher; the stream drops.
+  await page.getByRole("button", { name: "Mock API 상태 전환" }).click();
+  await page.getByRole("button", { name: /미연결/ }).click();
+  await expect(events.getByText(/재연결 중/)).toBeVisible({ timeout: 10_000 });
+
+  // Back online: the stream recovers, the banner clears and events are still listed (the
+  // seeded list is never dropped, and recovery re-polls to backfill the gap).
+  await page.getByRole("button", { name: /정상/ }).click();
+  await expect(events.getByText(/재연결 중/)).toBeHidden({ timeout: 10_000 });
+  await expect(events.getByRole("link").first()).toBeVisible();
+});
+
 test("SCR-000 status bar reports the gateway state", async ({ page }) => {
   await page.goto("/");
   // The gateway reports its own health, so one unreachable upstream still reads "보호 중";

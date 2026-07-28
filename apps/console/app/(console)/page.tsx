@@ -1,6 +1,6 @@
 "use client";
 
-import { getRecentEvents, getServers } from "@/lib/api/client";
+import { getServers } from "@/lib/api/client";
 import { useDelayed, useResource } from "@/lib/api/use-resource";
 import { isOffline, useOverview } from "@/components/providers/overview-provider";
 import { KpiCards } from "@/components/gateway/kpi-cards";
@@ -12,11 +12,9 @@ import { ServerInventory } from "@/components/gateway/server-inventory";
 export default function GatewayPage() {
   const overview = useOverview();
   const servers = useResource((signal) => getServers(signal));
-  const events = useResource((signal) => getRecentEvents(signal));
 
   // Spec §4.2: a response under 500ms must not flash a skeleton.
   const serversPending = useDelayed(!servers.data);
-  const eventsPending = useDelayed(!events.data);
 
   const registered = servers.data?.servers ?? [];
   const offline = isOffline(overview);
@@ -36,12 +34,7 @@ export default function GatewayPage() {
       <KpiCards overview={overview.data} failed={Boolean(overview.error) && !overview.data} />
       <div className="flex min-h-0 flex-1 gap-4">
         <ServerInventory servers={registered} loading={serversPending} failed={Boolean(servers.error) && !servers.data} />
-        <RecentEvents
-          events={events.data?.events ?? []}
-          loading={eventsPending}
-          failed={Boolean(events.error) && !events.data}
-          demoDisabled={offline}
-        />
+        <RecentEvents demoDisabled={offline} />
       </div>
     </div>
   );

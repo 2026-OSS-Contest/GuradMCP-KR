@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import type { SecurityEvent } from "@/lib/api/types";
-import { createSseClient, type SseStatus } from "@/lib/sse";
+import { getRecentEvents } from "@/lib/api/client";
+import { useDelayed } from "@/lib/api/use-resource";
+import { useEventStream } from "@/lib/use-event-stream";
 import { CtaChevronIcon } from "@/components/icons";
 import { RelativeTime } from "@/components/relative-time";
 import { VerdictBadge } from "@/components/verdict-badge";
@@ -22,12 +23,16 @@ const STREAM_URL = API_BASE ? `${API_BASE}/api/v1/events/stream` : MOCK_API ? "/
 /** The design widens this column only at its largest breakpoint: 315 up to 1920, then 664. */
 export const EVENTS_COLUMN = "w-[315px] min-[1920px]:w-[664px]";
 
-function EventRow({ event }: { event: SecurityEvent }) {
+function EventRow({ event, isNew }: { event: SecurityEvent; isNew: boolean }) {
   return (
     <li>
       <Link
         href={`/replay/${event.sessionId}?event=${event.id}`}
-        className="flex items-center gap-3 pb-4 transition-colors hover:bg-white/5 shadow-[inset_0_-1px_0_0_var(--primitive-opacity-white-alpha-10)]"
+        className={cn(
+          "flex items-center gap-3 pb-4 transition-colors hover:bg-white/5 shadow-[inset_0_-1px_0_0_var(--primitive-opacity-white-alpha-10)]",
+          // A freshly streamed event fades in from a highlight (spec §6.3).
+          isNew && "event-tint motion-reduce:animate-none"
+        )}
       >
         <span className="flex min-w-0 flex-1 items-center gap-3">
           <VerdictBadge verdict={event.verdict} />
@@ -48,44 +53,25 @@ function EventRow({ event }: { event: SecurityEvent }) {
   );
 }
 
-export function RecentEvents({
-  events,
-  loading,
-  failed,
-  demoDisabled
-}: {
-  events: SecurityEvent[];
-  loading: boolean;
-  /** Nothing has ever loaded and the last attempt failed — there is no stale data to show. */
-  failed: boolean;
-  demoDisabled: boolean;
-}) {
+export function RecentEvents({ demoDisabled }: { demoDisabled: boolean }) {
   const t = useTranslations("gateway.events");
   const tCta = useTranslations("gateway.cta");
   const tError = useTranslations("gateway.error");
-  const [streamed, setStreamed] = useState<SecurityEvent[]>([]);
-  const [status, setStatus] = useState<SseStatus>("closed");
 
-  useEffect(() => {
-    if (!STREAM_URL) return;
-    const client = createSseClient({
-      url: STREAM_URL,
-      onStatusChange: setStatus,
-      onMessage: (message) => {
-        if (message.type !== "guard.event") return;
-        setStreamed((previous) => [message.data as SecurityEvent, ...previous].slice(0, MAX_EVENTS));
-      }
-    });
-    return () => client.close();
-  }, []);
+  // The stream owns the list: it seeds from `/events/recent`, keeps it live over SSE, and
+  // re-polls that same endpoint on recovery so a dropped connection loses no events.
+  const { events, status, fresh, loading, failed } = useEventStream<SecurityEvent>({
+    streamUrl: STREAM_URL,
+    backfill: async (signal) => (await getRecentEvents(signal)).events,
+    getId: (event) => event.id,
+    getTime: (event) => Date.parse(event.at),
+    max: MAX_EVENTS
+  });
 
-  // A streamed event also shows up in the next `/events/recent` poll, so drop the duplicate
-  // and keep the streamed copy — it is the one already on screen.
-  const merged = useMemo(() => {
-    const byId = new Map<string, SecurityEvent>();
-    for (const event of [...streamed, ...events]) if (!byId.has(event.id)) byId.set(event.id, event);
-    return [...byId.values()].slice(0, MAX_EVENTS);
-  }, [streamed, events]);
+  // Spec §4.2: a response under 500ms must not flash a skeleton.
+  const pending = useDelayed(loading);
+  // Only surface the unreachable state when there is no data to fall back to.
+  const unreachable = failed && events.length === 0;
 
   return (
     <div className={cn("flex flex-none flex-col gap-4", EVENTS_COLUMN)}>
@@ -96,20 +82,20 @@ export function RecentEvents({
 
         {status === "reconnecting" && <p className="text-caption-text-c-rg text-verdict-warn">{t("reconnecting")}</p>}
 
-        {failed ? (
+        {unreachable ? (
           <p className="text-body-text-b3-md text-grayscale-400">{tError("unreachable")}</p>
-        ) : loading ? (
+        ) : pending ? (
           <div className="flex flex-col gap-4">
             {[0, 1, 2, 3].map((index) => (
               <div key={index} className="h-8 animate-pulse motion-reduce:animate-none rounded-sm bg-(--primitive-opacity-white-alpha-6)" />
             ))}
           </div>
-        ) : merged.length === 0 ? (
+        ) : events.length === 0 ? (
           <p className="text-body-text-b3-md text-grayscale-400">{t("empty")}</p>
         ) : (
           <ul role="log" aria-live="polite" className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-            {merged.map((event) => (
-              <EventRow key={event.id} event={event} />
+            {events.map((event) => (
+              <EventRow key={event.id} event={event} isNew={fresh.has(event.id)} />
             ))}
           </ul>
         )}
