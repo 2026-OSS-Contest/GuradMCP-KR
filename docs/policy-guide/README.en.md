@@ -61,6 +61,8 @@ Different axes in one policy must **all match (AND)**. `any_of` and lists within
 
 Risky tools and destinations usually belong on `request`; PII exfiltration and indirect injection usually belong on `response`. Avoid `any` unless both directions are necessary.
 
+**Direction-split strength (FR-INJ-03).** The `default` pack treats the same injection detection differently per direction. The response direction carries external data the Agent is about to trust, so `block_untrusted_injection_response` **blocks** it; the request direction carries text the user or Agent authored, where the same wording is often a legitimate quote, so `warn_injection_request` only **warns and records**. One payload therefore yields different verdicts depending on direction. Preserve this asymmetry in new detection policies — blocking the request direction as well breaks ordinary work.
+
 ### 3.2 `tool`
 
 A single case-sensitive string using exact matching or glob (`*`, `?`).

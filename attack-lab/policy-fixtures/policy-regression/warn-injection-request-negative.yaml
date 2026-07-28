@@ -1,0 +1,14 @@
+id: warn_injection_request_negative
+description: The same request-side detection below the warn band does not match.
+coverage:
+  policy_id: warn_injection_request
+  expectation: not_match
+event:
+  direction: request
+  tool: search_documents
+  server_trust: untrusted
+  detections: [INJECTION.INDIRECT]
+  risk_score: 39
+expected:
+  action: allow
+  matched_policy_ids: []

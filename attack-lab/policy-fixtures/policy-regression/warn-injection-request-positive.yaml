@@ -1,0 +1,14 @@
+id: warn_injection_request_positive
+description: Injection wording in tool arguments is warned, not blocked.
+coverage:
+  policy_id: warn_injection_request
+  expectation: match
+event:
+  direction: request
+  tool: search_documents
+  server_trust: untrusted
+  detections: [INJECTION.INDIRECT]
+  risk_score: 95
+expected:
+  action: warn
+  matched_policy_ids: [warn_injection_request]

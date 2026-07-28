@@ -118,6 +118,31 @@ export const runtimePolicyPacks: Record<string, RuntimePolicyPack> = {
         "message": "Tool output was blocked because it matched a high-risk injection policy."
       },
       {
+        "id": "warn_injection_request",
+        "pack": "default",
+        "version": 1,
+        "description": "Warn on prompt-injection wording in tool arguments instead of blocking it",
+        "priority": 130,
+        "match": {
+          "direction": "request",
+          "tool": "*",
+          "server_trust": "any",
+          "detections": {
+            "any_of": [
+              "INJECTION",
+              "INJECTION.INDIRECT",
+              "INJECTION.OBFUSCATED"
+            ]
+          },
+          "risk_score": {
+            "gte": 40
+          }
+        },
+        "action": "warn",
+        "severity": "medium",
+        "message": "Prompt-injection wording was detected in the tool arguments and recorded."
+      },
+      {
         "id": "approve_external_email_with_secret",
         "pack": "default",
         "version": 1,

@@ -1,0 +1,23 @@
+# Request-side counterpart to block-injection-response.yaml.
+#
+# FR-INJ-03 splits inspection by direction: the response direction carries
+# external data the Agent is about to trust, so it blocks; the request direction
+# carries text the user or Agent authored, where the same wording is often a
+# legitimate quote ("how do I stop 'ignore previous instructions' attacks?").
+# Warning there keeps the event on the record without breaking normal work.
+id: warn_injection_request
+pack: default
+version: 1
+description: Warn on prompt-injection wording in tool arguments instead of blocking it
+priority: 130 # Evaluated after the response-side block policy.
+match:
+  direction: request # Agent -> Tool arguments, not external data entering the Agent.
+  tool: '*'
+  server_trust: any
+  detections:
+    any_of: [INJECTION, INJECTION.INDIRECT, INJECTION.OBFUSCATED]
+  risk_score:
+    gte: 40 # Risk Gauge warn band (GMCP-40); below this the score is noise.
+action: warn
+severity: medium
+message: Prompt-injection wording was detected in the tool arguments and recorded.
