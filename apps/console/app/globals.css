@@ -12,3 +12,18 @@
     @apply bg-background text-foreground font-sans antialiased;
   }
 }
+
+/* A newly streamed event lands with a brief highlight that fades out (spec §6.3, 1.5s).
+   Pair with `motion-reduce:animate-none` so reduced-motion users get no flash. */
+@keyframes event-tint {
+  from {
+    background-color: var(--primitive-opacity-white-alpha-10);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+@utility event-tint {
+  animation: event-tint 1.5s ease-out;
+}
