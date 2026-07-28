@@ -34,8 +34,9 @@ export function StatusBar() {
 
   return (
     <header className="flex h-15 flex-none items-center gap-4 bg-grayscale-950 px-8 shadow-[inset_0_-1px_0_0_var(--primitive-color-grayscale-800)]">
-      {/* The design aligns this row to its bottom edge, not its centre. */}
-      <div className="flex flex-1 items-end gap-3 py-2">
+      {/* Centre every cluster on the bar's midline so the status text, policy chips and the
+          session picker share one baseline (they are different heights). */}
+      <div className="flex flex-1 items-center gap-3">
         <span className={cn("flex flex-none items-center gap-2 text-body-text-b3-md", text)}>
           <Icon className="size-5 flex-none" aria-hidden />
           {t(label)}
