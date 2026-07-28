@@ -39,10 +39,11 @@ curl --fail --silent --request POST http://localhost:3002/demo/pii
 ```
 
 The Demo Agent (LangChain4j) also reproduces the T-01 malicious-README scenario. Both modes
-run the same agent logic; guarded mode routes requests to the gateway (`/mcp`) so the policy
-blocks the `.env` read. Vulnerable mode currently replays the leak inside an isolated local
-sandbox rather than a real MCP endpoint — full endpoint-swap parity between the two modes
-arrives once the demo MCP servers (GMCP-19) are in place.
+**run the same agent logic and differ only in the endpoint they target.** Guarded mode routes
+requests through the gateway (`/mcp`) so the policy blocks the `.env` read; vulnerable mode
+calls the same tool servers directly (`/tools/call/…`) and shows the leak succeeding with no
+inspection in the way. Those tool servers are an isolated sandbox: the `.env` holds synthetic
+values and `send_email` records to a local outbox instead of contacting real SMTP.
 
 ```bash
 curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?mode=guarded"
