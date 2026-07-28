@@ -9,4 +9,5 @@ extends: []
 policies:
   - policies/block-env-file-read.yaml
   - policies/block-injection-response.yaml
+  - policies/warn-injection-request.yaml
   - policies/require-approval-external-secret-email.yaml
