@@ -1,11 +1,13 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { connect } from "node:net";
 import { evaluate, type Action, type Policy, type PolicyContext } from "@guardmcp/policy-engine";
 import { createAutoExpireApprovalBackend } from "./approval/backend.js";
 import { detect, mask, type Detection } from "./detect.js";
 import { routeByVerdict, type RouterDeps } from "./pipeline/actionRouter.js";
+import { emitGuardEvent } from "./pipeline/events.js";
 import { metricsSnapshot, recordInspection } from "./pipeline/metrics.js";
+import { inspectToolMetadata, type ToolMetadataInspection } from "./pipeline/toolMetadata.js";
 import type { PolicyDecision } from "./pipeline/types.js";
 import { scoreRisk } from "./risk.js";
 import { runtimePolicyPacks } from "./policies.generated.js";
@@ -80,7 +82,12 @@ async function handleMcp(body: Record<string, unknown>, response: ServerResponse
   const sessionId = sessionIdOf(body);
   if (body.method === "tools/list") {
     const upstream = await upstreamJson("/tools/list");
-    const payload = JSON.stringify(upstream);
+    // Quarantine poisoned descriptors first (FR-GW-04): a tool description is guidance
+    // the Agent acts on, so the injection must be removed before anything downstream —
+    // including this gateway's own reply — can carry it.
+    const metadata = inspectToolMetadata(upstream);
+    recordQuarantine(metadata, sessionId);
+    const payload = JSON.stringify(metadata.sanitized);
     const decision = evaluatePayload(payload, { direction: "response", tool: "tools/list", serverTrust: "untrusted", args: {} });
     const routed = await routeByVerdict(
       { direction: "response", toolName: "tools/list", payload, sessionId, serverTrust: "untrusted" },
@@ -91,7 +98,12 @@ async function handleMcp(body: Record<string, unknown>, response: ServerResponse
       send(response, 200, rpcError(id, -32002, "GuardMCP blocked unsafe tool metadata", routed.error.error));
       return;
     }
-    send(response, 200, { jsonrpc: "2.0", id, result: JSON.parse(routed.payload), _guardmcp: legacySummary(decision) });
+    send(response, 200, {
+      jsonrpc: "2.0",
+      id,
+      result: JSON.parse(routed.payload),
+      _guardmcp: { ...legacySummary(decision), quarantinedTools: metadata.quarantined }
+    });
     return;
   }
   if (body.method === "tools/call") {
@@ -244,6 +256,36 @@ function toPolicyDecision(result: ReturnType<typeof evaluate>, detections: Detec
 // action-router refactor (GMCP-15) dropped detections from this summary, so restore
 // them. Detection carries only type/subtype/tag/offsets/confidence — never raw text
 // (NFR-04) — and mirrors the GuardEvent wire shape that already exposes spans.
+/**
+ * Records one blocked GuardEvent per quarantined tool so the console and the audit
+ * trail show which descriptor was poisoned (GMCP-66 acceptance criterion). The event
+ * carries a digest and detector tags, never the injected text (NFR-04).
+ */
+function recordQuarantine(metadata: ToolMetadataInspection, sessionId: string): void {
+  for (const tool of metadata.quarantined) {
+    emitGuardEvent({
+      eventId: randomUUID(),
+      sessionId,
+      ts: new Date().toISOString(),
+      direction: "response",
+      toolName: tool.name,
+      argsDigest: createHash("sha256").update(tool.detections.join(",")).digest("hex").slice(0, 16),
+      verdict: "block",
+      riskScore: 100,
+      matchedPolicyIds: ["quarantine_poisoned_tool_description"],
+      detections: metadata.detections
+        .filter(({ type }) => type === "INJECTION")
+        .map((detection) => ({
+          type: detection.type,
+          subtype: detection.subtype,
+          span: { start: detection.start, end: detection.end },
+          confidence: detection.confidence,
+          maskedAs: detection.maskedAs
+        }))
+    });
+  }
+}
+
 function legacySummary(decision: PolicyDecision): { verdict: Action; riskScore: number; policyIds: string[]; detections: Detection[] } {
   return { verdict: decision.verdict, riskScore: decision.riskScore, policyIds: decision.matchedPolicyIds, detections: decision.detections };
 }

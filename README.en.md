@@ -39,6 +39,7 @@ AI Agent → GuardMCP-KR Gateway → MCP Tools
 ```
 
 - **Bidirectional inspection:** checks risky tools and arguments on requests, and PII, secrets, and indirect injection on responses.
+- **Tool description inspection:** inspects each descriptor in a `tools/list` response on its own, quarantining only the tools carrying hidden instructions and leaving the rest usable (Tool Description Poisoning defense).
 - **Explainable verdicts:** returns policy IDs, detection types, risk score, and masking result as MCP response metadata. Durable audit storage is future work.
 - **Korean defaults:** covers Korean phone numbers, RRN-like values, business registration numbers, bank accounts, and more.
 - **No-code extension:** policies and detection/attack samples can be contributed as YAML or datasets.
