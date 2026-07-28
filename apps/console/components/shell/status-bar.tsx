@@ -7,6 +7,7 @@ import { isOffline, useOverview } from "@/components/providers/overview-provider
 import { DropdownChevronIcon, StatusDisconnectedIcon, StatusProtectedIcon } from "@/components/icons";
 import { VerdictBadge } from "@/components/verdict-badge";
 import { Tag } from "@/components/ui/tag";
+import { usePendingApprovals } from "./use-pending-approvals";
 import { cn } from "@/lib/utils";
 
 /**
@@ -30,7 +31,8 @@ export function StatusBar() {
   const status: GatewayStatus = isOffline(overview) ? "disconnected" : (overview.data?.status ?? "protected");
   const { Icon, label, text } = STATUS[status];
   const packs = overview.data?.policies.packs ?? [];
-  const pending = overview.data?.pendingApprovals ?? 0;
+  // Seeded by the /overview poll, kept live by approval.created/resolved SSE events (spec §4.1).
+  const pending = usePendingApprovals(overview.data?.pendingApprovals ?? 0, overview.fetchedAt);
 
   return (
     <header className="flex h-15 flex-none items-center gap-4 bg-grayscale-950 px-8 shadow-[inset_0_-1px_0_0_var(--primitive-color-grayscale-800)]">
