@@ -52,11 +52,82 @@ const validators: Record<string, (value: string) => boolean> = {
 };
 
 const rules: Rule[] = [piiCatalog, secretCatalog, injectionCatalog].flatMap(parseCatalog);
+const injectionRules = rules.filter(({ type }) => type === "INJECTION");
 const bankAccounts = parseBankAccountTable(bankAccountTable);
 
 export function detect(input: string, options: DetectOptions = {}): Detection[] {
   const normalized = normalizeInput(input);
-  return rules.flatMap((rule) => findRule(rule, normalized, options.skipValidation === true));
+  const skipValidation = options.skipValidation === true;
+  return [
+    ...rules.flatMap((rule) => findRule(rule, normalized, skipValidation)),
+    ...findEncodedInjections(input, skipValidation)
+  ];
+}
+
+// --- Base64 de-obfuscation (GMCP-8, FR-INJ-02, threat T-07) -------------------
+//
+// NFKC and zero-width stripping run in normalizeInput, but an instruction that is
+// base64-encoded survives both: the detector sees one opaque token and nothing matches.
+// So decode the encoded runs and re-run the injection rules on what comes out.
+//
+// Two bounds keep this inside the NFR-01 latency budget: a candidate longer than
+// `maxEncodedRunLength` is skipped, and at most `maxEncodedSegments` runs are decoded
+// per payload. Both are cheap ceilings — a real hidden instruction is short.
+const encodedRun = /[A-Za-z0-9+/]{24,}={0,2}/g;
+const maxEncodedRunLength = 4096;
+const maxEncodedSegments = 16;
+
+/**
+ * Reports one detection per encoded run whose decoded text matches an injection rule.
+ * The span points at the **encoded** run in the original payload, so masking replaces
+ * the whole blob and the decoded instruction never reaches the caller (NFR-04).
+ *
+ * The subtype is `OBFUSCATED` rather than the rule that matched inside: the shipped
+ * `block_untrusted_injection_response` policy already lists `INJECTION.OBFUSCATED`, so
+ * this makes an existing policy axis real instead of introducing a parallel one.
+ */
+function findEncodedInjections(input: string, skipValidation: boolean): Detection[] {
+  const found: Detection[] = [];
+  let decoded = 0;
+  for (const match of input.matchAll(encodedRun)) {
+    if (decoded >= maxEncodedSegments) break;
+    if (match.index === undefined || match[0].length > maxEncodedRunLength) continue;
+    const text = decodeBase64Text(match[0]);
+    if (text === undefined) continue;
+    decoded += 1;
+    const confidence = strongestInjectionConfidence(text, skipValidation);
+    if (confidence === undefined) continue;
+    found.push({
+      type: "INJECTION",
+      subtype: "OBFUSCATED",
+      maskedAs: "[INJECTION]",
+      start: match.index,
+      end: match.index + match[0].length,
+      confidence
+    });
+  }
+  return found;
+}
+
+/**
+ * Decodes a candidate run, or returns undefined when it is not base64-encoded text.
+ * `atob` rejects malformed base64 and the fatal TextDecoder rejects anything that is
+ * not valid UTF-8, so binary blobs and hashes fall out here rather than being scanned.
+ */
+function decodeBase64Text(candidate: string): string | undefined {
+  try {
+    const binary = atob(candidate);
+    if (binary.length < 8) return undefined;
+    return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(binary, (character) => character.charCodeAt(0)));
+  } catch {
+    return undefined;
+  }
+}
+
+function strongestInjectionConfidence(text: string, skipValidation: boolean): number | undefined {
+  const normalized = normalizeInput(text);
+  const confidences = injectionRules.flatMap((rule) => findRule(rule, normalized, skipValidation)).map(({ confidence }) => confidence);
+  return confidences.length === 0 ? undefined : Math.max(...confidences);
 }
 
 export function mask(input: string, detections = detect(input)): string {
