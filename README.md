@@ -78,6 +78,7 @@ npm run bench
 | Quick Start | [열기](docs/quickstart.md) | [Open](docs/quickstart.en.md) |
 | 정책 작성 가이드 | [열기](docs/policy-guide/README.md) | [Open](docs/policy-guide/README.en.md) |
 | 위험 점수 산식 | [열기](docs/risk-scoring.md) | [Open](docs/risk-scoring.en.md) |
+| 판정 설명 문구 | [열기](docs/explanation.md) | [Open](docs/explanation.en.md) |
 | 벤치마크 게이트 | [열기](docs/benchmark-gate.md) | [Open](docs/benchmark-gate.en.md) |
 | 기여 가이드 | [열기](CONTRIBUTING.md#한국어) | [Open](CONTRIBUTING.md#english) |
 | 개발 워크플로 | [열기](docs/contributing/development-workflow.md) | [Open](docs/contributing/development-workflow.en.md) |

@@ -6,6 +6,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mask, type Detection } from "../detect.js";
 import type { ApprovalBackend, ApprovalDecision } from "../approval/backend.js";
 import { emitApprovalCreated, emitApprovalResolved, emitGuardEvent } from "./events.js";
+import { explainDecision } from "./explanation.js";
 import { recordMaskDiff } from "./maskDiff.js";
 import type { Action, GuardEvent, GuardEventDetection, PolicyDecision, RoutedResult, ToolCallContext } from "./types.js";
 
@@ -159,6 +160,9 @@ function buildGuardEvent(ctx: ToolCallContext, decision: PolicyDecision, verdict
     riskScore: decision.riskScore,
     matchedPolicyIds: decision.matchedPolicyIds,
     detections: decision.detections.map(toEventDetection),
+    // Every event funnels through here, so generating the explanation at this one point
+    // is what makes "100% of block events carry a reason" true rather than best-effort.
+    explanation: explainDecision(decision, verdict),
     ...extras
   };
 }

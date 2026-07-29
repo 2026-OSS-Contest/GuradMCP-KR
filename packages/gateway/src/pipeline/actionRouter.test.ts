@@ -234,3 +234,43 @@ describe("NFR-01 latency smoke test (rule pipeline, ≤50ms p95 target)", () => 
     expect(latency).toBeLessThan(50);
   });
 });
+
+describe("every guard event carries an explanation (GMCP-53)", () => {
+  const decision: PolicyDecision = {
+    verdict: "block",
+    matchedPolicyIds: ["block_env_file_read"],
+    riskScore: 96,
+    severity: "critical",
+    reasonCode: "BLOCK_ENV_FILE_READ",
+    message: "Credential-file access was blocked by policy.",
+    detections: []
+  };
+
+  async function eventsFor(verdict: PolicyDecision["verdict"]): Promise<Array<{ explanation?: { ko: string; en: string; reasonCode: string } }>> {
+    const captured: Array<{ explanation?: { ko: string; en: string; reasonCode: string } }> = [];
+    const unsubscribe = onGuardBusMessage((message) => {
+      if (message.type === "guard.event") captured.push(message.data as { explanation?: { ko: string; en: string; reasonCode: string } });
+    });
+    await routeByVerdict(baseCtx, { ...decision, verdict }, deps());
+    unsubscribe();
+    return captured;
+  }
+
+  it("explains the verdict on every recorded event, in Korean and English", async () => {
+    for (const verdict of ["allow", "warn", "mask_then_allow", "require_approval", "block"] as const) {
+      const events = await eventsFor(verdict);
+      expect(events.length).toBeGreaterThan(0);
+      for (const event of events) {
+        expect(event.explanation?.reasonCode).toBe("BLOCK_ENV_FILE_READ");
+        expect(event.explanation?.ko).toContain("block_env_file_read");
+        expect(event.explanation?.en).toContain("block_env_file_read");
+      }
+    }
+  });
+
+  it("records a timed-out approval as the block it became, not the approval it proposed", async () => {
+    const events = await eventsFor("require_approval");
+    // The backend stub expires, so the final event must read as a block (§4.5).
+    expect(events.at(-1)?.explanation?.ko.startsWith("차단했습니다")).toBe(true);
+  });
+});
