@@ -51,7 +51,9 @@ export function StatusBar() {
               <span className="text-body-text-b3-md text-grayscale-300">{t("policyPacks")}</span>
               <span className="flex items-center gap-2">
                 {packs.map((pack) => (
-                  <Link key={pack} href="/policies" className="transition-opacity hover:opacity-80">
+                  // inline-flex (not the default inline) so the mono chip centres on the row rather
+                  // than riding a text line-box that left it 2px below the labels.
+                  <Link key={pack} href="/policies" className="inline-flex items-center transition-opacity hover:opacity-80">
                     <Tag className="text-caption-mono-c-rg">{pack}</Tag>
                   </Link>
                 ))}
@@ -66,7 +68,9 @@ export function StatusBar() {
             <Link
               href="/approvals"
               aria-label={`${t("pendingApprovals")} ${pending}`}
-              className="transition-opacity hover:opacity-80"
+              // inline-flex (not the default inline) so the taller badge centres on the row instead
+              // of riding an inline text line-box, which left its label 2px above 보호 중 / 정책 팩.
+              className="inline-flex items-center transition-opacity hover:opacity-80"
             >
               <VerdictBadge verdict="require_approval" size="sm" count={pending} />
             </Link>
