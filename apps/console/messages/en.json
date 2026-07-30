@@ -18,7 +18,10 @@
     "collapse": "Collapse rail",
     "expand": "Expand rail",
     "offlineBanner": "The gateway needs to be connected.",
-    "lastFetched": "Last checked"
+    "lastFetched": "Last checked",
+    "sessionEvents": "{count} events",
+    "sessionEmpty": "No recorded sessions.",
+    "sessionError": "Could not load the session list."
   },
   "verdict": {
     "allow": "Allowed",

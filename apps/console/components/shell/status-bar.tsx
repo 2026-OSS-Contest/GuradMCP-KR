@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import type { GatewayStatus } from "@/lib/api/types";
 import { isOffline, useOverview } from "@/components/providers/overview-provider";
-import { DropdownChevronIcon, StatusDisconnectedIcon, StatusProtectedIcon } from "@/components/icons";
+import { StatusDisconnectedIcon, StatusProtectedIcon } from "@/components/icons";
 import { VerdictBadge } from "@/components/verdict-badge";
 import { Tag } from "@/components/ui/tag";
+import { SessionPicker } from "./session-picker";
 import { usePendingApprovals } from "./use-pending-approvals";
 import { cn } from "@/lib/utils";
 
@@ -78,15 +79,7 @@ export function StatusBar() {
         )}
       </div>
 
-      {/* Session picker is inert until `GET /sessions` exists (spec §6.2). */}
-      <button
-        type="button"
-        className="flex h-8 flex-none items-center gap-2 rounded-sm bg-(--primitive-opacity-white-alpha-6) py-1 pr-1 pl-3 transition-colors hover:bg-white/10"
-      >
-        <span className="text-body-text-b3-md text-grayscale-200">{t("session")}</span>
-        <span className="text-body-text-b3-md">#s-0712</span>
-        <DropdownChevronIcon className="size-6 flex-none" aria-hidden />
-      </button>
+      <SessionPicker />
     </header>
   );
 }

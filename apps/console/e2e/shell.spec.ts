@@ -22,3 +22,28 @@ test("SCR-000 pending-approval badge deep-links to the approval screen (SCR-402)
     "/approvals"
   );
 });
+
+test("SCR-000 session picker lists the sessions and opens the chosen one on Replay", async ({ page }) => {
+  await page.goto("/");
+  // The label settles on the live session once `GET /sessions` resolves.
+  const picker = page.getByRole("button", { name: /세션 #s-0712/ });
+  await expect(picker).toHaveAttribute("aria-expanded", "false");
+
+  await picker.click();
+  const list = page.getByRole("listbox", { name: "세션" });
+  await expect(list.getByRole("option", { name: /#s-0712.*LIVE/ })).toHaveAttribute("aria-selected", "true");
+
+  // Choosing another session opens it on SCR-301, and the label follows the route.
+  await list.getByRole("option", { name: /#s-0711/ }).click();
+  await expect(page).toHaveURL(/\/replay\/s-0711$/);
+  await expect(list).toBeHidden();
+  await expect(page.getByRole("button", { name: /세션 #s-0711/ })).toBeVisible();
+});
+
+test("SCR-000 session picker closes on Escape", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /세션 #s-/ }).click();
+  await expect(page.getByRole("listbox", { name: "세션" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("listbox", { name: "세션" })).toBeHidden();
+});
