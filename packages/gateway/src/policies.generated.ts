@@ -90,7 +90,8 @@ export const runtimePolicyPacks: Record<string, RuntimePolicyPack> = {
         },
         "action": "block",
         "severity": "critical",
-        "message": "Credential-file access was blocked by policy."
+        "message": "Credential-file access was blocked by policy.",
+        "reasonCode": "SECRET_FILE_ACCESS_BLOCKED"
       },
       {
         "id": "block_untrusted_injection_response",
@@ -115,7 +116,8 @@ export const runtimePolicyPacks: Record<string, RuntimePolicyPack> = {
         },
         "action": "block",
         "severity": "critical",
-        "message": "Tool output was blocked because it matched a high-risk injection policy."
+        "message": "Tool output was blocked because it matched a high-risk injection policy.",
+        "reasonCode": "PROMPT_INJECTION_DETECTED"
       },
       {
         "id": "warn_injection_request",

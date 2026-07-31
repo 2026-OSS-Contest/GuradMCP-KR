@@ -1,15 +1,16 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { extname, join, normalize, relative } from "node:path";
 import { parse } from "yaml";
-import { isSafePolicyRegex } from "../packages/policy-engine/src/index.js";
+import { isSafePolicyRegex, reasonCodes } from "../packages/policy-engine/src/index.js";
 
 const root = "policy-packs";
 const allowedActions = new Set(["allow", "warn", "require_approval", "block", "mask_then_allow"]);
 const allowedSeverities = new Set(["info", "low", "medium", "high", "critical"]);
 const allowedDirections = new Set(["request", "response", "any"]);
 const allowedTrust = new Set(["trusted", "limited", "untrusted", "any"]);
+const allowedReasonCodes = new Set<string>(reasonCodes);
 const manifestFields = new Set(["name", "version", "description", "dsl_version", "default_action", "evaluation_strategy", "extends", "policies"]);
-const policyFields = new Set(["id", "pack", "version", "description", "priority", "match", "action", "severity", "message", "enabled", "approval"]);
+const policyFields = new Set(["id", "pack", "version", "description", "priority", "match", "action", "severity", "message", "reasonCode", "enabled", "approval"]);
 const matchFields = new Set(["direction", "tool", "server_trust", "args", "detections", "risk_score"]);
 const detectionFields = new Set(["any_of", "all_of", "none_of"]);
 const riskFields = new Set(["gte", "lte"]);
@@ -64,6 +65,7 @@ for (const packName of await directoryNames(root)) {
     if (policy.enabled !== undefined && typeof policy.enabled !== "boolean") failures.push(`${path}: enabled must be boolean`);
     if (policy.description !== undefined && typeof policy.description !== "string") failures.push(`${path}: description must be a string`);
     if (policy.message !== undefined && typeof policy.message !== "string") failures.push(`${path}: message must be a string`);
+    if (policy.reasonCode !== undefined && !allowedReasonCodes.has(String(policy.reasonCode))) failures.push(`${path}: invalid reasonCode ${String(policy.reasonCode)}`);
     if (!isInteger(policy.priority) || policy.priority < 0) failures.push(`${path}: priority must be a non-negative integer`);
     if (!isRecord(policy.match) || Object.keys(policy.match).length === 0) failures.push(`${path}: match must be a non-empty object`);
     validateMatch(path, policy.match);
