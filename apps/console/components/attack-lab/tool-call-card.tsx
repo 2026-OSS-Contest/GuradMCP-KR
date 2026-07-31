@@ -1,13 +1,20 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import type { ToolCallCard as ToolCall } from "@/lib/api/types";
+import type { ToolCallCard as ToolCall, Verdict } from "@/lib/api/types";
 import { VerdictBadge } from "@/components/verdict-badge";
 import { Tag } from "@/components/ui/tag";
+import { SealBlockIcon, SealRequireApprovalIcon } from "./seal-icons";
 import { cn } from "@/lib/utils";
 
 /** The caret the design puts before every call name. */
 const Caret = () => <span className="flex-none text-grayscale-300">▶</span>;
+
+/** Only a ruling the gateway acted on is stamped — the seal has these two variants. */
+const SEALS: Partial<Record<Verdict, typeof SealBlockIcon>> = {
+  block: SealBlockIcon,
+  require_approval: SealRequireApprovalIcon
+};
 
 /**
  * One Tool Call Card in a run pane (spec §5.2 no.3). Three shapes: a call that ran (with the
@@ -28,15 +35,26 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
   }
 
   const blocked = call.verdict === "block";
+  const Seal = call.verdict ? SEALS[call.verdict] : undefined;
 
   return (
     <li
       className={cn(
-        "flex flex-col gap-2 rounded-lg bg-(--primitive-opacity-white-alpha-6) p-3",
+        "relative flex flex-col gap-2 rounded-lg bg-(--primitive-opacity-white-alpha-6) p-3",
         // The blocked card carries the verdict's tint, which is what the eye lands on first.
         blocked && "bg-(--primitive-opacity-block-alpha-6) shadow-[inset_0_0_0_1px_var(--primitive-opacity-block-alpha-10)]"
       )}
     >
+      {/* Stamped over the card the gateway ruled against. Cards arrive one at a time, so only
+          one seal is ever landing at once. */}
+      {Seal && (
+        <Seal
+          // Anchored below the title row so the call's timestamp stays readable beside it.
+          className="verdict-seal motion-reduce:animate-none pointer-events-none absolute right-3 bottom-2 size-12"
+          data-testid={`seal-${call.verdict}`}
+          aria-hidden
+        />
+      )}
       <div className="flex items-start gap-2">
         <Caret />
         <span className="min-w-0 flex-1 font-mono text-body-mono-b2-rg break-all text-grayscale-white">

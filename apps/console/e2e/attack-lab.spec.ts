@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 // SCR-201 Attack Lab. The dev server mocks `/attacklab/scenarios` and `/attacklab/run/{id}`
 // (see `mocks/`), so these exercise the same contracts the control plane will serve once the
@@ -8,7 +8,7 @@ const UNGUARDED = "미적용 (Vulnerable)";
 const GUARDED = "적용 (Guarded)";
 
 /** Opens the picker and chooses a runnable scenario. */
-async function pick(page: import("@playwright/test").Page, id: string) {
+async function pick(page: Page, id: string) {
   await page.getByRole("button", { name: /시나리오 선택|T-0/ }).click();
   await page.getByRole("option", { name: new RegExp(id) }).click();
 }
@@ -59,6 +59,20 @@ test("SCR-201 a guarded run shows the verdict, policy, risk score and the broken
   await expect(pane.getByText(/호출 안 됨 – 선행 호출 차단으로 체인 중단/)).toBeVisible();
   // The pane reports where the calls went.
   await expect(pane.getByText("GuardMCP 경유")).toBeVisible();
+  // The verdict seal is stamped over the card the gateway ruled against.
+  await expect(pane.getByTestId("seal-block")).toBeVisible();
+});
+
+test("SCR-201 stamps the approval seal when a call needs one", async ({ page }) => {
+  await page.goto("/demo");
+  await pick(page, "T-02");
+  const pane = page.getByRole("region", { name: GUARDED });
+
+  await page.getByRole("button", { name: "적용 실행", exact: true }).click();
+
+  // T-02 ends on an approval rather than a block, so it carries the other seal variant.
+  await expect(pane.getByTestId("seal-require_approval")).toBeVisible();
+  await expect(pane.getByText("approve_external_email")).toBeVisible();
 });
 
 test("SCR-201 an unguarded run exposes the payload it leaked", async ({ page }) => {
