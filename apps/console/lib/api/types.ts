@@ -194,8 +194,6 @@ export interface AttackScenario {
   /** `T-01` … `T-08`. */
   id: string;
   title: string;
-  /** One line describing what the scenario attempts. */
-  summary: string;
   /** Not runnable yet — the picker lists it as 준비 중 and refuses to select it. */
   available: boolean;
 }
@@ -204,18 +202,51 @@ export interface AttackScenariosResponse {
   scenarios: AttackScenario[];
 }
 
+/** One line of the payload an unguarded call leaked, e.g. `OPENAI_API_KEY = sk-…`. */
+export interface PayloadLine {
+  key: string;
+  value: string;
+  /** Rendered as an exposed secret — the point the unguarded pane is making. */
+  secret?: boolean;
+}
+
 /** One Tool Call Card in a run pane (spec §5.2 no.3). */
 export interface ToolCallCard {
   id: string;
   at: string;
   tool: string;
-  /** The call's subject — a path, host or recipient. */
-  target?: string;
-  verdict: Verdict;
-  /** Why the gateway ruled this way; absent when the guard was not applied. */
-  reason?: string;
-  /** The policy that decided it, shown as a chip. */
+  /** Argument shown beside the tool name, e.g. `".env"` or `to: attacker@evilexample.com`. */
+  args?: string;
+  /** Unguarded outcome line, e.g. `실행됨 · 토큰 노출`. */
+  note?: string;
+  /** What the call leaked, shown as a code block under the note. */
+  payload?: PayloadLine[];
+  /** Guarded verdict row: the badge, the deciding policy and the risk score. */
+  verdict?: Verdict;
   policy?: string;
+  riskScore?: number;
+  /** Never called because an earlier call was blocked — drawn dashed and dimmed. */
+  skippedReason?: string;
+}
+
+/** A row of the 실시간 스트림 table under the panes. */
+export interface StreamRow {
+  id: string;
+  at: string;
+  tool: string;
+  verdict: Verdict;
+  /** Secondary subject shown next to the verdict, e.g. `readme.md`. */
+  target?: string;
+  /** 위험 점수 (SSE). */
+  risk: number;
+}
+
+/** Verdict tallies for the shared result strip. */
+export interface RunSummary {
+  block: number;
+  warn: number;
+  require_approval: number;
+  allow: number;
 }
 
 /** A finished run of one scenario in one mode. */
@@ -223,13 +254,9 @@ export interface AttackRun {
   runId: string;
   scenarioId: string;
   mode: AttackRunMode;
-  /** What the run ended in — the seal stamped over the pane (spec §5.2 no.4). */
-  outcome: "leaked" | "blocked";
   calls: ToolCallCard[];
-  blocked: number;
-  masked: number;
-  /** Wall-clock duration the summary strip reports. */
-  elapsedMs: number;
+  summary: RunSummary;
+  stream: StreamRow[];
   /** Recorded session, for the Replay deep link on the summary strip. */
   sessionId: string;
 }

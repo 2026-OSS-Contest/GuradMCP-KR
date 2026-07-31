@@ -28,23 +28,3 @@
   animation: event-tint 1.5s ease-out;
 }
 
-/* The Attack Lab verdict seal lands like a rubber stamp once a run finishes (spec §5.2 no.4).
-   Pair with `motion-reduce:animate-none` so it simply appears for reduced-motion users. */
-@keyframes verdict-seal {
-  from {
-    opacity: 0;
-    transform: rotate(-16deg) scale(1.8);
-  }
-  60% {
-    opacity: 1;
-    transform: rotate(-12deg) scale(0.94);
-  }
-  to {
-    opacity: 1;
-    transform: rotate(-12deg) scale(1);
-  }
-}
-
-@utility verdict-seal {
-  animation: verdict-seal 420ms cubic-bezier(0.2, 0.8, 0.3, 1);
-}
