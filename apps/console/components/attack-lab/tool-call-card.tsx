@@ -44,7 +44,9 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
       className={cn(
         "relative flex flex-col gap-2 rounded-lg bg-(--primitive-opacity-white-alpha-6) p-3",
         // The blocked card carries the verdict's tint, which is what the eye lands on first.
-        blocked && "bg-(--primitive-opacity-block-alpha-6) shadow-[inset_0_0_0_1px_var(--primitive-opacity-block-alpha-10)]"
+        blocked && "bg-(--primitive-opacity-block-alpha-6) shadow-[inset_0_0_0_1px_var(--primitive-opacity-block-alpha-10)]",
+        // Keep the copy clear of the seal, which is absolutely placed over the card's right side.
+        seal && "pr-16"
       )}
     >
       {/* Stamped over the card the gateway ruled against. Cards arrive one at a time, so only

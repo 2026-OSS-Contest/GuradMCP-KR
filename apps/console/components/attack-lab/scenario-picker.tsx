@@ -74,7 +74,9 @@ export function ScenarioPicker({
   };
 
   return (
-    <div ref={ref} className="relative min-w-0 flex-1">
+    // The design keeps the picker at its own width and lets the run buttons sit at the far
+    // right, rather than stretching it across the row.
+    <div ref={ref} className="relative w-full max-w-100 min-w-0">
       <button
         ref={triggerRef}
         type="button"

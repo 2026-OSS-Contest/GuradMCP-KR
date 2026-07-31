@@ -97,9 +97,12 @@ export function AttackLab() {
 
   return (
     <div data-scr="SCR-201" className="flex flex-1 flex-col gap-4 px-8 py-6">
-      <div className="flex flex-none flex-wrap items-center gap-3">
+      {/* One row down to 1024, the narrowest frame the design draws. */}
+      <div className="flex flex-none items-center gap-3">
         <span className="flex-none text-body-text-b2-md text-grayscale-300">{t("scenario")}</span>
         <ScenarioPicker scenarios={list} selected={selected} onSelect={select} disabled={busy} />
+        {/* Run controls sit at the far right of the row (spec §5.2). */}
+        <span className="ml-auto flex flex-none items-center gap-3">
         {MODES.map((mode) => {
           const guarded = mode === "guarded";
           const disabled = busy || !selected;
@@ -124,6 +127,7 @@ export function AttackLab() {
             </button>
           );
         })}
+        </span>
       </div>
 
       {/* Sandbox notice (spec §5.2): the unguarded run never touches anything real. */}
