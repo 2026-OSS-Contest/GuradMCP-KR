@@ -12,11 +12,12 @@ import { cn } from "@/lib/utils";
 /** Spec §5.6: the countdown starts flashing once the call has less than this left. */
 const WARN_AT_MS = 20_000;
 
+// Straight off the design: red-700 / yellow-600 grounds, white type on both.
 const TAG_TONE: Record<string, string> = {
   SECRET: "bg-red-700 text-grayscale-white",
   RRN: "bg-red-700 text-grayscale-white",
-  PHONE: "bg-yellow-400 text-grayscale-black",
-  INJECTION: "bg-yellow-400 text-grayscale-black"
+  PHONE: "bg-yellow-600 text-grayscale-white",
+  INJECTION: "bg-yellow-600 text-grayscale-white"
 };
 
 function remainingMs(expiresAt: string): number {
