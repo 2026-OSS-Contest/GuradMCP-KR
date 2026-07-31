@@ -6,10 +6,11 @@
 // precedent in `@guardmcp/policy-engine` (types.ts), the real detector output
 // wins; spans are normalized to the `{ start, end }` shape only at the
 // GuardEvent boundary (see `buildGuardEvent` in actionRouter.ts).
-import type { Action, Direction, Severity, ServerTrust } from "@guardmcp/policy-engine";
+import type { Action, Direction, ReasonCode, Severity, ServerTrust } from "@guardmcp/policy-engine";
 import type { Detection } from "../detect.js";
+import type { GuardBlockError } from "../errors/guard-block-error.js";
 
-export type { Action, Direction, Severity, ServerTrust };
+export type { Action, Direction, ReasonCode, Severity, ServerTrust, GuardBlockError };
 
 /** Everything the router needs about the Tool Call being routed. */
 export interface ToolCallContext {
@@ -34,18 +35,6 @@ export interface PolicyDecision {
     timeoutSeconds: number;
     onTimeout: "block";
     allowMaskedApproval: boolean;
-  };
-}
-
-/** FR-GW-05 standard block error. Never carries raw detected text or spans. */
-export interface GuardBlockError {
-  error: {
-    code: "GUARD_BLOCKED";
-    policyId: string;
-    policyIds: string[];
-    reasonCode: string;
-    severity: string;
-    message: string;
   };
 }
 
