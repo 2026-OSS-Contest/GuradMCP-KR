@@ -139,6 +139,27 @@
       "stop": "Stop revealing"
     }
   },
+  "attackLab": {
+    "pickScenario": "Choose an attack scenario",
+    "comingSoon": "Coming soon",
+    "runUnguarded": "Run unguarded",
+    "runGuarded": "Run guarded",
+    "running": "Running…",
+    "sandboxNotice": "Runs execute in an isolated sandbox and never reach a real upstream server.",
+    "runError": "Could not run the scenario. Check the gateway connection, then run it again.",
+    "paneUnguarded": "Unguarded (no GuardMCP)",
+    "paneGuarded": "Guarded (GuardMCP on)",
+    "paneUnguardedHint": "Every tool call goes straight through.",
+    "paneGuardedHint": "Policy verdicts intercept the tool calls.",
+    "paneIdle": "Results appear here once you start a run.",
+    "sealBlocked": "Blocked",
+    "sealLeaked": "Leaked",
+    "decidedBy": "Decided by",
+    "summaryBlocked": "{count} blocked",
+    "summaryMasked": "{count} masked",
+    "summaryElapsed": "{seconds}s elapsed",
+    "openInReplay": "Open in Replay"
+  },
   "screens": {
     "gateway": {
       "title": "Gateway",

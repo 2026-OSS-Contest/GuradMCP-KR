@@ -182,6 +182,58 @@ export interface SessionsResponse {
   sessions: SessionSummary[];
 }
 
+// ── SCR-201 Attack Lab (spec §5.2) ──────────────────────────────────────────
+// `GET /attacklab/scenarios` and `POST /attacklab/run/{id}`. The control plane accepts the run
+// today but only records it as queued — executing it and returning the calls below is the Attack
+// Lab runner's job (GMCP-55), so the mock serves a completed run in the meantime.
+
+/** Guard off (취약) versus guard on (보호) — the two panes the run is compared across. */
+export type AttackRunMode = "unguarded" | "guarded";
+
+export interface AttackScenario {
+  /** `T-01` … `T-08`. */
+  id: string;
+  title: string;
+  /** One line describing what the scenario attempts. */
+  summary: string;
+  /** Not runnable yet — the picker lists it as 준비 중 and refuses to select it. */
+  available: boolean;
+}
+
+export interface AttackScenariosResponse {
+  scenarios: AttackScenario[];
+}
+
+/** One Tool Call Card in a run pane (spec §5.2 no.3). */
+export interface ToolCallCard {
+  id: string;
+  at: string;
+  tool: string;
+  /** The call's subject — a path, host or recipient. */
+  target?: string;
+  verdict: Verdict;
+  /** Why the gateway ruled this way; absent when the guard was not applied. */
+  reason?: string;
+  /** The policy that decided it, shown as a chip. */
+  policy?: string;
+}
+
+/** A finished run of one scenario in one mode. */
+export interface AttackRun {
+  runId: string;
+  scenarioId: string;
+  mode: AttackRunMode;
+  /** What the run ended in — the seal stamped over the pane (spec §5.2 no.4). */
+  outcome: "leaked" | "blocked";
+  calls: ToolCallCard[];
+  blocked: number;
+  masked: number;
+  /** Wall-clock duration the summary strip reports. */
+  elapsedMs: number;
+  /** Recorded session, for the Replay deep link on the summary strip. */
+  sessionId: string;
+}
+
 export interface TimelineResponse {
   events: TimelineEvent[];
   /** Full detail for each event id the panel can select. */
