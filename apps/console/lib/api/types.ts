@@ -261,6 +261,42 @@ export interface AttackRun {
   sessionId: string;
 }
 
+// ── SCR-401 Detector (spec §5.4) ────────────────────────────────────────────
+// `POST /detect/preview`, which the control plane already serves. Its own vocabulary is the
+// OpenAPI `GuardAction`/`Severity`, so these mirror the wire format rather than the UI's
+// `Verdict`; `toVerdict()` in `lib/verdict.ts` bridges the two.
+
+/** The control plane's verdict vocabulary. `mask_then_allow` is the UI's `warn`. */
+export type GuardAction = "allow" | "mask_then_allow" | "require_approval" | "block";
+export type Severity = "low" | "medium" | "high" | "critical";
+
+/** Which side of a tool call the text came from — the policies differ by direction. */
+export type DetectDirection = "request" | "response";
+
+export interface DetectionFinding {
+  policyId: string;
+  action: GuardAction;
+  severity: Severity;
+  matchedText: string;
+  /** Character offsets into the submitted text, which drive the inline highlight. */
+  start: number;
+  end: number;
+  /**
+   * Detector label shown as the tag and substituted into the masked text (PHONE, RRN, SECRET).
+   * The control plane does not report one yet, so the screen derives it from `policyId`.
+   */
+  type?: string;
+  /** 0–100. Absent until the control plane reports it, and then simply not shown. */
+  confidence?: number;
+}
+
+export interface DetectionPreview {
+  verdict: GuardAction;
+  findings: DetectionFinding[];
+  /** The text with every finding replaced — the right-hand 마스킹 결과 pane. */
+  maskedText: string;
+}
+
 export interface TimelineResponse {
   events: TimelineEvent[];
   /** Full detail for each event id the panel can select. */

@@ -167,6 +167,28 @@
     "colVerdict": "판정",
     "colRisk": "위험 점수 (SSE)"
   },
+  "detector": {
+    "direction": "방향",
+    "directionHint": "방향별 기본 정책 강도가 다릅니다.",
+    "inputLabel": "검사할 텍스트",
+    "placeholder": "검사하고 싶은 텍스트를 입력해주세요",
+    "notStored": "입력한 텍스트는 저장되지 않습니다.",
+    "sample": {
+      "pii": "한국형 PII 샘플",
+      "secret": "SECRET 샘플",
+      "injection": "인젝션 샘플"
+    },
+    "run": "검사 실행",
+    "running": "검사 중…",
+    "findings": "탐지 결과",
+    "maskedResult": "마스킹 결과",
+    "emptyTitle": "텍스트를 입력 후 검사 실행 버튼을 클릭하세요.",
+    "emptyBody": "탐지를 원하는 내용을 입력하면 예상 보안 위기를 탐지하고 마스킹 결과까지 도출해줍니다.",
+    "noFindings": "탐지된 항목이 없습니다. 다른 텍스트로 다시 검사해 보세요.",
+    "copy": "마스킹 결과 복사",
+    "copied": "복사했습니다.",
+    "error": "검사를 실행하지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 실행하세요."
+  },
   "screens": {
     "gateway": {
       "title": "Gateway",

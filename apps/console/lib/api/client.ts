@@ -2,6 +2,8 @@ import type {
   AttackRun,
   AttackRunMode,
   AttackScenariosResponse,
+  DetectDirection,
+  DetectionPreview,
   Overview,
   PolicyDetail,
   RecentEventsResponse,
@@ -33,6 +35,17 @@ async function post<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(`${BASE}/api/v1${path}`, {
+    method: "POST",
+    signal,
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) throw new ApiError(response.status, response.statusText);
+  return (await response.json()) as T;
+}
+
 export const getOverview = (signal?: AbortSignal) => get<Overview>("/overview", signal);
 export const getServers = (signal?: AbortSignal) => get<ServersResponse>("/servers", signal);
 export const getRecentEvents = (signal?: AbortSignal) => get<RecentEventsResponse>("/events/recent", signal);
@@ -51,3 +64,11 @@ export const getAttackScenarios = (signal?: AbortSignal) =>
 /** Runs one scenario with the guard off or on; resolves once the run has finished. */
 export const runAttackScenario = (id: string, mode: AttackRunMode, signal?: AbortSignal) =>
   post<AttackRun>(`/attacklab/run/${encodeURIComponent(id)}?mode=${mode}`, signal);
+
+/**
+ * SCR-401 Detector (spec §5.4). The control plane serves this one for real. `direction` rides
+ * as a query parameter rather than in the body: the endpoint does not read it yet and an unknown
+ * body field would be rejected, whereas an unbound query parameter is simply ignored.
+ */
+export const previewDetection = (text: string, direction: DetectDirection, signal?: AbortSignal) =>
+  postJson<DetectionPreview>(`/detect/preview?direction=${direction}`, { text }, signal);
