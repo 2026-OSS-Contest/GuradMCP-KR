@@ -76,7 +76,9 @@ export function ScenarioPicker({
   return (
     // The design keeps the picker at its own width and lets the run buttons sit at the far
     // right, rather than stretching it across the row.
-    <div ref={ref} className="relative w-full max-w-100 min-w-0">
+    // Design width is 339px around a 240px title; a little more keeps the longest title from
+    // truncating under the browser's SUIT metrics.
+    <div ref={ref} className="relative w-full max-w-92 min-w-0">
       <button
         ref={triggerRef}
         type="button"
@@ -91,7 +93,7 @@ export function ScenarioPicker({
         aria-expanded={open}
         aria-haspopup="listbox"
         className={cn(
-          "inline-flex h-12 w-full items-center gap-3 rounded-lg bg-grayscale-900 px-4 text-left transition-colors hover:bg-white/10",
+          "inline-flex h-10 w-full items-center gap-3 rounded-xl bg-grayscale-900 px-4 text-left transition-colors hover:bg-white/10",
           open && "bg-white/10",
           disabled && "cursor-not-allowed opacity-50 hover:bg-grayscale-900"
         )}

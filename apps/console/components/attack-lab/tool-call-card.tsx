@@ -28,7 +28,7 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
   // A call the chain never reached — drawn dashed and dimmed, with the reason inline.
   if (call.skippedReason) {
     return (
-      <li className="flex items-center gap-2 rounded-lg border border-dashed border-(--primitive-opacity-white-alpha-25) px-3 py-2 opacity-50">
+      <li className="flex items-center gap-2 rounded-xl border border-dashed border-(--primitive-opacity-white-alpha-25) px-3 py-2 opacity-50">
         <Caret />
         <span className="flex-none font-mono text-body-mono-b2-rg text-grayscale-300">{call.tool}</span>
         <span className="min-w-0 text-caption-text-c-rg text-grayscale-400">· {call.skippedReason}</span>
@@ -42,7 +42,7 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
   return (
     <li
       className={cn(
-        "relative flex flex-col gap-2 rounded-lg bg-(--primitive-opacity-white-alpha-6) p-3",
+        "relative flex flex-col gap-2 rounded-xl bg-(--primitive-opacity-white-alpha-6) p-3",
         // The blocked card carries the verdict's tint, which is what the eye lands on first.
         blocked && "bg-(--primitive-opacity-block-alpha-6) shadow-[inset_0_0_0_1px_var(--primitive-opacity-block-alpha-10)]",
         // Keep the copy clear of the seal, which is absolutely placed over the card's right side.

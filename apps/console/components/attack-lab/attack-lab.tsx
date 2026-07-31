@@ -103,30 +103,30 @@ export function AttackLab() {
         <ScenarioPicker scenarios={list} selected={selected} onSelect={select} disabled={busy} />
         {/* Run controls sit at the far right of the row (spec §5.2). */}
         <span className="ml-auto flex flex-none items-center gap-3">
-        {MODES.map((mode) => {
-          const guarded = mode === "guarded";
-          const disabled = busy || !selected;
-          return (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => selected && void start(mode, selected.id)}
-              disabled={disabled}
-              aria-label={t(guarded ? "runGuarded" : "runUnguarded")}
-              className={cn(
-                "flex h-12 w-32 flex-none items-center justify-center rounded-lg text-body-text-b2-md text-grayscale-white transition-colors",
-                guarded ? "bg-blue-800 hover:bg-blue-700" : "bg-grayscale-800 hover:bg-grayscale-700",
-                disabled && "cursor-not-allowed opacity-50"
-              )}
-            >
-              {running === mode ? (
-                <Loader2 className="size-5 animate-spin motion-reduce:animate-none" aria-hidden />
-              ) : (
-                t(guarded ? "runGuarded" : "runUnguarded")
-              )}
-            </button>
-          );
-        })}
+          {MODES.map((mode) => {
+            const guarded = mode === "guarded";
+            const disabled = busy || !selected;
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => selected && void start(mode, selected.id)}
+                disabled={disabled}
+                aria-label={t(guarded ? "runGuarded" : "runUnguarded")}
+                className={cn(
+                  "flex h-10 flex-none items-center justify-center rounded-xl px-5 text-body-text-b2-md text-grayscale-white transition-colors",
+                  guarded ? "bg-blue-800 hover:bg-blue-700" : "bg-grayscale-800 hover:bg-grayscale-700",
+                  disabled && "cursor-not-allowed opacity-50"
+                )}
+              >
+                {running === mode ? (
+                  <Loader2 className="size-5 animate-spin motion-reduce:animate-none" aria-hidden />
+                ) : (
+                  t(guarded ? "runGuarded" : "runUnguarded")
+                )}
+              </button>
+            );
+          })}
         </span>
       </div>
 

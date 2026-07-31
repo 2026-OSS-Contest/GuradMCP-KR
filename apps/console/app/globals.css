@@ -28,6 +28,27 @@
   animation: event-tint 1.5s ease-out;
 }
 
+/* `Proto/Shimmer` from the design: a pane sweeps this gradient while its run is in flight. */
+@keyframes pane-shimmer {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@utility pane-shimmer {
+  background: linear-gradient(
+    180deg,
+    rgba(252, 252, 253, 0) 0%,
+    rgba(252, 252, 253, 0.06) 10%,
+    rgba(252, 252, 253, 0.1) 33%,
+    rgba(252, 252, 253, 0) 100%
+  );
+  animation: pane-shimmer 1.6s ease-in-out infinite;
+}
+
 /* The Attack Lab verdict seal lands like a rubber stamp when its card arrives (spec §5.2).
    Pair with `motion-reduce:animate-none` so it simply appears for reduced-motion users. */
 @keyframes verdict-seal {

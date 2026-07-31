@@ -35,7 +35,7 @@ export function SummaryStrip({ summary, sessionId }: { summary: RunSummary | und
   const tVerdict = useTranslations("verdict");
 
   return (
-    <div className="flex flex-none flex-wrap items-center gap-x-6 gap-y-2 rounded-lg bg-grayscale-900 px-4 py-3">
+    <div className="flex flex-none flex-wrap items-center gap-x-6 gap-y-2 rounded-xl bg-grayscale-900 px-4 py-3">
       <span className="flex-none text-body-text-b3-md text-grayscale-300">{t("resultSummary")}</span>
 
       {ITEMS.map(({ verdict, key, Icon, tone }) => (
@@ -50,7 +50,7 @@ export function SummaryStrip({ summary, sessionId }: { summary: RunSummary | und
         {sessionId ? (
           <Link
             href={`/replay/${sessionId}`}
-            className="inline-flex h-10 items-center gap-1 rounded-lg bg-(--primitive-opacity-white-alpha-10) px-4 text-body-text-b3-md text-grayscale-white transition-colors hover:bg-white/20"
+            className="inline-flex h-8 items-center gap-1 rounded-lg bg-(--primitive-opacity-white-alpha-10) px-4 text-body-text-b3-md text-grayscale-white transition-colors hover:bg-white/20"
           >
             {t("openInReplay")}
             <CtaChevronIcon className="h-5 w-4 flex-none" aria-hidden />
@@ -58,7 +58,7 @@ export function SummaryStrip({ summary, sessionId }: { summary: RunSummary | und
         ) : (
           <span
             aria-disabled
-            className="inline-flex h-10 cursor-not-allowed items-center gap-1 rounded-lg bg-(--primitive-opacity-white-alpha-6) px-4 text-body-text-b3-md text-grayscale-400 opacity-50"
+            className="inline-flex h-8 cursor-not-allowed items-center gap-1 rounded-lg bg-(--primitive-opacity-white-alpha-6) px-4 text-body-text-b3-md text-grayscale-400 opacity-50"
           >
             {t("openInReplay")}
             <CtaChevronIcon className="h-5 w-4 flex-none" aria-hidden />

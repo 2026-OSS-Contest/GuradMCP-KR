@@ -14,7 +14,7 @@ export function StreamTable({ rows }: { rows: StreamRow[] }) {
   const t = useTranslations("attackLab");
 
   return (
-    <section aria-label={t("liveStream")} className="flex flex-none flex-col gap-3 rounded-lg bg-grayscale-900 p-4">
+    <section aria-label={t("liveStream")} className="flex flex-none flex-col gap-3 rounded-xl bg-grayscale-900 p-4">
       <h2 className="text-body-text-b3-md text-grayscale-300">{t("liveStream")}</h2>
 
       {rows.length === 0 ? (

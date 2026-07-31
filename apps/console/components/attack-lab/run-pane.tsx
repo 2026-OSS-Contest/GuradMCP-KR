@@ -49,7 +49,11 @@ export function RunPane({
         </span>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col rounded-lg bg-grayscale-900 p-3">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-grayscale-900 p-3">
+        {/* `Proto/Shimmer`: the pane sweeps while its own run is still coming back. */}
+        {running && (
+          <span className="pane-shimmer motion-reduce:animate-none pointer-events-none absolute inset-0" aria-hidden />
+        )}
         {failed ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
             <span className="flex size-10 items-center justify-center rounded-full bg-(--primitive-opacity-white-alpha-10)">
