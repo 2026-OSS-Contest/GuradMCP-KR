@@ -1,0 +1,10 @@
+id: korean_pii_disabled_example
+pack: korean-pii
+priority: 310
+enabled: false
+match:
+  direction: response
+  tool: disabled_tool
+action: warn
+severity: low
+message: This policy is individually disabled to exercise the enabled:false path.

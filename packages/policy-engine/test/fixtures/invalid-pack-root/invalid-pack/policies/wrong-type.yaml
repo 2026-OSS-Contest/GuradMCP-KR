@@ -1,0 +1,8 @@
+# Intentionally invalid: priority is present but not a number.
+id: wrong_type_example
+pack: invalid-pack
+priority: high
+match:
+  tool: '*'
+action: warn
+severity: low

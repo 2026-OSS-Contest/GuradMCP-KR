@@ -1,0 +1,6 @@
+# Intentionally invalid: required fields `priority` and `severity` are missing.
+id: missing_required_fields_example
+pack: invalid-pack
+match:
+  tool: read_file
+action: warn

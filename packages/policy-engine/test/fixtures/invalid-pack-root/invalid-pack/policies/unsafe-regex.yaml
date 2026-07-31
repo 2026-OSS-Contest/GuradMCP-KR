@@ -1,0 +1,9 @@
+# Intentionally invalid: catastrophic-backtracking regex, rejected at load time.
+id: unsafe_regex_example
+pack: invalid-pack
+priority: 600
+match:
+  args:
+    value_regex: '(a|aa)+$'
+action: warn
+severity: low

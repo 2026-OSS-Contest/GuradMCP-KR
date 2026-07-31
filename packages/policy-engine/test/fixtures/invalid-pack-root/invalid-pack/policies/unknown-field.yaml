@@ -1,0 +1,9 @@
+# Intentionally invalid: `unexpected_field` is not part of the policy schema.
+id: unknown_field_example
+pack: invalid-pack
+priority: 100
+match:
+  tool: '*'
+action: warn
+severity: low
+unexpected_field: true

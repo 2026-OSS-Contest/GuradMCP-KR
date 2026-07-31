@@ -1,0 +1,7 @@
+id: bad_syntax_example
+pack: invalid-pack
+priority: 100
+match:
+	tool: read_file
+action: warn
+severity: low

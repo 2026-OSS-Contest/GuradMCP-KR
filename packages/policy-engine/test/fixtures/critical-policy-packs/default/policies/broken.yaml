@@ -1,0 +1,7 @@
+id: broken_default_policy
+pack: default
+priority: 100
+match:
+  tool: read_file
+action: blck
+severity: critical

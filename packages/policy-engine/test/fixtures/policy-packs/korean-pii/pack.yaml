@@ -1,0 +1,9 @@
+name: korean-pii
+version: 1.0.0
+description: Fixture korean-pii pack
+dsl_version: 1
+default_action: allow
+evaluation_strategy: severity-max
+policies:
+  - policies/mask-korean-pii-response.yaml
+  - policies/disabled-policy.yaml

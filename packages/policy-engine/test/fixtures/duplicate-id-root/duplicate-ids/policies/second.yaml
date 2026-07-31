@@ -1,0 +1,7 @@
+id: dup_policy_id
+pack: duplicate-ids
+priority: 200
+match:
+  tool: other_tool
+action: block
+severity: high

@@ -1,0 +1,9 @@
+name: duplicate-ids
+version: 1.0.0
+description: Fixture pack for duplicate id detection
+dsl_version: 1
+default_action: allow
+evaluation_strategy: severity-max
+policies:
+  - policies/first.yaml
+  - policies/second.yaml

@@ -1,0 +1,8 @@
+# Intentionally invalid: action require_approval needs an `approval` block.
+id: missing_approval_example
+pack: invalid-pack
+priority: 100
+match:
+  tool: send_email
+action: require_approval
+severity: high

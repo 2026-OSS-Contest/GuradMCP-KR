@@ -1,0 +1,7 @@
+id: no_manifest_pack_policy
+pack: no-manifest-pack
+priority: 100
+match:
+  tool: '*'
+action: warn
+severity: low

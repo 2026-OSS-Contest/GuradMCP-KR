@@ -1,0 +1,7 @@
+id: broken_manifest_valid_example
+pack: broken-manifest
+priority: 100
+match:
+  tool: '*'
+action: warn
+severity: low

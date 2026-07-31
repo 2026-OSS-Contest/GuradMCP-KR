@@ -1,0 +1,18 @@
+name: invalid-pack
+version: 1.0.0
+description: Fixture pack containing intentionally broken policies
+dsl_version: 1
+default_action: allow
+evaluation_strategy: severity-max
+policies:
+  - policies/bad-action.yaml
+  - policies/missing-fields.yaml
+  - policies/bad-syntax.yaml
+  - policies/out-of-range.yaml
+  - policies/unsafe-regex.yaml
+  - policies/wrong-type.yaml
+  - policies/unknown-field.yaml
+  - policies/missing-approval.yaml
+  - policies/mismatched-pack.yaml
+  - policies/not-an-object.yaml
+  - policies/valid-policy.yaml

@@ -1,0 +1,10 @@
+name: broken-manifest
+version: 1.0.0
+description: Fixture pack whose manifest lists a duplicate entry and a missing file
+dsl_version: 1
+default_action: allow
+evaluation_strategy: severity-max
+policies:
+  - policies/first.yaml
+  - policies/first.yaml
+  - policies/does-not-exist.yaml
