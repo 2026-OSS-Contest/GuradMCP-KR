@@ -16,9 +16,10 @@ const TYPE_BY_POLICY: Record<string, string> = {
   approve_external_email: "EMAIL"
 };
 
+// Straight off the design: red-700 / yellow-600 grounds, white type on both.
 const TAG_TONE: Record<Verdict, string> = {
   block: "bg-red-700 text-grayscale-white",
-  warn: "bg-yellow-400 text-grayscale-black",
+  warn: "bg-yellow-600 text-grayscale-white",
   require_approval: "bg-(--primitive-opacity-require-approval-alpha-25) text-violet-100",
   allow: "bg-(--primitive-opacity-allow-alpha-10) text-verdict-allow"
 };
