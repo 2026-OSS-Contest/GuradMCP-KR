@@ -6,7 +6,7 @@ import { createAutoExpireApprovalBackend } from "./approval/backend.js";
 import { detect, mask, type Detection } from "./detect.js";
 import { routeByVerdict, type RouterDeps } from "./pipeline/actionRouter.js";
 import { metricsSnapshot, recordInspection } from "./pipeline/metrics.js";
-import type { PolicyDecision } from "./pipeline/types.js";
+import type { GuardBlockError, PolicyDecision } from "./pipeline/types.js";
 import { scoreRisk } from "./risk.js";
 import { runtimePolicyPacks } from "./policies.generated.js";
 
@@ -88,7 +88,7 @@ async function handleMcp(body: Record<string, unknown>, response: ServerResponse
       routerDeps
     );
     if (routed.verdict === "block") {
-      send(response, 200, rpcError(id, -32002, "GuardMCP blocked unsafe tool metadata", routed.error.error));
+      send(response, 200, rpcBlockError(id, routed.error));
       return;
     }
     send(response, 200, { jsonrpc: "2.0", id, result: JSON.parse(routed.payload), _guardmcp: legacySummary(decision) });
@@ -112,12 +112,10 @@ async function handleMcp(body: Record<string, unknown>, response: ServerResponse
       routerDeps
     );
     if (requestRouted.verdict === "block") {
-      // require_approval auto-expires to block (no console attached, §4.5) but keeps its own RPC code/message.
-      const code = requestDecision.verdict === "require_approval" ? -32003 : -32001;
-      const message = requestDecision.verdict === "require_approval"
-        ? "Human approval required; the demo gateway fails closed"
-        : "GuardMCP blocked unsafe tool arguments";
-      send(response, 200, rpcError(id, code, message, requestRouted.error.error));
+      // require_approval auto-expires to block (no console attached, §4.5); the standardized
+      // error (FR-GW-05 §3.1) uses one fixed code/message regardless of cause — reasonCode
+      // (APPROVAL_TIMEOUT_BLOCKED vs. the deciding policy's own code) carries the distinction.
+      send(response, 200, rpcBlockError(id, requestRouted.error));
       return;
     }
     const upstream = await upstreamJson(`/tools/call/${encodeURIComponent(tool)}`, {
@@ -133,7 +131,7 @@ async function handleMcp(body: Record<string, unknown>, response: ServerResponse
       routerDeps
     );
     if (responseRouted.verdict === "block") {
-      send(response, 200, rpcError(id, -32002, "GuardMCP blocked unsafe tool output", responseRouted.error.error));
+      send(response, 200, rpcBlockError(id, responseRouted.error));
       return;
     }
     send(response, 200, {
@@ -226,7 +224,10 @@ function toPolicyDecision(result: ReturnType<typeof evaluate>, detections: Detec
     matchedPolicyIds: result.matchedPolicyIds,
     riskScore,
     severity: deciding?.severity ?? "info",
-    reasonCode: deciding ? deciding.id.toUpperCase() : "NO_POLICY_MATCH",
+    // FR-GW-05 §7: an explicit policy `reasonCode` wins; otherwise fall back to the id-derived
+    // token. `buildGuardBlockError` normalizes whatever lands here against the §4 enum, so an
+    // unrecognized fallback (e.g. "BLOCK_ENV_FILE_READ") still resolves to a valid reasonCode.
+    reasonCode: deciding?.reasonCode ?? (deciding ? deciding.id.toUpperCase() : "NO_POLICY_MATCH"),
     message: deciding?.message ?? "No policy matched; the pack's default action was applied.",
     detections,
     ...(deciding?.approval ? {
@@ -296,6 +297,11 @@ function sendReadError(response: ServerResponse, error: unknown, jsonRpc: boolea
 
 function rpcError(id: unknown, code: number, message: string, data?: unknown): Record<string, unknown> {
   return { jsonrpc: "2.0", id, error: data === undefined ? { code, message } : { code, message, data } };
+}
+
+/** FR-GW-05 §3.1: `GuardBlockError` already carries `code`/`message`/`data`, so it *is* the JSON-RPC error object. */
+function rpcBlockError(id: unknown, error: GuardBlockError): Record<string, unknown> {
+  return { jsonrpc: "2.0", id, error };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
