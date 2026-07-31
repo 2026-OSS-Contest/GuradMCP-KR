@@ -39,6 +39,22 @@ export {
 
 export { decide } from "./decide.js";
 
+export type { PolicyLoadError, PolicyLoadErrorLevel } from "./loader/errors.js";
+export { parsePolicyFile, type ParsePolicyFileResult } from "./loader/parsePolicyFile.js";
+export {
+  scanPackDirectories,
+  findManifestPath,
+  listYamlFilesFlat,
+  type PackDirectoryEntry
+} from "./loader/scanPackDirectory.js";
+export {
+  PackRegistry,
+  loadPolicyPacks,
+  type PackState,
+  type PackSummary,
+  type LoadPolicyPacksOptions
+} from "./loader/packRegistry.js";
+
 import type { Action, EvaluationResult, EvaluationStrategy, Policy, PolicyContext } from "./types.js";
 import { matchesPolicy } from "./matcher.js";
 
