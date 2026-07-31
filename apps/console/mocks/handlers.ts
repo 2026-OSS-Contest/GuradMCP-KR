@@ -9,7 +9,7 @@ import type {
   SessionsResponse,
   TimelineResponse
 } from "@/lib/api/types";
-import { EMPTY_OVERVIEW, SERVERS, liveEvent, overviewOf, recentEvents } from "./data";
+import { EMPTY_OVERVIEW, SERVERS, approvals, liveEvent, overviewOf, recentEvents } from "./data";
 import { ATTACK_SCENARIOS, attackRun } from "./attack-lab";
 import { SESSIONS, policyDetail, revealOf, timelineOf } from "./replay";
 import { readScenario } from "./scenario";
@@ -118,9 +118,18 @@ export const handlers = [
       }
       client.send({ event: "guard.event", data: liveEvent(seq) });
       // Move the status-bar pending badge over SSE (spec §4.1): raise one approval, then resolve
-      // it a tick later, so the count visibly changes between the 10s /overview polls.
-      if (seq % 3 === 0) client.send({ event: "approval.created", data: { id: `apr-${seq}` } });
-      else if (seq % 3 === 1) client.send({ event: "approval.resolved", data: { id: `apr-${seq - 1}` } });
+      // it a tick later, so the count visibly changes between the 10s /overview polls. The
+      // ledger moves with the event, so the next /overview agrees with what was just sent.
+      // An empty console has no approvals to raise, so the stream stays quiet there.
+      if (readScenario() !== "empty") {
+        if (seq % 3 === 0) {
+          approvals.raise();
+          client.send({ event: "approval.created", data: { id: `apr-${seq}` } });
+        } else if (seq % 3 === 1) {
+          approvals.resolve();
+          client.send({ event: "approval.resolved", data: { id: `apr-${seq - 1}` } });
+        }
+      }
       seq += 1;
     }, STREAM_INTERVAL_MS);
   })

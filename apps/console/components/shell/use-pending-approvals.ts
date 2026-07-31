@@ -5,35 +5,62 @@ import { createSseClient } from "@/lib/sse";
 import { MOCK_API } from "@/mocks/scenario";
 
 // Same stream the rest of the console consumes: same-origin under the mock, the real gateway
-// when one is configured, and nothing to connect to without either.
+// when one is configured, and nothing to connect to without either. `createSseClient` shares one
+// connection per URL, so the status bar does not add an EventSource to every screen.
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
 const STREAM_URL = API_BASE ? `${API_BASE}/api/v1/events/stream` : MOCK_API ? "/api/v1/events/stream" : null;
+
+/** A `approval.created` (+1) or `approval.resolved` (-1), stamped with when it reached us. */
+interface Change {
+  at: number;
+  delta: number;
+}
 
 /**
  * Live pending-approval count for the SCR-000 status-bar badge (spec §4.1).
  *
- * The 10s `/overview` poll stays authoritative — it seeds the count and reconciles any drift —
- * while `approval.created` / `approval.resolved` events move it in between polls, so the badge
- * reacts the moment an approval is raised or resolved instead of waiting up to ten seconds.
+ * The 10s `/overview` poll stays authoritative and `approval.created` / `approval.resolved`
+ * move the badge in between, so it reacts the moment an approval is raised instead of waiting
+ * out the interval.
+ *
+ * @param polled      the count the last successful poll reported
+ * @param requestedAt when that poll's request was sent — the cut-off for what it can reflect
  */
-export function usePendingApprovals(polled: number, polledAt: Date | undefined): number {
-  const [delta, setDelta] = useState(0);
+export function usePendingApprovals(polled: number, requestedAt: Date | undefined): number {
+  const [changes, setChanges] = useState<Change[]>([]);
 
-  // Every fresh poll is the source of truth; drop the interim SSE delta so it cannot accumulate.
-  useEffect(() => setDelta(0), [polledAt]);
+  // Discard only what the snapshot already counts: a change that landed before its request went
+  // out. Dropping everything would also discard changes that arrived while it was in flight —
+  // the snapshot cannot contain those, and their paired resolve would later subtract from a
+  // count that never included them, leaving the badge wrong until the following poll.
+  const snapshotAt = requestedAt?.getTime();
+  useEffect(() => {
+    if (snapshotAt === undefined) return;
+    setChanges((previous) => {
+      const kept = previous.filter((change) => change.at >= snapshotAt);
+      return kept.length === previous.length ? previous : kept;
+    });
+  }, [snapshotAt]);
 
   useEffect(() => {
     if (!STREAM_URL) return;
     const client = createSseClient({
       url: STREAM_URL,
+      onStatusChange: (status) => {
+        // A drop means an unknown number of missed changes, so anything held is no longer
+        // trustworthy; fall back to the poll until it reports again.
+        if (status === "reconnecting") setChanges([]);
+      },
       onMessage: (message) => {
-        if (message.type === "approval.created") setDelta((d) => d + 1);
-        else if (message.type === "approval.resolved") setDelta((d) => d - 1);
+        const delta = message.type === "approval.created" ? 1 : message.type === "approval.resolved" ? -1 : 0;
+        if (delta === 0) return;
+        setChanges((previous) => [...previous, { at: Date.now(), delta }]);
       }
     });
     return () => client.close();
   }, []);
 
-  // A poll and an unfilled resolved event could momentarily disagree; never show a negative.
+  const delta = changes.reduce((sum, change) => sum + change.delta, 0);
+  // A resolve can still outrun the create it pairs with across a reconnect; never show negative.
   return Math.max(0, polled + delta);
 }

@@ -33,12 +33,18 @@ export function StatusBar() {
   const { Icon, label, text } = STATUS[status];
   const packs = overview.data?.policies.packs ?? [];
   // Seeded by the /overview poll, kept live by approval.created/resolved SSE events (spec §4.1).
-  const pending = usePendingApprovals(overview.data?.pendingApprovals ?? 0, overview.fetchedAt);
+  const pending = usePendingApprovals(overview.data?.pendingApprovals ?? 0, overview.requestedAt);
 
   return (
     <header className="flex h-15 flex-none items-center gap-4 bg-grayscale-950 px-8 shadow-[inset_0_-1px_0_0_var(--primitive-color-grayscale-800)]">
       {/* Centre every cluster on the bar's midline so the status text, policy chips and the
-          session picker share one baseline (they are different heights). */}
+          session picker share one baseline (they are different heights).
+
+          This replaces an earlier bottom-edge alignment: the session picker on the right is
+          centred by the header itself, so aligning only the left cluster to the bottom left the
+          two sides on different lines — measured at 1440, the left labels sat at cy 33.5 against
+          the picker's 30. Centring the row puts every label on cy ≈ 29.5. Worth a designer's
+          confirmation if the bottom edge was deliberate. */}
       <div className="flex flex-1 items-center gap-3">
         <span className={cn("flex flex-none items-center gap-2 text-body-text-b3-md", text)}>
           <Icon className="size-5 flex-none" aria-hidden />

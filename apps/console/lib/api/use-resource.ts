@@ -12,6 +12,11 @@ export interface Resource<T> {
   loading: boolean;
   /** When `data` was last refreshed — shown in the offline banner (spec §5.1 "미연결"). */
   fetchedAt: Date | undefined;
+  /**
+   * When the request behind `data` was sent. Anything that happened before this is already in
+   * the payload, which is what lets a live overlay tell its own stale updates from fresh ones.
+   */
+  requestedAt: Date | undefined;
 }
 
 export interface ResourceOptions {
@@ -32,7 +37,8 @@ export function useResource<T>(load: (signal: AbortSignal) => Promise<T>, option
     data: undefined,
     error: undefined,
     loading: true,
-    fetchedAt: undefined
+    fetchedAt: undefined,
+    requestedAt: undefined
   });
 
   // `load` is normally an inline arrow, so it must not drive the effect.
@@ -44,9 +50,12 @@ export function useResource<T>(load: (signal: AbortSignal) => Promise<T>, option
     const controller = new AbortController();
 
     const run = async () => {
+      // Stamped before the request goes out, so a consumer can tell which live updates the
+      // response could not possibly have accounted for.
+      const requestedAt = new Date();
       try {
         const data = await loadRef.current(controller.signal);
-        if (!cancelled) setState({ data, error: undefined, loading: false, fetchedAt: new Date() });
+        if (!cancelled) setState({ data, error: undefined, loading: false, fetchedAt: new Date(), requestedAt });
       } catch (error) {
         if (cancelled || controller.signal.aborted) return;
         setState((previous) => ({ ...previous, error: error as Error, loading: false }));

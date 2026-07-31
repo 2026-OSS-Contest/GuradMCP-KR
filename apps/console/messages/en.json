@@ -19,7 +19,7 @@
     "expand": "Expand rail",
     "offlineBanner": "The gateway needs to be connected.",
     "lastFetched": "Last checked",
-    "sessionEvents": "{count} events",
+    "sessionEvents": "{count, plural, one {# event} other {# events}}",
     "sessionEmpty": "No recorded sessions yet. Run the demo to create one.",
     "sessionError": "Could not load the session list. Check the gateway connection, then reopen this menu."
   },
