@@ -16,8 +16,29 @@
 export const actions = ["allow", "mask_then_allow", "warn", "require_approval", "block"] as const;
 export const severities = ["info", "low", "medium", "high", "critical"] as const;
 
+/**
+ * FR-GW-05 (`docs/task-docs/GMCP-67/FR-GW-05-block-error-object-spec.md` §4)
+ * taxonomy for standardized block errors. Lives here, not in the gateway,
+ * because `Policy.reasonCode` below is a DSL-level concept — same reasoning
+ * as `Action`/`Severity` already living in this file and being re-exported
+ * through `@guardmcp/gateway`'s pipeline types.
+ */
+export const reasonCodes = [
+  "PII_EXPOSURE_BLOCKED",
+  "SECRET_EXPOSURE_BLOCKED",
+  "SECRET_FILE_ACCESS_BLOCKED",
+  "PROMPT_INJECTION_DETECTED",
+  "TOOL_DESCRIPTION_TAMPERED",
+  "UNTRUSTED_SERVER_ESCALATION",
+  "BULK_EXFIL_SUSPECTED",
+  "APPROVAL_TIMEOUT_BLOCKED",
+  "POLICY_EXPLICIT_BLOCK",
+  "GATEWAY_FAIL_CLOSED"
+] as const;
+
 export type Action = (typeof actions)[number];
 export type Severity = (typeof severities)[number];
+export type ReasonCode = (typeof reasonCodes)[number];
 export type Direction = "request" | "response";
 export type ServerTrust = "trusted" | "limited" | "untrusted";
 export type EvaluationStrategy = "severity-max" | "first-match";
@@ -99,6 +120,8 @@ export interface Policy {
   action: Action;
   severity: Severity;
   message?: string;
+  /** FR-GW-05 §7: optional explicit taxonomy code; the gateway infers one (§4) when absent. */
+  reasonCode?: ReasonCode;
   enabled?: boolean;
   approval?: {
     timeout_seconds: number;
