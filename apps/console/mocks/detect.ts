@@ -21,23 +21,25 @@ interface Rule {
 
 const RULES: Rule[] = [
   {
+    type: "RRN",
+    policyId: "mask_korean_rrn",
+    action: "block",
+    severity: "critical",
+    confidence: 98,
+    // The seventh digit encodes birth era and nationality: 1-4 are Korean nationals, 5-8 are
+    // foreign residents, so narrowing it to 1-4 would quietly miss half the numbers.
+    pattern: /\d{6}-?[1-8]\d{6}/g,
+    // The design shows the resident number already partly hidden in the list — a detector that
+    // echoed it in full would leak the value it exists to protect.
+    redact: (match) => `${match.slice(0, 6)}-*******`
+  },
+  {
     type: "PHONE",
     policyId: "mask_korean_phone",
     action: "mask_then_allow",
     severity: "medium",
     confidence: 98,
     pattern: /01[016789]-?\d{3,4}-?\d{4}/g
-  },
-  {
-    type: "RRN",
-    policyId: "mask_korean_rrn",
-    action: "block",
-    severity: "critical",
-    confidence: 98,
-    pattern: /\d{6}-?[1-4]\d{6}/g,
-    // The design shows the resident number already partly hidden in the list — a detector that
-    // echoed it in full would leak the value it exists to protect.
-    redact: (match) => `${match.slice(0, 6)}-*******`
   },
   {
     type: "SECRET",
