@@ -46,4 +46,39 @@ test("SCR-000 session picker closes on Escape", async ({ page }) => {
   await expect(page.getByRole("listbox", { name: "세션" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("listbox", { name: "세션" })).toBeHidden();
+  // Focus returns to the trigger rather than being dropped at the top of the document.
+  await expect(page.getByRole("button", { name: /세션 #s-/ })).toBeFocused();
+});
+
+test("SCR-000 session picker is operable from the keyboard alone", async ({ page }) => {
+  await page.goto("/");
+  const picker = page.getByRole("button", { name: /세션 #s-0712/ });
+  await picker.focus();
+  // ArrowDown opens the list and lands on the current session.
+  await page.keyboard.press("ArrowDown");
+  const list = page.getByRole("listbox", { name: "세션" });
+  await expect(list.getByRole("option", { name: /#s-0712/ })).toBeFocused();
+  // Arrows rove between options; Enter activates the focused one.
+  await page.keyboard.press("ArrowDown");
+  await expect(list.getByRole("option", { name: /#s-0711/ })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/replay\/s-0711$/);
+});
+
+// Both states need the very first load to be empty/failing, so the scenario is seeded before
+// the app boots — a later switch would leave the last good session list on screen.
+
+test("SCR-000 session picker explains an empty session list", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("guardmcp.mock-scenario", "empty"));
+  await page.goto("/");
+  await page.getByRole("banner").getByRole("button", { name: /세션/ }).click();
+  // Spec §4.2: the copy gives the cause and the next action.
+  await expect(page.getByText(/데모를 실행하면 세션이 만들어집니다/)).toBeVisible();
+});
+
+test("SCR-000 session picker explains an unreachable gateway", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("guardmcp.mock-scenario", "offline"));
+  await page.goto("/");
+  await page.getByRole("banner").getByRole("button", { name: /세션/ }).click();
+  await expect(page.getByText(/게이트웨이 연결을 확인한 뒤/)).toBeVisible();
 });

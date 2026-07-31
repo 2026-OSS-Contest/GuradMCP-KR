@@ -20,8 +20,8 @@
     "offlineBanner": "The gateway needs to be connected.",
     "lastFetched": "Last checked",
     "sessionEvents": "{count} events",
-    "sessionEmpty": "No recorded sessions.",
-    "sessionError": "Could not load the session list."
+    "sessionEmpty": "No recorded sessions yet. Run the demo to create one.",
+    "sessionError": "Could not load the session list. Check the gateway connection, then reopen this menu."
   },
   "verdict": {
     "allow": "Allowed",
