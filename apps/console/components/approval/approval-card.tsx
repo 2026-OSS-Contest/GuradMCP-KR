@@ -12,13 +12,6 @@ import { cn } from "@/lib/utils";
 /** Spec §5.6: the countdown starts flashing once the call has less than this left. */
 const WARN_AT_MS = 20_000;
 
-/** Keys the three decisions answer to, as drawn on the buttons. */
-export const DECISION_KEYS: Record<string, ApprovalDecision> = {
-  a: "approve",
-  b: "block",
-  n: "approve_masked"
-};
-
 const TAG_TONE: Record<string, string> = {
   SECRET: "bg-red-700 text-grayscale-white",
   RRN: "bg-red-700 text-grayscale-white",
@@ -181,7 +174,7 @@ export function ApprovalCard({
             )}
           >
             {t("approveMasked")}
-            <Keycap>N</Keycap>
+            <Keycap>M</Keycap>
           </button>
         </span>
       </footer>

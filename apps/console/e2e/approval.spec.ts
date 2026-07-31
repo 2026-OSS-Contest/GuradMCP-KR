@@ -35,16 +35,22 @@ test("SCR-402 approving masked moves the call into the history", async ({ page }
   await expect(row.getByText("administrator")).toBeVisible();
 });
 
-test("SCR-402 blocking is available from the keyboard", async ({ page }) => {
+test("SCR-402 the three decisions are available from the keyboard", async ({ page }) => {
   await page.goto("/approvals");
   await expect(page.getByRole("article").filter({ hasText: "send_email" })).toBeVisible();
 
-  // B resolves the call at the top of the queue without reaching for the mouse (spec §5.6).
+  // B / M / A resolve the call at the top of the queue without reaching for the mouse (§5.6).
   await page.keyboard.press("b");
   await expect(page.getByRole("article").filter({ hasText: "send_email" })).toBeHidden();
 
+  // M masks the next one, so both letters are covered against a stray remap.
+  await expect(page.getByRole("article").filter({ hasText: "fetch_url" })).toBeVisible();
+  await page.keyboard.press("m");
+  await expect(page.getByRole("article").filter({ hasText: "fetch_url" })).toBeHidden();
+
   await page.getByRole("button", { name: "처리 이력" }).click();
   await expect(page.getByRole("row").filter({ hasText: "send_email" }).getByText("차단")).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: "fetch_url" }).getByText("마스킹 후 승인")).toBeVisible();
 });
 
 test("SCR-402 a call that runs out of time says so before it leaves", async ({ page }) => {

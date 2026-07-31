@@ -79,7 +79,7 @@ export function ApprovalConsole() {
     [busy]
   );
 
-  // Spec §5.6: B / N / A resolve the call at the top of the queue without reaching for the mouse.
+  // Spec §5.6: B / M / A resolve the call at the top of the queue without reaching for the mouse.
   useEffect(() => {
     const top = pending[0];
     if (!top || tab !== "queue") return;
@@ -87,7 +87,7 @@ export function ApprovalConsole() {
       const target = event.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || event.metaKey || event.ctrlKey) return;
       const decision =
-        event.key.toLowerCase() === "a" ? "approve" : event.key.toLowerCase() === "b" ? "block" : event.key.toLowerCase() === "n" ? "approve_masked" : undefined;
+        event.key.toLowerCase() === "a" ? "approve" : event.key.toLowerCase() === "b" ? "block" : event.key.toLowerCase() === "m" ? "approve_masked" : undefined;
       if (!decision) return;
       event.preventDefault();
       void decide(top, decision);
