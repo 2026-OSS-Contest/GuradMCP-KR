@@ -139,6 +139,31 @@
       "stop": "Stop revealing"
     }
   },
+  "attackLab": {
+    "scenario": "Scenario",
+    "pickScenario": "Select a scenario",
+    "comingSoon": "Coming soon",
+    "runUnguarded": "Run unguarded",
+    "runGuarded": "Run guarded",
+    "sandboxNotice": "The unguarded run only ever touches an isolated sandbox (a fake .env, a fake SMTP). No real data is used.",
+    "paneUnguarded": "Unguarded (Vulnerable)",
+    "paneGuarded": "Guarded",
+    "viaSandbox": "Sandbox",
+    "viaGuard": "Via GuardMCP",
+    "paneIdle": "Select a scenario and run it",
+    "runFailedTitle": "Run request failed",
+    "runFailedBody": "The run request could not be processed.\nCheck the attack-lab container.",
+    "retry": "Retry",
+    "riskScore": "Risk score",
+    "resultSummary": "Result summary",
+    "openInReplay": "Open in Replay",
+    "liveStream": "Live stream",
+    "streamEmpty": "No data yet.",
+    "colTime": "Time",
+    "colToolCall": "Tool Call",
+    "colVerdict": "Verdict",
+    "colRisk": "Risk score (SSE)"
+  },
   "screens": {
     "gateway": {
       "title": "Gateway",

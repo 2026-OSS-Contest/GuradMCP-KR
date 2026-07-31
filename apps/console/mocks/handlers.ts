@@ -1,5 +1,7 @@
 import { HttpResponse, delay, http, sse } from "msw";
 import type {
+  AttackRunMode,
+  AttackScenariosResponse,
   Overview,
   RecentEventsResponse,
   SecurityEvent,
@@ -8,6 +10,7 @@ import type {
   TimelineResponse
 } from "@/lib/api/types";
 import { EMPTY_OVERVIEW, SERVERS, liveEvent, overviewOf, recentEvents } from "./data";
+import { ATTACK_SCENARIOS, attackRun } from "./attack-lab";
 import { SESSIONS, policyDetail, revealOf, timelineOf } from "./replay";
 import { readScenario } from "./scenario";
 
@@ -20,7 +23,13 @@ const STREAM_INTERVAL_MS = 4_000;
 
 /** `offline` fails at the network level, which is what a down gateway looks like to fetch(). */
 async function respond(
-  payload: Overview | ServersResponse | RecentEventsResponse | SessionsResponse | TimelineResponse
+  payload:
+    | Overview
+    | ServersResponse
+    | RecentEventsResponse
+    | SessionsResponse
+    | TimelineResponse
+    | AttackScenariosResponse
 ) {
   await delay(LATENCY_MS);
   if (readScenario() === "offline") return HttpResponse.error();
@@ -43,6 +52,22 @@ export const handlers = [
   http.get("*/api/v1/sessions/:id/timeline", async ({ params }) =>
     respond(timelineOf(String(params.id)))
   ),
+
+  // SCR-201 Attack Lab (spec §5.2). The catalogue is static; unavailable scenarios still list so
+  // the picker can show them as 준비 중.
+  http.get("*/api/v1/attacklab/scenarios", async () => respond({ scenarios: ATTACK_SCENARIOS })),
+
+  // The real endpoint only queues the run (the runner is GMCP-55); the mock plays it out and
+  // returns the finished result the panes render. The delay stands in for that execution.
+  http.post("*/api/v1/attacklab/run/:id", async ({ params, request }) => {
+    const mode = (new URL(request.url).searchParams.get("mode") ?? "guarded") as AttackRunMode;
+    await delay(600);
+    if (readScenario() === "offline") return HttpResponse.error();
+    const run = attackRun(String(params.id), mode);
+    return run
+      ? HttpResponse.json(run)
+      : HttpResponse.json({ code: "scenario_not_found", message: "unknown or unavailable scenario" }, { status: 404 });
+  }),
 
   // Policy Chip popover (spec §3). Not gated by scenario — a chip resolves even offline-ish.
   http.get("*/api/v1/policies/:id", async ({ params }) => {
