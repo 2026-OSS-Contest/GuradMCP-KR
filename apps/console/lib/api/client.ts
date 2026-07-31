@@ -1,4 +1,7 @@
 import type {
+  Approval,
+  ApprovalDecision,
+  ApprovalsResponse,
   AttackRun,
   AttackRunMode,
   AttackScenariosResponse,
@@ -72,3 +75,14 @@ export const runAttackScenario = (id: string, mode: AttackRunMode, signal?: Abor
  */
 export const previewDetection = (text: string, direction: DetectDirection, signal?: AbortSignal) =>
   postJson<DetectionPreview>(`/detect/preview?direction=${direction}`, { text }, signal);
+
+// SCR-402 Approval Console (spec §5.6), served by the control plane today.
+export const getApprovals = (status: "pending" | "resolved", signal?: AbortSignal) =>
+  get<ApprovalsResponse>(`/approvals?status=${status}`, signal);
+
+/**
+ * Resolve a held call. Throws `ApiError` with status 409 when someone else — or the 120s
+ * timeout — got there first, which the screen reports rather than retrying.
+ */
+export const decideApproval = (id: string, decision: ApprovalDecision, signal?: AbortSignal) =>
+  postJson<Approval>(`/approvals/${encodeURIComponent(id)}/decision`, { decision }, signal);

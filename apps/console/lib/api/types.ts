@@ -297,6 +297,45 @@ export interface DetectionPreview {
   maskedText: string;
 }
 
+// ── SCR-402 Approval Console (spec §5.6) ────────────────────────────────────
+// `GET /approvals` and `POST /approvals/{id}/decision`, both already served by the control
+// plane. Its own vocabulary is used on the wire; the enrichment the design draws — the risk
+// tags, the threat score, the mask preview — is optional because the control plane does not
+// report it yet, and the card simply leaves out whatever is missing.
+
+export type ApprovalStatus = "pending" | "approved" | "approved_masked" | "blocked" | "expired";
+
+/** The operator's three choices (spec §5.6): 차단 / 마스킹 후 승인 / 그대로 승인. */
+export type ApprovalDecision = "block" | "approve_masked" | "approve";
+
+export interface Approval {
+  id: string;
+  sessionId: string;
+  status: ApprovalStatus;
+  toolName: string;
+  /** Call arguments; the card headlines the first as the call's subject. */
+  arguments: Record<string, string>;
+  riskReason: string;
+  policyId?: string | null;
+  requestedAt: string;
+  /** When the gateway gives up and fails closed — what the countdown counts down to. */
+  expiresAt: string;
+  decision?: ApprovalDecision | null;
+  decidedBy?: string | null;
+  decidedAt?: string | null;
+
+  /** `SECRET 1건`, `INJECTION 1건` — the evidence chips beside the reason. */
+  riskTags?: { type: string; count: number }[];
+  /** 0–100, shown beside the tags. */
+  threatScore?: number;
+  /** The 마스킹 미리보기 panes, in the same shape SCR-301's Mask Diff uses. */
+  maskPreview?: { raw: ContentLine[]; masked: ContentLine[] };
+}
+
+export interface ApprovalsResponse {
+  approvals: Approval[];
+}
+
 export interface TimelineResponse {
   events: TimelineEvent[];
   /** Full detail for each event id the panel can select. */

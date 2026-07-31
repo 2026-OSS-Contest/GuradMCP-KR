@@ -1,7 +1,6 @@
-import { getTranslations } from "next-intl/server";
-import { ScreenStub } from "@/components/screen-stub";
+import { ApprovalConsole } from "@/components/approval/approval-console";
 
-export default async function ApprovalsPage() {
-  const t = await getTranslations();
-  return <ScreenStub scr="SCR-402" title={t("screens.approval.title")} desc={t("screens.approval.desc")} note={t("common.scaffold")} />;
+/** SCR-402 Approval Console — FR-APR-01/02, UI specification §5.6. */
+export default function ApprovalsPage() {
+  return <ApprovalConsole />;
 }
