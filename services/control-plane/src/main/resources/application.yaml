@@ -21,3 +21,8 @@ management:
     health:
       probes:
         enabled: true
+
+# NFR-04: raw (unmasked) payload text is never persisted unless explicitly opted in.
+# Default false — the audit event store only ever holds argsDigest/maskDiffRef.
+audit:
+  store-raw-payload: ${AUDIT_STORE_RAW_PAYLOAD:false}
