@@ -19,6 +19,7 @@ tags:
   - name: approvals
   - name: detect
   - name: attack-lab
+  - name: servers
 paths:
   /api/v1/overview:
     get:
@@ -389,6 +390,122 @@ paths:
                 $ref: "#/components/schemas/AttackLabRun"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/servers:
+    get:
+      tags: [servers]
+      summary: List registered MCP servers (FR-GW-02)
+      description: >-
+        Lean summary shape shared by the console home-page inventory and the
+        gateway's server-registry cache sync. See /api/v1/servers/{id} for the
+        full entity (endpoint, connection/tool-snapshot state, trust-change
+        provenance).
+      operationId: listServers
+      responses:
+        "200":
+          description: Registered servers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServersResponse"
+  /api/v1/servers/{id}:
+    get:
+      tags: [servers]
+      summary: Server detail
+      operationId: getServer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Full server entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/McpServer"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/servers/{id}/trust:
+    put:
+      tags: [servers]
+      summary: Change a server's trust grade
+      description: >-
+        Grade order is untrusted < limited < trusted. A downgrade applies
+        immediately regardless of `confirmed`. An upgrade without
+        `confirmed: true` is rejected with 409 and an impact summary instead
+        of applying; the same request with `confirmed: true` then applies it.
+        A request for the server's current grade is a no-op. Every actual
+        change is recorded as a TrustLevelChangeEvent in the audit hash chain
+        and pushed to /api/v1/servers/stream subscribers immediately.
+      operationId: changeServerTrust
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrustChangeRequest"
+      responses:
+        "200":
+          description: Updated (or unchanged, for a no-op) server summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >-
+            The requested change is an upgrade and confirmed was not true.
+            details carries fromTrust, toTrust, and affectedPolicyCount.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/servers/trust-events:
+    get:
+      tags: [servers]
+      summary: Trust-change audit chain
+      description: Every TrustLevelChangeEvent recorded so far, in chain order (Replay Dashboard query surface).
+      operationId: listTrustChangeEvents
+      responses:
+        "200":
+          description: Chained trust-change events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TrustLevelChangeEvent"
+  /api/v1/servers/stream:
+    get:
+      tags: [servers]
+      summary: Server-registry push channel
+      description: >-
+        Server-sent events. Emits a servers.snapshot event with the current
+        ServersResponse on connect, and again after every trust change — the
+        gateway's registry cache and the console both subscribe instead of
+        polling, so a downgrade reaches them without waiting out a poll
+        interval.
+      operationId: streamServers
+      responses:
+        "200":
+          description: text/event-stream of servers.snapshot frames
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/ServersResponse"
 components:
   responses:
     BadRequest:
@@ -751,3 +868,110 @@ components:
         requestedAt:
           type: string
           format: date-time
+    TrustLevel:
+      type: string
+      enum: [trusted, limited, untrusted]
+    ConnectionStatus:
+      type: string
+      enum: [connected, disconnected]
+    ServerSummary:
+      type: object
+      required: [id, name, connected, trust, tools]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        connected:
+          type: boolean
+        trust:
+          $ref: "#/components/schemas/TrustLevel"
+        tools:
+          description: Always empty today — FR-GW-03 per-server tool inventory is not sourced from the registry yet.
+          type: array
+          items: {}
+    ServersResponse:
+      type: object
+      required: [servers]
+      properties:
+        servers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServerSummary"
+    McpServer:
+      type: object
+      required:
+        - id
+        - name
+        - endpoint
+        - trustLevel
+        - connectionStatus
+        - toolSnapshotHash
+        - createdAt
+        - updatedAt
+        - trustLevelUpdatedAt
+        - trustLevelUpdatedBy
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        endpoint:
+          type: string
+        trustLevel:
+          $ref: "#/components/schemas/TrustLevel"
+        connectionStatus:
+          $ref: "#/components/schemas/ConnectionStatus"
+        toolSnapshotHash:
+          description: FR-GW-03 tool-snapshot hash; null until a first-approval snapshot exists.
+          type: [string, "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        trustLevelUpdatedAt:
+          type: string
+          format: date-time
+        trustLevelUpdatedBy:
+          description: 'null until a console identity system exists; "console" for a confirmed upgrade today.'
+          type: [string, "null"]
+    TrustChangeRequest:
+      type: object
+      required: [trustLevel]
+      properties:
+        trustLevel:
+          $ref: "#/components/schemas/TrustLevel"
+        confirmed:
+          type: boolean
+          default: false
+    TrustLevelChangeEvent:
+      type: object
+      required: [eventId, ts, serverId, fromTrust, toTrust, direction, confirmedBy, prevHash, hash]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        ts:
+          type: string
+          format: date-time
+        serverId:
+          type: string
+          format: uuid
+        fromTrust:
+          $ref: "#/components/schemas/TrustLevel"
+        toTrust:
+          $ref: "#/components/schemas/TrustLevel"
+        direction:
+          type: string
+          enum: [downgrade, upgrade]
+        confirmedBy:
+          description: Set for an upgrade; null for a downgrade (no confirmation is required).
+          type: [string, "null"]
+        prevHash:
+          type: string
+        hash:
+          type: string
