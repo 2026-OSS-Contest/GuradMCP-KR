@@ -21,7 +21,7 @@ export type {
   DecisionEvent,
   DecisionInput,
   DecisionResult,
-  ReasonCode
+  ReasonCode,
 } from "./types.js";
 export { actions, severities, reasonCodes } from "./types.js";
 
@@ -34,28 +34,44 @@ export {
   matchRiskScore,
   matchDetections,
   matchArgs,
-  isSafePolicyRegex
+  isSafePolicyRegex,
 } from "./matcher.js";
 
 export { decide } from "./decide.js";
 
 export type { PolicyLoadError, PolicyLoadErrorLevel } from "./loader/errors.js";
-export { parsePolicyFile, type ParsePolicyFileResult } from "./loader/parsePolicyFile.js";
+export {
+  parsePolicyFile,
+  type ParsePolicyFileResult,
+} from "./loader/parsePolicyFile.js";
 export {
   scanPackDirectories,
   findManifestPath,
   listYamlFilesFlat,
-  type PackDirectoryEntry
+  type PackDirectoryEntry,
 } from "./loader/scanPackDirectory.js";
 export {
   PackRegistry,
   loadPolicyPacks,
   type PackState,
   type PackSummary,
-  type LoadPolicyPacksOptions
+  type LoadPolicyPacksOptions,
 } from "./loader/packRegistry.js";
+export type { PathNormalizationResult } from "./pathNormalize.js";
+export {
+  PATH_LIKE_KEYS,
+  normalizePath,
+  extractPathArg,
+  basename as pathBasename,
+} from "./pathNormalize.js";
 
-import type { Action, EvaluationResult, EvaluationStrategy, Policy, PolicyContext } from "./types.js";
+import type {
+  Action,
+  EvaluationResult,
+  EvaluationStrategy,
+  Policy,
+  PolicyContext,
+} from "./types.js";
 import { matchesPolicy } from "./matcher.js";
 
 const actionWeight: Record<Action, number> = {
@@ -63,26 +79,37 @@ const actionWeight: Record<Action, number> = {
   mask_then_allow: 1,
   warn: 2,
   require_approval: 3,
-  block: 4
+  block: 4,
 };
 
 export function evaluate(
   policies: Policy[],
   context: PolicyContext,
   defaultAction: Action = "allow",
-  strategy: EvaluationStrategy = "severity-max"
+  strategy: EvaluationStrategy = "severity-max",
 ): EvaluationResult {
   const matched = [...policies]
     .filter((policy) => policy.enabled !== false)
-    .sort((left, right) => left.priority - right.priority || left.id.localeCompare(right.id))
+    .sort(
+      (left, right) =>
+        left.priority - right.priority || left.id.localeCompare(right.id),
+    )
     .filter((policy) => matchesPolicy(policy, context));
 
-  const action = strategy === "first-match"
-    ? matched[0]?.action ?? defaultAction
-    : matched.reduce<Action>(
-      (strongest, policy) => actionWeight[policy.action] > actionWeight[strongest] ? policy.action : strongest,
-      defaultAction
-    );
+  const action =
+    strategy === "first-match"
+      ? (matched[0]?.action ?? defaultAction)
+      : matched.reduce<Action>(
+          (strongest, policy) =>
+            actionWeight[policy.action] > actionWeight[strongest]
+              ? policy.action
+              : strongest,
+          defaultAction,
+        );
 
-  return { action, matchedPolicyIds: matched.map(({ id }) => id), policies: matched };
+  return {
+    action,
+    matchedPolicyIds: matched.map(({ id }) => id),
+    policies: matched,
+  };
 }
