@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { connect } from "node:net";
-import { evaluate, type Action, type Policy, type PolicyContext } from "@guardmcp/policy-engine";
+import { evaluate, extractPathArg, normalizePath, type Action, type Policy, type PolicyContext } from "@guardmcp/policy-engine";
 import { createAutoExpireApprovalBackend } from "./approval/backend.js";
 import { detect, mask, type Detection } from "./detect.js";
 import { digest, routeByVerdict, toEventDetection, type RouterDeps } from "./pipeline/actionRouter.js";
@@ -225,7 +225,7 @@ function evaluatePayload(text: string, context: Pick<PolicyContext, "direction" 
     riskScore
   }, activePack.defaultAction, activePack.evaluationStrategy);
   recordInspection(result.action, performance.now() - startedAt);
-  return toPolicyDecision(result, detections, riskScore);
+  return toPolicyDecision(result, detections, riskScore, context.args);
 }
 
 /**
@@ -234,11 +234,20 @@ function evaluatePayload(text: string, context: Pick<PolicyContext, "direction" 
  * the severity-max winner here so the router has a policy to source
  * severity/message/reasonCode/approval config from.
  */
-function toPolicyDecision(result: ReturnType<typeof evaluate>, detections: Detection[], riskScore: number): PolicyDecision {
+function toPolicyDecision(
+  result: ReturnType<typeof evaluate>,
+  detections: Detection[],
+  riskScore: number,
+  args: Record<string, unknown>
+): PolicyDecision {
   const deciding = result.policies.reduce<Policy | undefined>(
     (strongest, policy) => (!strongest || actionWeight[policy.action] > actionWeight[strongest.action]) ? policy : strongest,
     undefined
   );
+  // FR-SEC-04 §3.3: surface the normalized path (not the raw one — the block
+  // error path already avoids echoing it) so Replay can show what the
+  // path_regex condition actually matched against.
+  const rawPath = extractPathArg(args);
   return {
     verdict: result.action,
     matchedPolicyIds: result.matchedPolicyIds,
@@ -251,6 +260,7 @@ function toPolicyDecision(result: ReturnType<typeof evaluate>, detections: Detec
     reasonCode: deciding?.reasonCode ?? (deciding ? deciding.id.toUpperCase() : "NO_POLICY_MATCH"),
     message: deciding?.message ?? "No policy matched; the pack's default action was applied.",
     detections,
+    ...(rawPath !== undefined ? { normalizedPath: normalizePath(rawPath).normalized } : {}),
     ...(deciding?.approval ? {
       approval: {
         timeoutSeconds: deciding.approval.timeout_seconds,

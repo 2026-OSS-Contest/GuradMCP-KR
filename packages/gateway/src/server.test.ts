@@ -123,6 +123,37 @@ describe("gateway HTTP boundary", () => {
     expect(guardEvents).toContainEqual(expect.objectContaining({ verdict: "block", matchedPolicyIds: ["block_env_file_read"] }));
   });
 
+  it("blocks obfuscated credential-path bypass variants (FR-SEC-04 §4) and records normalizedPath/severity on the GuardEvent", async () => {
+    const upstream = createServer((_request, response) => response.end(JSON.stringify({})));
+    process.env.DEMO_MCP_TOOLS_URL = await listen(upstream);
+
+    const guardEvents: Array<{ verdict: string; matchedPolicyIds: string[]; severity?: string; normalizedPath?: string }> = [];
+    const unsubscribe = onGuardBusMessage((message) => {
+      if (message.type === "guard.event") {
+        guardEvents.push(message.data as { verdict: string; matchedPolicyIds: string[]; severity?: string; normalizedPath?: string });
+      }
+    });
+
+    const url = await listen(createServer(handler));
+    // Relative-path traversal — the same bypass variant as DoD case #1.
+    const response = await fetch(`${url}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "read_file", arguments: { path: "./config/../.env" } } })
+    });
+    unsubscribe();
+
+    const body = await response.json() as { error: { data: { policyIds: string[]; severity: string } } };
+    expect(body.error.data.policyIds).toEqual(["block_env_file_read"]);
+    expect(body.error.data.severity).toBe("critical");
+    // The RPC error itself must never echo the raw or normalized path back to the caller.
+    expect(JSON.stringify(body)).not.toContain(".env");
+
+    const blocked = guardEvents.find((event) => event.verdict === "block");
+    expect(blocked?.matchedPolicyIds).toEqual(["block_env_file_read"]);
+    expect(blocked?.normalizedPath).toBe(".env");
+  });
+
   it("fails closed when a request requires human approval", async () => {
     const url = await listen(createServer(handler));
     const response = await fetch(`${url}/mcp`, {
