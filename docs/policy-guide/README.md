@@ -114,6 +114,8 @@ args:
   body_exists: true
 ```
 
+**`path_regex`는 특별합니다 (FR-SEC-04).** `<name>`이 정확히 `path`일 때만 매처가 `path`, 없으면 `file_path`, 그다음 `filename` 순으로 첫 문자열 필드를 찾고, 매칭 전에 정규화합니다 — 반복 percent-decode(최대 3회), NFKC, null byte 절단과 제어문자 제거, `~`/`$HOME` 확장, `.`/`..` 경로 해석, 소문자화 순입니다(`packages/policy-engine/src/pathNormalize.ts`). 정규화한 전체 경로와 basename 양쪽에 정규식을 적용하므로 `./config/../.env`, `%2e%65%6e%76`, `id_rsa%00.png`, `~/credentials.json` 같은 변형도 `.env`/`id_rsa`/`credentials.json`으로 귀결되어 매칭됩니다. `path`가 아닌 다른 `<name>_regex`는 이 정규화를 거치지 않고 원래 값 그대로 매칭합니다.
+
 ### 3.5 `detections`
 
 Detector가 만든 정규화 tag를 평가합니다. tag는 `SECRET`, `INJECTION.INDIRECT`, `PII.PHONE`, `PII.RRN_LIKE`처럼 점으로 계층화합니다. 상위 tag `PII`는 모든 `PII.*`와 매칭합니다.
