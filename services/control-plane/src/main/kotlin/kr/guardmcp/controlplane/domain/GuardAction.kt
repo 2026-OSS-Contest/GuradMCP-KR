@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonValue
  */
 enum class GuardAction(@get:JsonValue val wire: String) {
     ALLOW("allow"),
+    WARN("warn"),
     MASK_THEN_ALLOW("mask_then_allow"),
     REQUIRE_APPROVAL("require_approval"),
     BLOCK("block");
