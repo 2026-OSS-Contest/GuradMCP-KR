@@ -24,6 +24,10 @@ WORKDIR /app
 COPY --from=build --chown=node:node /workspace/packages/gateway/dist ./dist
 COPY --from=build --chown=node:node /workspace/packages/policy-engine/package.json ./node_modules/@guardmcp/policy-engine/package.json
 COPY --from=build --chown=node:node /workspace/packages/policy-engine/dist ./node_modules/@guardmcp/policy-engine/dist
+# @guardmcp/policy-engine's loader imports these at module load time (GMCP-14),
+# so they must resolve even though gateway itself never imports them directly.
+COPY --from=build --chown=node:node /workspace/node_modules/yaml ./node_modules/yaml
+COPY --from=build --chown=node:node /workspace/node_modules/zod ./node_modules/zod
 USER node
 EXPOSE 3001
 CMD ["node", "dist/server.js"]
