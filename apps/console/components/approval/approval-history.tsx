@@ -2,13 +2,8 @@
 
 import { useTranslations } from "next-intl";
 import type { Approval, ApprovalStatus } from "@/lib/api/types";
+import { hhmmss } from "@/lib/time";
 import { cn } from "@/lib/utils";
-
-/** Local rather than shared: PR #61 introduces `lib/time.ts`, and duplicating the file here
- *  would collide with it. Folded into that helper once the shell branch lands. */
-function hhmmss(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
 
 const DECISION: Partial<Record<ApprovalStatus, { key: string; tone: string }>> = {
   approved: { key: "approve", tone: "bg-grayscale-700 text-grayscale-white" },
