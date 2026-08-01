@@ -2,33 +2,36 @@ import { expect, test } from "@playwright/test";
 
 // GMCP-21 flow 2: 승인 3택 처리 흐름 (approve / deny / mask).
 //
-// SCR-402 (Approval Console) is still a `ScreenStub` on this branch — there are no approve /
-// deny / mask controls in the DOM, so the 3-way decision flow cannot be driven from the UI yet
-// (the control-plane approval workflow itself landed backend-only; see commit history on
-// services/control-plane). This spec covers the closest existing behaviour instead: the two
-// entry points an operator has today, and that the destination screen is reachable and reports
-// itself as a scaffold rather than silently 404ing or rendering blank. The interactive 3-way
-// flow is a documented gap — see the PR description — pending SCR-402 UI.
+// SCR-402 was a `ScreenStub` when this spec was written, so it could only check that the two
+// entry points reached a scaffold. GMCP-50 built the console, so the flow can now be driven for
+// real: each test enters the way an operator would and carries a held call to its decision.
+// The console's own behaviour — the evidence on a card, the 120s timeout, the 409 a second
+// operator hits — belongs to `approval.spec.ts`; this spec covers the route in, plus 그대로 승인,
+// the one of the three decisions that spec does not already exercise.
 
-test("GMCP-21 the status bar surfaces pending approvals and links to the Approval Console", async ({ page }) => {
+test("GMCP-21 the status bar's pending badge opens the queue it counts", async ({ page }) => {
   await page.goto("/");
-  const pending = page.getByRole("link", { name: /승인 대기 2/ });
+  const pending = page.getByRole("banner").getByRole("link", { name: /승인 대기 2/ });
   await expect(pending).toBeVisible();
 
   await pending.click();
   await expect(page).toHaveURL(/\/approvals$/);
-  await expect(page.getByText("SCR-402")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Approval Console" })).toBeVisible();
-  await expect(page.getByText(/스캐폴드 단계/)).toBeVisible();
+
+  // The badge counted two held calls, and the queue it lands on holds exactly those two.
+  await expect(page.getByRole("button", { name: /대기열/ })).toContainText("2");
+  await expect(page.getByRole("article")).toHaveCount(2);
 });
 
-test("GMCP-21 rail nav also reaches the Approval Console stub directly", async ({ page }) => {
-  await page.goto("/approvals");
-  await expect(page.getByRole("heading", { name: "Approval Console" })).toBeVisible();
-  await expect(page.getByText("승인 대기열과 처리 이력")).toBeVisible();
-
-  // The rail nav's own link stays reachable and marks the route consistently with the others.
+test("GMCP-21 rail nav reaches the console, where a call can be approved as it stands", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "Approval" }).click();
   await expect(page).toHaveURL(/\/approvals$/);
+
+  const card = page.getByRole("article").filter({ hasText: "send_email" });
+  await card.getByRole("button", { name: /그대로 승인/ }).click();
+  await expect(card).toBeHidden();
+
+  // 처리 이력 names the decision that let it through, unmasked.
+  await page.getByRole("button", { name: "처리 이력" }).click();
+  await expect(page.getByRole("row").filter({ hasText: "send_email" }).getByText("그대로 승인")).toBeVisible();
 });
