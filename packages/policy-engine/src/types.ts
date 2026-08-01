@@ -105,7 +105,9 @@ export type ToolCallContext = PolicyContext;
 export interface MatchDefinition {
   direction?: Direction | "any";
   tool?: string; // exact match, or glob when it contains `*`
-  server_trust?: ServerTrust | "any";
+  // A list matches when ctx.serverTrust is any of the listed grades (OR),
+  // e.g. `[limited, untrusted]` to express "every grade except trusted".
+  server_trust?: ServerTrust | ServerTrust[] | "any";
   args?: Record<string, unknown>;
   detections?: { any_of?: string[]; all_of?: string[]; none_of?: string[] };
   risk_score?: { gte?: number; lte?: number };

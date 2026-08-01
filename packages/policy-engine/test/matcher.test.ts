@@ -221,6 +221,15 @@ describe("matchServerTrust", () => {
   it("`any` always matches", () => {
     expect(matchServerTrust("any", context({ serverTrust: "untrusted" }))).toBe(true);
   });
+
+  it("matches a list containing the context's grade (e.g. excluding trusted)", () => {
+    expect(matchServerTrust(["limited", "untrusted"], context({ serverTrust: "limited" }))).toBe(true);
+    expect(matchServerTrust(["limited", "untrusted"], context({ serverTrust: "untrusted" }))).toBe(true);
+  });
+
+  it("does not match a list omitting the context's grade", () => {
+    expect(matchServerTrust(["limited", "untrusted"], context({ serverTrust: "trusted" }))).toBe(false);
+  });
 });
 
 describe("matchArgs — path_regex", () => {
