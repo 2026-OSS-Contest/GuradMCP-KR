@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: guardmcp-demo-agent
+  threads:
+    virtual:
+      enabled: true
+  main:
+    banner-mode: "off"
+server:
+  port: ${PORT:3002}
+# The gateway is the only place the demo agent points at for the guarded mode;
+# vulnerable mode targets the upstream tools directly. Nothing else differs.
+guardmcp:
+  service-name: ${SERVICE_NAME:demo-agent}
+  gateway-url: ${GATEWAY_URL:http://localhost:3001}
+  demo-mcp-tools-url: ${DEMO_MCP_TOOLS_URL:http://localhost:3003}
+  dependency-urls: ${DEPENDENCY_URLS:}
+logging:
+  level:
+    root: INFO

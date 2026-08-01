@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: guardmcp-control-plane
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/guardmcp}
+    username: ${SPRING_DATASOURCE_USERNAME:guardmcp}
+    password: ${SPRING_DATASOURCE_PASSWORD:guardmcp-local-only}
+  flyway:
+    enabled: true
+server:
+  port: ${PORT:8080}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+# NFR-04: raw (unmasked) payload text is never persisted unless explicitly opted in.
+# Default false — the audit event store only ever holds argsDigest/maskDiffRef.
+audit:
+  store-raw-payload: ${AUDIT_STORE_RAW_PAYLOAD:false}
