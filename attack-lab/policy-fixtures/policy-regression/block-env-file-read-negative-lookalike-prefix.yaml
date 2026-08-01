@@ -1,0 +1,16 @@
+id: block_env_file_read_negative_lookalike_prefix
+description: FR-SEC-04 §4 case N2 — a filename that merely starts with "env" (environment.md) does not match block_env_file_read.
+coverage:
+  policy_id: block_env_file_read
+  expectation: not_match
+event:
+  direction: request
+  tool: read_file
+  server_trust: trusted
+  args:
+    path: environment.md
+  detections: []
+  risk_score: 10
+expected:
+  action: allow
+  matched_policy_ids: []
