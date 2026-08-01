@@ -89,9 +89,10 @@ services:
       PGDATABASE: ${POSTGRES_DB:-guardmcp}
       PGUSER: ${POSTGRES_USER:-guardmcp}
       PGPASSWORD: ${POSTGRES_PASSWORD:-guardmcp-local-only}
-    command: ["psql", "--set", "ON_ERROR_STOP=1", "--file", "/seed/001-demo-seed.sql"]
+    command: ["psql", "--set", "ON_ERROR_STOP=1", "--file", "/seed/001-demo-seed.sql", "--file", "/seed/002-mcp-servers.sql"]
     volumes:
       - ./infra/postgres/001-demo-seed.sql:/seed/001-demo-seed.sql:ro
+      - ./infra/postgres/002-mcp-servers.sql:/seed/002-mcp-servers.sql:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -165,6 +166,9 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD:-guardmcp-local-only}@redis:6379/0
       CONTROL_PLANE_URL: http://control-plane:8080
       DEMO_MCP_TOOLS_URL: http://demo-mcp-tools:3003
+      # Identity of the single upstream this gateway routes to, in the Control Plane's server
+      # registry (FR-GW-02 §4.1) — must match a seeded id in infra/postgres/002-mcp-servers.sql.
+      GATEWAY_SERVER_ID: 30000000-0000-4000-8000-000000000001
       DEPENDENCY_TCP: postgres:5432,redis:6379
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-3001}:3001"
