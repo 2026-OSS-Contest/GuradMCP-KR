@@ -11,6 +11,7 @@ import {
   VerdictWarnIcon
 } from "@/components/icons";
 import { useReplay } from "./replay-provider";
+import { hhmm } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
 const VERDICT_ICON = {
@@ -37,10 +38,6 @@ function VerdictCount({ verdict, count }: { verdict: Verdict; count: number }) {
       {count}
     </span>
   );
-}
-
-function hhmm(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
 function SessionCard({ session, selected, onSelect }: { session: SessionSummary; selected: boolean; onSelect: () => void }) {

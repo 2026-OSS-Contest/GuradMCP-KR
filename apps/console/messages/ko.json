@@ -18,7 +18,10 @@
     "collapse": "레일 접기",
     "expand": "레일 펼치기",
     "offlineBanner": "게이트웨이 연결이 필요합니다.",
-    "lastFetched": "마지막 조회 시각"
+    "lastFetched": "마지막 조회 시각",
+    "sessionEvents": "이벤트 {count}건",
+    "sessionEmpty": "기록된 세션이 없습니다. 데모를 실행하면 세션이 만들어집니다.",
+    "sessionError": "세션 목록을 불러오지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 열어 주세요."
   },
   "verdict": {
     "allow": "허용",

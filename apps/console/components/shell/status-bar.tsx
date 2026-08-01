@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import type { GatewayStatus } from "@/lib/api/types";
 import { isOffline, useOverview } from "@/components/providers/overview-provider";
-import { DropdownChevronIcon, StatusDisconnectedIcon, StatusProtectedIcon } from "@/components/icons";
+import { StatusDisconnectedIcon, StatusProtectedIcon } from "@/components/icons";
 import { VerdictBadge } from "@/components/verdict-badge";
 import { Tag } from "@/components/ui/tag";
+import { SessionPicker } from "./session-picker";
+import { usePendingApprovals } from "./use-pending-approvals";
 import { cn } from "@/lib/utils";
 
 /**
@@ -30,12 +32,20 @@ export function StatusBar() {
   const status: GatewayStatus = isOffline(overview) ? "disconnected" : (overview.data?.status ?? "protected");
   const { Icon, label, text } = STATUS[status];
   const packs = overview.data?.policies.packs ?? [];
-  const pending = overview.data?.pendingApprovals ?? 0;
+  // Seeded by the /overview poll, kept live by approval.created/resolved SSE events (spec §4.1).
+  const pending = usePendingApprovals(overview.data?.pendingApprovals ?? 0, overview.requestedAt);
 
   return (
     <header className="flex h-15 flex-none items-center gap-4 bg-grayscale-950 px-8 shadow-[inset_0_-1px_0_0_var(--primitive-color-grayscale-800)]">
-      {/* The design aligns this row to its bottom edge, not its centre. */}
-      <div className="flex flex-1 items-end gap-3 py-2">
+      {/* Centre every cluster on the bar's midline so the status text, policy chips and the
+          session picker share one baseline (they are different heights).
+
+          This replaces an earlier bottom-edge alignment: the session picker on the right is
+          centred by the header itself, so aligning only the left cluster to the bottom left the
+          two sides on different lines — measured at 1440, the left labels sat at cy 33.5 against
+          the picker's 30. Centring the row puts every label on cy ≈ 29.5. Worth a designer's
+          confirmation if the bottom edge was deliberate. */}
+      <div className="flex flex-1 items-center gap-3">
         <span className={cn("flex flex-none items-center gap-2 text-body-text-b3-md", text)}>
           <Icon className="size-5 flex-none" aria-hidden />
           {t(label)}
@@ -48,7 +58,9 @@ export function StatusBar() {
               <span className="text-body-text-b3-md text-grayscale-300">{t("policyPacks")}</span>
               <span className="flex items-center gap-2">
                 {packs.map((pack) => (
-                  <Link key={pack} href="/policies" className="transition-opacity hover:opacity-80">
+                  // inline-flex (not the default inline) so the mono chip centres on the row rather
+                  // than riding a text line-box that left it 2px below the labels.
+                  <Link key={pack} href="/policies" className="inline-flex items-center transition-opacity hover:opacity-80">
                     <Tag className="text-caption-mono-c-rg">{pack}</Tag>
                   </Link>
                 ))}
@@ -63,7 +75,9 @@ export function StatusBar() {
             <Link
               href="/approvals"
               aria-label={`${t("pendingApprovals")} ${pending}`}
-              className="transition-opacity hover:opacity-80"
+              // inline-flex (not the default inline) so the taller badge centres on the row instead
+              // of riding an inline text line-box, which left its label 2px above 보호 중 / 정책 팩.
+              className="inline-flex items-center transition-opacity hover:opacity-80"
             >
               <VerdictBadge verdict="require_approval" size="sm" count={pending} />
             </Link>
@@ -71,15 +85,7 @@ export function StatusBar() {
         )}
       </div>
 
-      {/* Session picker is inert until `GET /sessions` exists (spec §6.2). */}
-      <button
-        type="button"
-        className="flex h-8 flex-none items-center gap-2 rounded-sm bg-(--primitive-opacity-white-alpha-6) py-1 pr-1 pl-3 transition-colors hover:bg-white/10"
-      >
-        <span className="text-body-text-b3-md text-grayscale-200">{t("session")}</span>
-        <span className="text-body-text-b3-md">#s-0712</span>
-        <DropdownChevronIcon className="size-6 flex-none" aria-hidden />
-      </button>
+      <SessionPicker />
     </header>
   );
 }

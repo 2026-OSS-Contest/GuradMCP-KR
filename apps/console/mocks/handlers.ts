@@ -9,7 +9,7 @@ import type {
   SessionsResponse,
   TimelineResponse
 } from "@/lib/api/types";
-import { EMPTY_OVERVIEW, SERVERS, liveEvent, overviewOf, recentEvents } from "./data";
+import { EMPTY_OVERVIEW, SERVERS, approvals, liveEvent, overviewOf, recentEvents } from "./data";
 import { ATTACK_SCENARIOS, attackRun } from "./attack-lab";
 import { SESSIONS, policyDetail, revealOf, timelineOf } from "./replay";
 import { readScenario } from "./scenario";
@@ -81,10 +81,15 @@ export const handlers = [
     return HttpResponse.json(revealOf());
   }),
 
-  // The gateway event stream (spec §6.3). Real backends emit several event types; SCR-101 only
-  // consumes `guard.event`, so that is all the mock pushes. A named event maps onto the
-  // client's `addEventListener("guard.event", …)`, and objects are JSON-serialised for it.
-  sse<{ "guard.event": SecurityEvent }>("*/api/v1/events/stream", ({ client, request }) => {
+  // The gateway event stream (spec §6.3). Real backends emit several event types; the console
+  // consumes `guard.event` (SCR-101 recent events) and `approval.created`/`approval.resolved`
+  // (the SCR-000 status-bar pending badge, spec §4.1). A named event maps onto the client's
+  // `addEventListener(type, …)`, and objects are JSON-serialised for it.
+  sse<{
+    "guard.event": SecurityEvent;
+    "approval.created": { id: string };
+    "approval.resolved": { id: string };
+  }>("*/api/v1/events/stream", ({ client, request }) => {
     if (readScenario() === "offline") return void client.error();
 
     // request.signal never aborts for an intercepted EventSource in the browser, so the only
@@ -111,7 +116,21 @@ export const handlers = [
         stop();
         return client.error();
       }
-      client.send({ event: "guard.event", data: liveEvent(seq++) });
+      client.send({ event: "guard.event", data: liveEvent(seq) });
+      // Move the status-bar pending badge over SSE (spec §4.1): raise one approval, then resolve
+      // it a tick later, so the count visibly changes between the 10s /overview polls. The
+      // ledger moves with the event, so the next /overview agrees with what was just sent.
+      // An empty console has no approvals to raise, so the stream stays quiet there.
+      if (readScenario() !== "empty") {
+        if (seq % 3 === 0) {
+          approvals.raise();
+          client.send({ event: "approval.created", data: { id: `apr-${seq}` } });
+        } else if (seq % 3 === 1) {
+          approvals.resolve();
+          client.send({ event: "approval.resolved", data: { id: `apr-${seq - 1}` } });
+        }
+      }
+      seq += 1;
     }, STREAM_INTERVAL_MS);
   })
 ];
