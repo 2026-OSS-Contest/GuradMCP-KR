@@ -13,8 +13,20 @@
 //     `DetectionType[]`. The flat form in the GMCP-7 draft was a
 //     simplification; see `DetectionType` below for how it maps.
 
-export const actions = ["allow", "mask_then_allow", "warn", "require_approval", "block"] as const;
-export const severities = ["info", "low", "medium", "high", "critical"] as const;
+export const actions = [
+  "allow",
+  "mask_then_allow",
+  "warn",
+  "require_approval",
+  "block",
+] as const;
+export const severities = [
+  "info",
+  "low",
+  "medium",
+  "high",
+  "critical",
+] as const;
 
 /**
  * FR-GW-05 (`docs/task-docs/GMCP-67/FR-GW-05-block-error-object-spec.md` §4)
@@ -33,7 +45,7 @@ export const reasonCodes = [
   "BULK_EXFIL_SUSPECTED",
   "APPROVAL_TIMEOUT_BLOCKED",
   "POLICY_EXPLICIT_BLOCK",
-  "GATEWAY_FAIL_CLOSED"
+  "GATEWAY_FAIL_CLOSED",
 ] as const;
 
 export type Action = (typeof actions)[number];
@@ -130,10 +142,42 @@ export interface Policy {
   };
 }
 
-export interface EvaluationResult {
+/** Output of the GMCP-7 `evaluate()` pipeline wrapper (index.ts). */
+export interface MatchEvaluation {
   action: Action;
   matchedPolicyIds: string[];
   policies: Policy[];
+}
+
+/**
+ * Policy-pack-level settings that steer `evaluatePolicies()` (GMCP-75,
+ * FR-POL-02, 부록 A.3). `rules` mirrors the pack's full policy list as
+ * loaded from its manifest (`policy-packs/*\/pack.yaml`); callers may pass a
+ * different (e.g. activation-filtered) rule set as `evaluatePolicies`'s own
+ * `rules` argument, so the two are not required to be identical.
+ */
+export interface PolicyPackConfig {
+  name: string;
+  strategy: EvaluationStrategy;
+  /** Explicit value always wins; see {@link resolveDefaultAction}. */
+  default_action?: Action | undefined;
+  /** When `default_action` is unset, `true` resolves to `warn`, `false`/unset to `allow`. */
+  strict?: boolean | undefined;
+  rules: Policy[];
+}
+
+/**
+ * `evaluatePolicies()` output (GMCP-75, 부록 A.3 규칙 5): every matched
+ * policy id is always recorded, even under `first-match`, where only the
+ * *action* adoption short-circuits at the first match.
+ */
+export interface EvaluationResult {
+  action: Action;
+  severity: Severity | null; // null when default_action was adopted
+  matchedPolicyIds: string[]; // priority-ascending; full list, not just the winner
+  winningPolicyId: string | null; // policy that decided `action`; null when unmatched
+  strategy: EvaluationStrategy;
+  usedDefault: boolean; // true when no policy matched and default_action was used
 }
 
 /**
@@ -143,10 +187,14 @@ export interface EvaluationResult {
  * Risk Scorer's output (stage ⑤) plus the already loaded/activated policy
  * list and produces a single verdict. Field names mirror the task spec
  * (`docs/task-docs/GMCP-12/decision-engine.md` §4) rather than
- * {@link PolicyContext}/{@link EvaluationResult} above, because
+ * {@link PolicyContext}/{@link MatchEvaluation} above, because
  * `DecisionResult` maps directly onto `GuardEvent` (§4.2):
  *   GuardEvent.verdict          = DecisionResult.verdict
  *   GuardEvent.matchedPolicyIds = DecisionResult.matchedPolicyIds
+ *
+ * As of GMCP-75, `decide()` is a thin adapter over `evaluatePolicies()`
+ * (evaluate.ts); see that module for the actual strategy/default_action
+ * algorithm.
  */
 export interface DecisionEvent {
   direction: Direction;
@@ -161,8 +209,8 @@ export interface DecisionInput {
   riskScore: number; // 0-100
   activePolicies: Policy[];
   strategy?: EvaluationStrategy; // default: severity-max
-  defaultAction?: Action; // policy-pack default_action, default: allow
-  strictMode?: boolean; // true: unmatched events resolve to warn regardless of defaultAction
+  defaultAction?: Action; // policy-pack default_action; when set, wins over strictMode
+  strictMode?: boolean; // true: unmatched events resolve to warn, but only when defaultAction is unset
 }
 
 export interface DecisionResult {
