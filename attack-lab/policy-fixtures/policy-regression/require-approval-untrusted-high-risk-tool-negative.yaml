@@ -1,0 +1,16 @@
+id: require_approval_untrusted_high_risk_tool_negative
+description: The same send_email call from a trusted server does not require the T-06 defense policy's approval.
+coverage:
+  policy_id: require_approval_untrusted_high_risk_tool
+  expectation: not_match
+event:
+  direction: request
+  tool: send_email
+  server_trust: trusted
+  args:
+    to: partner@company.co.kr
+  detections: []
+  risk_score: 10
+expected:
+  action: allow
+  matched_policy_ids: []

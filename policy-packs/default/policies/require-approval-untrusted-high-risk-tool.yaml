@@ -1,0 +1,26 @@
+# FR-GW-02 §7 — T-06 (Confused Deputy) 1차 방어: 저신뢰 서버발 고위험 Tool 호출에
+# 사람 승인이라는 관문을 강제한다. 호출 인자/응답에서 아무것도 탐지되지 않았더라도
+# (Confused Deputy 유도 호출 자체는 흔히 "깨끗해" 보인다) 매칭은 tool/server_trust만으로
+# 성립한다 — risk_score 조건은 의도적으로 두지 않았다.
+id: require_approval_untrusted_high_risk_tool
+pack: default
+version: 1
+description: 신뢰 등급이 untrusted인 서버로 향하는 고위험 Tool 호출은 사람 승인을 거친다
+priority: 150
+match:
+  direction: request
+  # DSL v1의 match.tool은 단일 glob만 지원한다(목록 미지원). send_*는 부록 예시의
+  # write_file/send_email/delete_*/db_query_all 중 T-06 시나리오(외부 유출)를 대표하는
+  # 고위험 카테고리다. write_*/delete_*/exec_*/run_* 등 나머지 고위험 카테고리는
+  # Risk Scorer의 untrusted 고위험 하한(§4.3)으로 riskScore는 이미 상향되지만, 이번
+  # 스프린트의 "최소 정책 1개" 범위에서는 이 카테고리 전부를 커버하는 정책 확충은
+  # 후속 과제로 남긴다(§2.2).
+  tool: send_*
+  server_trust: untrusted
+action: require_approval
+severity: high
+approval:
+  timeout_seconds: 120
+  on_timeout: block
+  allow_masked_approval: false
+message: 미검증(untrusted) 서버로 향하는 고위험 도구 호출은 승인이 필요합니다.

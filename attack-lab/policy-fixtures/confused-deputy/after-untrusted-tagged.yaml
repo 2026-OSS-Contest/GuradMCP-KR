@@ -1,0 +1,22 @@
+# T-06 Confused Deputy demo — "After" (FR-GW-02 §8.3): identical call, identical (empty)
+# detections — the only change is that the originating server is now registered and tagged
+# `untrusted` (§3.1 fail-safe default for an unreviewed server). require_approval_untrusted_
+# high_risk_tool (policy-packs/default) matches on tool + server_trust alone, so this Confused
+# Deputy hand-off now stops at a human-approval gate instead of executing outright — the T-06
+# 1st line of defense this feature exists to provide.
+id: confused_deputy_after_untrusted_tagged
+description: After GMCP-64, the same hand-off through an untrusted server's high-risk tool call is held for human approval.
+coverage:
+  policy_id: require_approval_untrusted_high_risk_tool
+  expectation: match
+event:
+  direction: request
+  tool: send_email
+  server_trust: untrusted
+  args:
+    to: partner@company.co.kr
+  detections: []
+  risk_score: 10
+expected:
+  action: require_approval
+  matched_policy_ids: [require_approval_untrusted_high_risk_tool]

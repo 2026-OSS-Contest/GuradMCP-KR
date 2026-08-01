@@ -12,3 +12,4 @@ policies:
   - policies/warn-injection-request.yaml
   - policies/require-approval-external-secret-email.yaml
   - policies/mask-secret-response.yaml
+  - policies/require-approval-untrusted-high-risk-tool.yaml
