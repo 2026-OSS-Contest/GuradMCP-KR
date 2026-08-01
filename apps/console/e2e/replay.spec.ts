@@ -70,9 +70,10 @@ test("clicking a timeline node swaps in that node's own detail", async ({ page }
   // Default selection is the block verdict — its threat score is on screen.
   await expect(detail.getByText("read_file")).toBeVisible();
   await expect(detail.getByText("위협 점수")).toBeVisible();
-  // The user node reads differently: its input original, not a verdict breakdown.
+  // The user node reads differently: its own header, not a verdict breakdown.
   await page.getByRole("log").getByRole("button", { name: /README를 요약해줘/ }).click();
-  await expect(detail.getByText("입력 원문")).toBeVisible();
+  await expect(detail.getByText("README를 요약해줘")).toBeVisible();
+  await expect(detail.getByText("read_file")).toBeHidden();
   await expect(detail.getByText("위협 점수")).toBeHidden();
 });
 

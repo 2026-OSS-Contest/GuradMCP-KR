@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { ChevronRight, Pause } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import type { TimelineEvent, TimelineNodeType } from "@/lib/api/types";
+import { VerdictBadge } from "@/components/verdict-badge";
 import { useReplay } from "./replay-provider";
 import {
   NodeAgentIcon,
@@ -71,10 +72,7 @@ function NodeRow({
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         {event.type === "verdict" ? (
           <span className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full bg-(--primitive-opacity-block-alpha-10) px-2 py-1 text-body-text-b3-md text-red-300 shadow-[inset_0_0_0_1px_var(--primitive-opacity-block-alpha-10)]">
-              <NodeVerdictIcon className="h-5 w-4 flex-none" aria-hidden />
-              {t("blocked")}
-            </span>
+            <VerdictBadge verdict={event.verdict ?? "allow"} size="sm" />
             {event.policy && (
               <span className="max-w-full truncate rounded-[4px] bg-(--primitive-opacity-white-alpha-10) px-2 py-1 text-body-text-b3-md text-grayscale-white shadow-[inset_0_0_0_1px_var(--primitive-opacity-white-alpha-10)]">
                 {event.policy}
