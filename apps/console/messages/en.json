@@ -123,6 +123,7 @@
       "target": "Target",
       "args": "Arguments",
       "argsCount": "{count}",
+      "normalizedPath": "Normalized path",
       "morePolicies": "+{count}"
     },
     "policy": {

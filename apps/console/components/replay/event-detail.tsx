@@ -202,6 +202,16 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
           </>
         )}
 
+        {/* Tool call — normalized path (FR-SEC-04, GMCP-73): the raw arg above, resolved here. */}
+        {detail.normalizedPath && (
+          <section className="flex flex-col gap-2">
+            <SectionHeading>{t("normalizedPath")}</SectionHeading>
+            <span className="w-fit max-w-full truncate rounded-[4px] bg-grayscale-800 px-[7px] py-px font-mono text-caption-mono-c-rg text-grayscale-white shadow-[inset_0_0_0_1px_var(--primitive-color-grayscale-700)]">
+              {detail.normalizedPath}
+            </span>
+          </section>
+        )}
+
         {/* Verdict — matching policies. */}
         {detail.policies && detail.policies.length > 0 && (
           <section className="flex flex-col gap-2">
