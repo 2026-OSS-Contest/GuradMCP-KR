@@ -1,19 +1,21 @@
 import { HttpResponse, delay, http, sse } from "msw";
-import type {
-  ApiSessionsResponse,
-  ApiSessionTimelineResponse,
-  ApprovalDecision,
-  AttackRunMode,
-  AttackScenariosResponse,
-  DetectDirection,
-  Overview,
-  RecentEventsResponse,
-  SecurityEvent,
-  ServersResponse,
+import {
+  TRUST_RANK,
+  type ApiSessionsResponse,
+  type ApiSessionTimelineResponse,
+  type ApprovalDecision,
+  type AttackRunMode,
+  type AttackScenariosResponse,
+  type DetectDirection,
+  type Overview,
+  type RecentEventsResponse,
+  type SecurityEvent,
+  type ServersResponse,
+  type ServerTrustChangeRequest,
 } from "@/lib/api/types";
 import { allApprovals, decide, raiseApproval, resetApprovals, resolveRaised } from "./approvals";
-import { EMPTY_OVERVIEW, SERVERS, liveEvent, overviewOf, recentEvents } from "./data";
 import { ATTACK_SCENARIOS, attackRun } from "./attack-lab";
+
 import { previewOf } from "./detect";
 import {
   POLICY_YAML,
@@ -25,6 +27,14 @@ import {
   togglePack,
   togglePolicy,
 } from "./policies";
+import {
+  EMPTY_OVERVIEW,
+  SERVERS,
+  affectedPolicyCount,
+  liveEvent,
+  overviewOf,
+  recentEvents,
+} from "./data";
 import {
   SESSIONS,
   eventLookup,
@@ -68,6 +78,54 @@ export const handlers = [
   http.get("*/api/v1/servers", async () =>
     respond({ servers: readScenario() === "empty" ? [] : SERVERS }),
   ),
+
+  // FR-GW-02 §5.1: downgrade applies immediately; an upgrade needs a follow-up confirmed:true
+  // request or 409s with an impact summary. Mirrors services/control-plane's ServerController.
+  http.put("*/api/v1/servers/:id/trust", async ({ params, request }) => {
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    const server = SERVERS.find(
+      (candidate) => candidate.id === String(params.id),
+    );
+    if (!server)
+      return HttpResponse.json(
+        { code: "server_not_found", message: "server not found" },
+        { status: 404 },
+      );
+
+    const body = (await request.json()) as ServerTrustChangeRequest;
+    const toTrust = body.trustLevel;
+    if (toTrust === server.trust)
+      return HttpResponse.json({
+        id: server.id,
+        name: server.name,
+        connected: server.connected,
+        trust: server.trust,
+      });
+
+    const isUpgrade = TRUST_RANK[toTrust] > TRUST_RANK[server.trust];
+    if (isUpgrade && !body.confirmed) {
+      return HttpResponse.json(
+        {
+          code: "upgrade_requires_confirmation",
+          message: `upgrading ${server.id} to ${toTrust} requires confirmation`,
+          details: {
+            fromTrust: server.trust,
+            toTrust,
+            affectedPolicyCount: String(affectedPolicyCount(server.id)),
+          },
+        },
+        { status: 409 },
+      );
+    }
+    server.trust = toTrust;
+    return HttpResponse.json({
+      id: server.id,
+      name: server.name,
+      connected: server.connected,
+      trust: server.trust,
+    });
+  }),
 
   http.get("*/api/v1/events/recent", async () =>
     respond({ events: readScenario() === "empty" ? [] : recentEvents() }),

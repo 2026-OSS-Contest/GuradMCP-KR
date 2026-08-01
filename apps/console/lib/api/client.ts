@@ -10,6 +10,7 @@ import type {
   DetectDirection,
   DetectionPreview,
   EventDetail,
+  ApiErrorBody,
   Overview,
   PolicyDetail,
   PolicyPack,
@@ -17,6 +18,8 @@ import type {
   PolicyStats,
   RecentEventsResponse,
   RevealContent,
+  ServerTrustChangeRequest,
+  ServerTrustChangeResult,
   ServersResponse,
   SessionsResponse,
   TimelineResponse,
@@ -31,9 +34,11 @@ import {
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 export class ApiError extends Error {
+  /** Parsed JSON error body, when the response had one — e.g. the trust-upgrade 409's `details`. */
   constructor(
     readonly status: number,
     statusText: string,
+    readonly body?: ApiErrorBody,
   ) {
     super(`${status} ${statusText}`);
     this.name = "ApiError";
@@ -109,6 +114,40 @@ export const getEvent = (
   get<ApiEventLookupResponse>(`/events/${encodeURIComponent(id)}`, signal).then(
     toEventDetailFromLookup,
   );
+
+async function put<T>(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  const response = await fetch(`${BASE}/api/v1${path}`, {
+    method: "PUT",
+    signal,
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => undefined);
+  if (!response.ok)
+    throw new ApiError(
+      response.status,
+      response.statusText,
+      payload as ApiErrorBody | undefined,
+    );
+  return payload as T;
+}
+
+/** FR-GW-02 §5.1: throws ApiError(409) with `body.details` when an upgrade needs `confirmed: true`. */
+export const putServerTrust = (
+  id: string,
+  request: ServerTrustChangeRequest,
+  signal?: AbortSignal,
+) =>
+  put<ServerTrustChangeResult>(
+    `/servers/${encodeURIComponent(id)}/trust`,
+    request,
+    signal,
+  );
+
 export const getPolicy = (id: string, signal?: AbortSignal) =>
   get<PolicyDetail>(`/policies/${encodeURIComponent(id)}`, signal);
 /** Reveal-original (spec §5.3 no.5): records the access in the audit log. */
@@ -134,8 +173,16 @@ export const runAttackScenario = (
  * as a query parameter rather than in the body: the endpoint does not read it yet and an unknown
  * body field would be rejected, whereas an unbound query parameter is simply ignored.
  */
-export const previewDetection = (text: string, direction: DetectDirection, signal?: AbortSignal) =>
-  postJson<DetectionPreview>(`/detect/preview?direction=${direction}`, { text }, signal);
+export const previewDetection = (
+  text: string,
+  direction: DetectDirection,
+  signal?: AbortSignal,
+) =>
+  postJson<DetectionPreview>(
+    `/detect/preview?direction=${direction}`,
+    { text },
+    signal,
+  );
 
 /**
  * SCR-402 Approval Console (spec §5.6), served by the control plane today.
@@ -144,7 +191,8 @@ export const previewDetection = (text: string, direction: DetectDirection, signa
  * accepts one `ApprovalStatus` at a time — there is no `resolved` bucket covering the four
  * terminal ones. So the screen asks once, unfiltered, and splits the list itself.
  */
-export const getApprovals = (signal?: AbortSignal) => get<Approval[]>("/approvals", signal);
+export const getApprovals = (signal?: AbortSignal) =>
+  get<Approval[]>("/approvals", signal);
 
 /**
  * Resolve a held call. Throws `ApiError` with status 409 when someone else — or the 120s
