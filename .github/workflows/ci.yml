@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Validate GitHub Actions workflows
         uses: docker://rhysd/actionlint:1.7.7
         with:
@@ -37,9 +37,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -59,9 +59,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -72,7 +72,7 @@ jobs:
         run: npm test
       - name: Upload Vitest coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: vitest-coverage-${{ github.run_id }}
           path: coverage/
@@ -88,19 +88,19 @@ jobs:
         working-directory: services/control-plane
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5.6.0
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
       - name: Run JUnit 5 and Kotest suites
         run: ./gradlew test --no-daemon
       - name: Upload JVM test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: junit-kotest-results-${{ github.run_id }}
           path: |
@@ -115,9 +115,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -130,7 +130,7 @@ jobs:
         run: npm run test:e2e
       - name: Upload Playwright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-${{ github.run_id }}
           path: |
@@ -148,7 +148,7 @@ jobs:
       GMCP30_REPORT_PATH: ${{ github.workspace }}/reports/gmcp-30-readiness.json
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Initialize GMCP-30 evidence
         run: |
           mkdir -p reports
@@ -202,7 +202,7 @@ jobs:
           docker compose --profile demo logs --no-color > reports/gmcp-30-compose.log 2>&1 || true
       - name: Upload GMCP-30 evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gmcp-30-readiness-${{ github.run_id }}
           path: |

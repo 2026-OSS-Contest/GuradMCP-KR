@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -52,7 +52,7 @@ jobs:
 
       - name: Set up Node.js
         if: steps.scope.outputs.required == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -78,7 +78,7 @@ jobs:
           echo "No policy, dataset, detector, gateway, or benchmark change was detected." >> "$GITHUB_STEP_SUMMARY"
       - name: Upload benchmark evidence
         if: always() && steps.scope.outputs.required == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: policy-benchmark-${{ github.run_id }}
           path: artifacts/benchmark/
