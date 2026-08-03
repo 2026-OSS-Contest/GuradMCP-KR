@@ -1,7 +1,6 @@
-import { getTranslations } from "next-intl/server";
-import { ScreenStub } from "@/components/screen-stub";
+import { AttackLab } from "@/components/attack-lab/attack-lab";
 
-export default async function DemoPage() {
-  const t = await getTranslations();
-  return <ScreenStub scr="SCR-201" title={t("screens.liveConsole.title")} desc={t("screens.liveConsole.desc")} note={t("common.scaffold")} />;
+/** SCR-201 Demo & Live Console — the Attack Lab run view (FR-UI-02, UI specification §5.2). */
+export default function DemoPage() {
+  return <AttackLab />;
 }

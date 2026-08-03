@@ -18,7 +18,10 @@
     "collapse": "레일 접기",
     "expand": "레일 펼치기",
     "offlineBanner": "게이트웨이 연결이 필요합니다.",
-    "lastFetched": "마지막 조회 시각"
+    "lastFetched": "마지막 조회 시각",
+    "sessionEvents": "이벤트 {count}건",
+    "sessionEmpty": "기록된 세션이 없습니다. 데모를 실행하면 세션이 만들어집니다.",
+    "sessionError": "세션 목록을 불러오지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 열어 주세요."
   },
   "verdict": {
     "allow": "허용",
@@ -138,6 +141,31 @@
       "masked": "마스킹 후 (Masked)",
       "stop": "열람 중지"
     }
+  },
+  "attackLab": {
+    "scenario": "시나리오",
+    "pickScenario": "시나리오 선택",
+    "comingSoon": "준비 중",
+    "runUnguarded": "미적용 실행",
+    "runGuarded": "적용 실행",
+    "sandboxNotice": "미적용 실행은 격리 샌드박스(가짜 .env, 가짜 SMTP)에서만 동작합니다. 실제 데이터는 사용되지 않습니다.",
+    "paneUnguarded": "미적용 (Vulnerable)",
+    "paneGuarded": "적용 (Guarded)",
+    "viaSandbox": "샌드박스",
+    "viaGuard": "GuardMCP 경유",
+    "paneIdle": "시나리오를 선택하고 실행하세요",
+    "runFailedTitle": "Run 요청 실패",
+    "runFailedBody": "Run 요청 처리에 실패하였습니다.\nattack-lab 컨테이너 상태를 확인하세요.",
+    "retry": "재시도",
+    "riskScore": "위험 점수",
+    "resultSummary": "결과 요약",
+    "openInReplay": "Replay에서 보기",
+    "liveStream": "실시간 스트림",
+    "streamEmpty": "데이터가 없습니다.",
+    "colTime": "시각",
+    "colToolCall": "Tool Call",
+    "colVerdict": "판정",
+    "colRisk": "위험 점수 (SSE)"
   },
   "screens": {
     "gateway": {
