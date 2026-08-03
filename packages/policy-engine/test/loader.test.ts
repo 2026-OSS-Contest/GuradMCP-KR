@@ -265,5 +265,16 @@ describe("loadPolicyPacks", () => {
     expect(registry.getPack("korean-pii")?.errors).toEqual([]);
     expect(registry.getRootErrors()).toEqual([]);
     expect(registry.getActivePolicyCount()).toBeGreaterThan(0);
+
+    // reasonCode must survive the yaml -> zod -> Policy round-trip, not just
+    // pass schema validation, since GMCP-67's error pipeline reads it off
+    // the loaded Policy object.
+    const activePolicies = registry.getActivePolicies();
+    expect(activePolicies.find((policy) => policy.id === "block_env_file_read")?.reasonCode).toBe(
+      "SECRET_FILE_ACCESS_BLOCKED"
+    );
+    expect(activePolicies.find((policy) => policy.id === "block_untrusted_injection_response")?.reasonCode).toBe(
+      "PROMPT_INJECTION_DETECTED"
+    );
   });
 });

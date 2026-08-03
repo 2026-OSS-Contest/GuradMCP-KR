@@ -9,7 +9,7 @@
 // (task spec §2) rather than a silently ignored typo.
 
 import { z } from "zod";
-import { actions, severities } from "../types.js";
+import { actions, reasonCodes, severities } from "../types.js";
 
 const directionValues = ["request", "response", "any"] as const;
 const serverTrustValues = ["trusted", "limited", "untrusted", "any"] as const;
@@ -61,6 +61,7 @@ export const policyFileSchema = z
     action: z.enum(actions),
     severity: z.enum(severities),
     message: z.string().optional(),
+    reasonCode: z.enum(reasonCodes).optional(),
     enabled: z.boolean().optional(),
     approval: approvalSchema.optional()
   })
