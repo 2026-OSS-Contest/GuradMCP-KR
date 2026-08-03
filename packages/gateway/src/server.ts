@@ -242,6 +242,7 @@ function toPolicyDecision(result: ReturnType<typeof evaluate>, detections: Detec
   return {
     verdict: result.action,
     matchedPolicyIds: result.matchedPolicyIds,
+    decidingPolicyId: deciding?.id ?? null,
     riskScore,
     severity: deciding?.severity ?? "info",
     reasonCode: deciding ? deciding.id.toUpperCase() : "NO_POLICY_MATCH",
