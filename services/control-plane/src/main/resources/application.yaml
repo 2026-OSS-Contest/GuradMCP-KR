@@ -10,6 +10,12 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:guardmcp-local-only}
   flyway:
     enabled: true
+    # infra/postgres/001-demo-seed.sql (docker-compose) creates demo tables in the public
+    # schema before Flyway ever runs, so a fresh compose stack always looks like a
+    # populated-but-untracked schema to Flyway. Baseline it at version 0 so V1__create_guard_event
+    # applies on top instead of aborting with "found non-empty schema, no history table".
+    baseline-on-migrate: true
+    baseline-version: 0
 server:
   port: ${PORT:8080}
 management:
