@@ -127,7 +127,8 @@ function computeMask(ctx: ToolCallContext, decision: PolicyDecision): { result: 
   return { result: { verdict: "mask_then_allow", payload: masked }, maskDiffRef };
 }
 
-function toEventDetection(detection: Detection): GuardEventDetection {
+/** Shared so every producer of a GuardEvent normalizes spans the same way. */
+export function toEventDetection(detection: Detection): GuardEventDetection {
   return {
     type: detection.type,
     subtype: detection.subtype,
@@ -137,7 +138,8 @@ function toEventDetection(detection: Detection): GuardEventDetection {
   };
 }
 
-function digest(payload: string): string {
+/** Shared so `argsDigest` always means "digest of the inspected payload" (§8.4). */
+export function digest(payload: string): string {
   return createHash("sha256").update(payload).digest("hex").slice(0, 16);
 }
 

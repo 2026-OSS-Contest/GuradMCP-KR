@@ -1,13 +1,13 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { connect } from "node:net";
 import { evaluate, type Action, type Policy, type PolicyContext } from "@guardmcp/policy-engine";
 import { createAutoExpireApprovalBackend } from "./approval/backend.js";
 import { detect, mask, type Detection } from "./detect.js";
-import { routeByVerdict, type RouterDeps } from "./pipeline/actionRouter.js";
+import { digest, routeByVerdict, toEventDetection, type RouterDeps } from "./pipeline/actionRouter.js";
 import { emitGuardEvent } from "./pipeline/events.js";
 import { metricsSnapshot, recordInspection } from "./pipeline/metrics.js";
-import { inspectToolMetadata, type ToolMetadataInspection } from "./pipeline/toolMetadata.js";
+import { inspectToolMetadata, type QuarantinedToolReport, type ToolMetadataInspection } from "./pipeline/toolMetadata.js";
 import type { PolicyDecision } from "./pipeline/types.js";
 import { scoreRisk } from "./risk.js";
 import { runtimePolicyPacks } from "./policies.generated.js";
@@ -86,24 +86,30 @@ async function handleMcp(body: Record<string, unknown>, response: ServerResponse
     // the Agent acts on, so the injection must be removed before anything downstream —
     // including this gateway's own reply — can carry it.
     const metadata = inspectToolMetadata(upstream);
-    recordQuarantine(metadata, sessionId);
+    if (!metadata.recognized) {
+      // Per-tool quarantine did nothing here. Say so, rather than letting an unfamiliar
+      // upstream shape look like a clean inspection.
+      logEvent("warn", "tools/list carried no recognizable tool list; per-tool quarantine was skipped");
+    }
+    const quarantineDecisions = recordQuarantine(metadata, sessionId);
     const payload = JSON.stringify(metadata.sanitized);
     const decision = evaluatePayload(payload, { direction: "response", tool: "tools/list", serverTrust: "untrusted", args: {} });
+    const summary = summarizeWithQuarantine(decision, quarantineDecisions, metadata);
     const routed = await routeByVerdict(
       { direction: "response", toolName: "tools/list", payload, sessionId, serverTrust: "untrusted" },
       decision,
       routerDeps
     );
     if (routed.verdict === "block") {
-      send(response, 200, rpcError(id, -32002, "GuardMCP blocked unsafe tool metadata", routed.error.error));
+      // Keep the quarantine visible even when the sanitized payload blocks for its own
+      // reasons; otherwise the Agent loses the record of which tools were removed.
+      send(response, 200, rpcError(id, -32002, "GuardMCP blocked unsafe tool metadata", {
+        ...routed.error.error,
+        quarantinedTools: summary.quarantinedTools
+      }));
       return;
     }
-    send(response, 200, {
-      jsonrpc: "2.0",
-      id,
-      result: JSON.parse(routed.payload),
-      _guardmcp: { ...legacySummary(decision), quarantinedTools: metadata.quarantined }
-    });
+    send(response, 200, { jsonrpc: "2.0", id, result: JSON.parse(routed.payload), _guardmcp: summary });
     return;
   }
   if (body.method === "tools/call") {
@@ -251,41 +257,68 @@ function toPolicyDecision(result: ReturnType<typeof evaluate>, detections: Detec
   };
 }
 
-// GMCP-30 acceptance criterion 3 requires the demo response to expose the policy id,
-// detections, and risk score; the readiness probe asserts detections.length >= 2. The
-// action-router refactor (GMCP-15) dropped detections from this summary, so restore
-// them. Detection carries only type/subtype/tag/offsets/confidence — never raw text
-// (NFR-04) — and mirrors the GuardEvent wire shape that already exposes spans.
 /**
  * Records one blocked GuardEvent per quarantined tool so the console and the audit
- * trail show which descriptor was poisoned (GMCP-66 acceptance criterion). The event
- * carries a digest and detector tags, never the injected text (NFR-04).
+ * trail show which descriptor was poisoned (GMCP-66 acceptance criterion), and returns
+ * each tool's decision so the caller can fold it into the response summary.
+ *
+ * Each event is built from that tool's **own** inspected text: its digest is the digest
+ * of that text (the §8.4 meaning of `argsDigest`), and its detections are only the ones
+ * found in it, so their offsets stay valid against the payload the event refers to.
+ * The recorded verdict is `block` because the gateway did remove the tool, while
+ * `matchedPolicyIds` reports whichever real policies matched — the quarantine is a
+ * structural defense, so it never invents a policy ID that no pack declares.
  */
-function recordQuarantine(metadata: ToolMetadataInspection, sessionId: string): void {
-  for (const tool of metadata.quarantined) {
+function recordQuarantine(metadata: ToolMetadataInspection, sessionId: string): PolicyDecision[] {
+  return metadata.quarantined.map((tool) => {
+    const decision = evaluatePayload(tool.payload, {
+      direction: "response", tool: tool.report.name, serverTrust: "untrusted", args: {}
+    });
     emitGuardEvent({
       eventId: randomUUID(),
       sessionId,
       ts: new Date().toISOString(),
       direction: "response",
-      toolName: tool.name,
-      argsDigest: createHash("sha256").update(tool.detections.join(",")).digest("hex").slice(0, 16),
+      toolName: tool.report.name,
+      argsDigest: digest(tool.payload),
       verdict: "block",
-      riskScore: 100,
-      matchedPolicyIds: ["quarantine_poisoned_tool_description"],
-      detections: metadata.detections
-        .filter(({ type }) => type === "INJECTION")
-        .map((detection) => ({
-          type: detection.type,
-          subtype: detection.subtype,
-          span: { start: detection.start, end: detection.end },
-          confidence: detection.confidence,
-          maskedAs: detection.maskedAs
-        }))
+      riskScore: decision.riskScore,
+      matchedPolicyIds: decision.matchedPolicyIds,
+      detections: tool.detections.map(toEventDetection)
     });
-  }
+    return decision;
+  });
 }
 
+/**
+ * Folds the quarantine into the summary the Agent reads. Without this a request that
+ * silently lost tools still reported `allow` with an empty policy list, and a client
+ * that switches on `verdict` — as the demo agent does — could not tell that anything
+ * had happened. A quarantine raises the summary to at least `warn`.
+ */
+function summarizeWithQuarantine(
+  decision: PolicyDecision,
+  quarantineDecisions: PolicyDecision[],
+  metadata: ToolMetadataInspection
+): ReturnType<typeof legacySummary> & { quarantinedTools: QuarantinedToolReport[] } {
+  const summary = legacySummary(decision);
+  const quarantinedTools = metadata.quarantined.map(({ report }) => report);
+  if (quarantinedTools.length === 0) return { ...summary, quarantinedTools };
+  const verdict = actionWeight[summary.verdict] > actionWeight.warn ? summary.verdict : "warn";
+  return {
+    ...summary,
+    verdict,
+    riskScore: Math.max(summary.riskScore, ...quarantineDecisions.map(({ riskScore }) => riskScore)),
+    policyIds: [...new Set([...summary.policyIds, ...quarantineDecisions.flatMap(({ matchedPolicyIds }) => matchedPolicyIds)])],
+    quarantinedTools
+  };
+}
+
+// GMCP-30 acceptance criterion 3 requires the demo response to expose the policy id,
+// detections, and risk score; the readiness probe asserts detections.length >= 2. The
+// action-router refactor (GMCP-15) dropped detections from this summary, so restore
+// them. Detection carries only type/subtype/tag/offsets/confidence — never raw text
+// (NFR-04) — and mirrors the GuardEvent wire shape that already exposes spans.
 function legacySummary(decision: PolicyDecision): { verdict: Action; riskScore: number; policyIds: string[]; detections: Detection[] } {
   return { verdict: decision.verdict, riskScore: decision.riskScore, policyIds: decision.matchedPolicyIds, detections: decision.detections };
 }
@@ -364,6 +397,11 @@ function tcpReachable(host: string, targetPort: number): Promise<boolean> {
     socket.once("timeout", () => done(false));
     socket.once("error", () => done(false));
   });
+}
+
+/** Structured log line (NFR-06); carries no payload text. */
+function logEvent(level: "info" | "warn", message: string): void {
+  process.stdout.write(`${JSON.stringify({ level, service: "gateway", message })}\n`);
 }
 
 function send(response: ServerResponse, status: number, body: unknown): void {
