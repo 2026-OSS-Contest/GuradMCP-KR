@@ -6,7 +6,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mask, type Detection } from "../detect.js";
 import type { ApprovalBackend, ApprovalDecision } from "../approval/backend.js";
 import { emitApprovalCreated, emitApprovalResolved, emitGuardEvent } from "./events.js";
-import { explainDecision } from "./explanation.js";
+import { explainDecision, type ApprovalResolution } from "./explanation.js";
 import { recordMaskDiff } from "./maskDiff.js";
 import type { Action, GuardEvent, GuardEventDetection, PolicyDecision, RoutedResult, ToolCallContext } from "./types.js";
 
@@ -81,7 +81,7 @@ async function awaitApproval(ctx: ToolCallContext, decision: PolicyDecision, bac
     decidedBy: "approval-backend",
     decidedAt: new Date().toISOString(),
     ...(outcome.maskDiffRef ? { maskDiffRef: outcome.maskDiffRef } : {})
-  }));
+  }, outcome.resolution));
   return outcome.result;
 }
 
@@ -90,14 +90,15 @@ function resolveApprovalOutcome(
   decision: PolicyDecision,
   rawDecision: ApprovalDecision,
   allowMaskedApproval: boolean
-): { verdict: Action; result: RoutedResult; maskDiffRef?: string } {
-  if (rawDecision === "approve") return { verdict: "allow", result: computePassthrough(ctx, "allow") };
+): { verdict: Action; result: RoutedResult; maskDiffRef?: string; resolution: ApprovalResolution } {
+  if (rawDecision === "approve") return { verdict: "allow", result: computePassthrough(ctx, "allow"), resolution: "approved" };
   if (rawDecision === "approve_masked" && allowMaskedApproval) {
     const { result, maskDiffRef } = computeMask(ctx, decision);
-    return { verdict: "mask_then_allow", result, maskDiffRef };
+    return { verdict: "mask_then_allow", result, maskDiffRef, resolution: "masked" };
   }
   // "block", "expired", or an approve_masked the policy doesn't allow: fail closed (NFR-03).
-  return { verdict: "block", result: computeBlock(decision) };
+  // A timeout and a refusal both end in a block, so the event records which one it was.
+  return { verdict: "block", result: computeBlock(decision), resolution: rawDecision === "expired" ? "expired" : "denied" };
 }
 
 function computePassthrough(ctx: ToolCallContext, verdict: "allow" | "warn"): RoutedResult {
@@ -148,7 +149,13 @@ interface GuardEventExtras {
   decidedAt?: string;
 }
 
-function buildGuardEvent(ctx: ToolCallContext, decision: PolicyDecision, verdict: Action, extras: GuardEventExtras = {}): GuardEvent {
+function buildGuardEvent(
+  ctx: ToolCallContext,
+  decision: PolicyDecision,
+  verdict: Action,
+  extras: GuardEventExtras = {},
+  resolution?: ApprovalResolution
+): GuardEvent {
   return {
     eventId: randomUUID(),
     sessionId: ctx.sessionId,
@@ -162,7 +169,7 @@ function buildGuardEvent(ctx: ToolCallContext, decision: PolicyDecision, verdict
     detections: decision.detections.map(toEventDetection),
     // Every event funnels through here, so generating the explanation at this one point
     // is what makes "100% of block events carry a reason" true rather than best-effort.
-    explanation: explainDecision(decision, verdict),
+    explanation: explainDecision(decision, verdict, resolution),
     ...extras
   };
 }

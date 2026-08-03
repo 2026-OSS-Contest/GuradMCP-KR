@@ -31,6 +31,7 @@ describe("blockWithStandardError (§4.3, FR-GW-05)", () => {
   const decision: PolicyDecision = {
     verdict: "block",
     matchedPolicyIds: ["block_env_file_read", "block_untrusted_injection_response"],
+    decidingPolicyId: "block_env_file_read",
     riskScore: 96,
     severity: "critical",
     reasonCode: "BLOCK_ENV_FILE_READ",
@@ -78,6 +79,7 @@ describe("maskThenAllow (§4.4)", () => {
     const decision: PolicyDecision = {
       verdict: "mask_then_allow",
       matchedPolicyIds: ["mask_secrets"],
+      decidingPolicyId: "mask_secrets",
       riskScore: 80,
       severity: "high",
       reasonCode: "MASK_SECRETS",
@@ -98,6 +100,7 @@ describe("awaitApproval (§4.5, FR-APR-03)", () => {
   const decision: PolicyDecision = {
     verdict: "require_approval",
     matchedPolicyIds: ["approve_external_email_with_secret"],
+    decidingPolicyId: "approve_external_email_with_secret",
     riskScore: 88,
     severity: "high",
     reasonCode: "APPROVE_EXTERNAL_EMAIL_WITH_SECRET",
@@ -147,6 +150,7 @@ describe("GuardEvent emission (§4.1, §8.4 contract)", () => {
       const decision: PolicyDecision = {
         verdict: "allow",
         matchedPolicyIds: [],
+        decidingPolicyId: null,
         riskScore: 0,
         severity: "info",
         reasonCode: "NO_POLICY_MATCH",
@@ -178,6 +182,7 @@ describe("GuardEvent emission (§4.1, §8.4 contract)", () => {
       const decision: PolicyDecision = {
         verdict: "require_approval",
         matchedPolicyIds: ["approve_external_email_with_secret"],
+        decidingPolicyId: "approve_external_email_with_secret",
         riskScore: 88,
         severity: "high",
         reasonCode: "APPROVE_EXTERNAL_EMAIL_WITH_SECRET",
@@ -218,7 +223,7 @@ describe("NFR-01 latency smoke test (rule pipeline, ≤50ms p95 target)", () => 
 
   it("keeps the allow path fast", async () => {
     const decision: PolicyDecision = {
-      verdict: "allow", matchedPolicyIds: [], riskScore: 0, severity: "info",
+      verdict: "allow", matchedPolicyIds: [], decidingPolicyId: null, riskScore: 0, severity: "info",
       reasonCode: "NO_POLICY_MATCH", message: "No policy matched.", detections: []
     };
     const latency = await p95(() => routeByVerdict({ ...baseCtx, payload }, decision, deps()));
@@ -227,7 +232,7 @@ describe("NFR-01 latency smoke test (rule pipeline, ≤50ms p95 target)", () => 
 
   it("keeps the block path fast", async () => {
     const decision: PolicyDecision = {
-      verdict: "block", matchedPolicyIds: ["block_env_file_read"], riskScore: 96, severity: "critical",
+      verdict: "block", matchedPolicyIds: ["block_env_file_read"], decidingPolicyId: "block_env_file_read", riskScore: 96, severity: "critical",
       reasonCode: "BLOCK_ENV_FILE_READ", message: "Credential-file access was blocked by policy.", detections: []
     };
     const latency = await p95(() => routeByVerdict({ ...baseCtx, payload }, decision, deps()));
@@ -239,6 +244,7 @@ describe("every guard event carries an explanation (GMCP-53)", () => {
   const decision: PolicyDecision = {
     verdict: "block",
     matchedPolicyIds: ["block_env_file_read"],
+    decidingPolicyId: "block_env_file_read",
     riskScore: 96,
     severity: "critical",
     reasonCode: "BLOCK_ENV_FILE_READ",
@@ -268,9 +274,28 @@ describe("every guard event carries an explanation (GMCP-53)", () => {
     }
   });
 
-  it("records a timed-out approval as the block it became, not the approval it proposed", async () => {
+  it("records a timed-out approval as the block it became, and says the timeout caused it", async () => {
     const events = await eventsFor("require_approval");
-    // The backend stub expires, so the final event must read as a block (§4.5).
-    expect(events.at(-1)?.explanation?.ko.startsWith("차단했습니다")).toBe(true);
+    // The backend stub expires, so the final event must read as a block (§4.5) — and a
+    // block from a timeout has to be distinguishable from one a policy asked for.
+    const final = events.at(-1)?.explanation;
+    expect(final?.ko.startsWith("차단했습니다")).toBe(true);
+    expect(final?.ko).toContain("승인 시간이 초과되어");
+  });
+
+  it("names the deciding policy in the event, not the first of several matches", async () => {
+    const captured: Array<{ explanation?: { ko: string } }> = [];
+    const unsubscribe = onGuardBusMessage((message) => {
+      if (message.type === "guard.event") captured.push(message.data as { explanation?: { ko: string } });
+    });
+    await routeByVerdict(baseCtx, {
+      ...decision,
+      verdict: "block",
+      matchedPolicyIds: ["warn_injection_request", "block_env_file_read"],
+      decidingPolicyId: "block_env_file_read"
+    }, deps());
+    unsubscribe();
+    expect(captured.at(-1)?.explanation?.ko).toContain("정책 block_env_file_read");
+    expect(captured.at(-1)?.explanation?.ko).not.toContain("정책 warn_injection_request");
   });
 });

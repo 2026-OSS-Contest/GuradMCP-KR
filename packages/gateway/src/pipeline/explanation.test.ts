@@ -6,6 +6,7 @@ function decision(overrides: Partial<PolicyDecision> = {}): PolicyDecision {
   return {
     verdict: "block",
     matchedPolicyIds: ["block_env_file_read"],
+    decidingPolicyId: "block_env_file_read",
     riskScore: 96,
     severity: "critical",
     reasonCode: "BLOCK_ENV_FILE_READ",
@@ -30,31 +31,92 @@ describe("explanation generator (GMCP-53)", () => {
     expect(explainDecision(decision()).reasonCode).toBe("BLOCK_ENV_FILE_READ");
   });
 
-  it("summarizes detections by type and count", () => {
-    const { ko, en } = explainDecision(decision({
-      detections: [detection("PII", "PHONE"), detection("PII", "RRN_LIKE"), detection("SECRET", "JWT")]
-    }));
-    expect(ko).toContain("탐지 PII 2건, SECRET 1건");
-    expect(en).toContain("Detected PII ×2, SECRET ×1");
+  describe("with more than one policy matched", () => {
+    // Reproduces the shipped korean-pii pack: an external email carrying both an
+    // injection string and a secret matches warn_injection_request (priority 130) and
+    // approve_external_email_with_secret (priority 200). severity-max adopts the second,
+    // so matchedPolicyIds[0] is the policy that did *not* decide.
+    const multi = decision({
+      verdict: "require_approval",
+      matchedPolicyIds: ["warn_injection_request", "approve_external_email_with_secret"],
+      decidingPolicyId: "approve_external_email_with_secret",
+      severity: "high",
+      reasonCode: "APPROVE_EXTERNAL_EMAIL_WITH_SECRET"
+    });
+
+    it("names the policy that decided, not the first one that matched", () => {
+      const { ko, en } = explainDecision(multi);
+      expect(ko).toContain("정책 approve_external_email_with_secret");
+      expect(en).toContain("policy approve_external_email_with_secret");
+      expect(ko).not.toContain("정책 warn_injection_request");
+      expect(en).not.toContain("policy warn_injection_request");
+    });
+
+    it("keeps the named policy consistent with the reason code on the same decision", () => {
+      const { ko, reasonCode } = explainDecision(multi);
+      // severity, reasonCode, and message all come from the deciding policy, so the
+      // sentence must name that same policy or it contradicts its own event.
+      expect(ko).toContain(reasonCode.toLowerCase());
+      expect(ko).toContain("심각도 high");
+    });
+
+    it("accounts for the other matches without listing them", () => {
+      expect(explainDecision(multi).ko).toContain("외 1건 매칭");
+      expect(explainDecision(multi).en).toContain("1 other matched");
+      const three = explainDecision(decision({
+        matchedPolicyIds: ["a", "b", "c"],
+        decidingPolicyId: "b"
+      }));
+      expect(three.ko).toContain("외 2건 매칭");
+      expect(three.en).toContain("2 others matched");
+    });
   });
 
-  it("never repeats the matched text, only tags and counts (NFR-04)", () => {
-    const leaky = { ...detection("PII", "PHONE"), maskedAs: "[PHONE]" };
-    const explanation = explainDecision(decision({ detections: [leaky] }));
-    expect(JSON.stringify(explanation)).not.toContain("010-");
-    expect(explanation.ko).toContain("PII 1건");
+  it("summarizes detections by full tag so subtypes survive", () => {
+    const { ko, en } = explainDecision(decision({
+      detections: [detection("PII", "PHONE"), detection("PII", "RRN_LIKE"), detection("PII", "PHONE")]
+    }));
+    // PII.RRN_LIKE and PII.PHONE call for different responses; collapsing both to "PII"
+    // would drop the part a reader acts on.
+    expect(ko).toContain("탐지 PII.PHONE 2건, PII.RRN_LIKE 1건");
+    expect(en).toContain("Detected PII.PHONE ×2, PII.RRN_LIKE ×1");
+  });
+
+  it("repeats no free-text field from the decision or its detections (NFR-04)", () => {
+    // Poison every string the generator can reach; none may surface in either locale.
+    const explanation = explainDecision(decision({
+      message: "CANARY-MESSAGE the raw payload said 010-1234-5678",
+      detections: [{ ...detection("PII", "PHONE"), subtype: "CANARY-SUBTYPE", maskedAs: "CANARY-MASK" }]
+    }));
+    const serialized = JSON.stringify(explanation);
+    expect(serialized).not.toContain("CANARY-MESSAGE");
+    expect(serialized).not.toContain("CANARY-MASK");
+    expect(serialized).not.toContain("010-1234-5678");
+    // The subtype is a detector tag, so it is named — that is the evidence, not the text.
+    expect(explanation.ko).toContain("PII.CANARY-SUBTYPE 1건");
   });
 
   it("says so plainly when no policy matched", () => {
-    const { ko, en } = explainDecision(decision({ matchedPolicyIds: [], reasonCode: "NO_POLICY_MATCH" }));
+    const { ko, en } = explainDecision(decision({ matchedPolicyIds: [], decidingPolicyId: null, reasonCode: "NO_POLICY_MATCH" }));
     expect(ko).toContain("매칭된 정책 없음, 정책팩 기본 동작");
     expect(en).toContain("no policy matched, pack default action");
   });
 
   it("describes the verdict the router actually reached, not the one proposed", () => {
-    // An approval that times out is recorded as the block it became.
     const { ko } = explainDecision(decision({ verdict: "require_approval" }), "block");
     expect(ko.startsWith("차단했습니다")).toBe(true);
+  });
+
+  it("distinguishes a timed-out approval from a policy block", () => {
+    const proposed = decision({ verdict: "require_approval", severity: "high" });
+    const expired = explainDecision(proposed, "block", "expired");
+    const denied = explainDecision(proposed, "block", "denied");
+    const straight = explainDecision(decision(), "block");
+    expect(expired.ko).toContain("승인 시간이 초과되어");
+    expect(expired.en).toContain("the approval timed out");
+    expect(denied.ko).toContain("승인이 거부되어");
+    // All three are blocks, but a reader can tell which is which.
+    expect(new Set([expired.ko, denied.ko, straight.ko]).size).toBe(3);
   });
 
   it("produces a sentence for every verdict", () => {

@@ -2,15 +2,15 @@
 
 **English** | [한국어](explanation.md)
 
-Every guard event carries a human-readable reason for its verdict. A policy's `message` is optional author prose and may be absent, so the reason a reader actually needs — verdict, deciding policy, severity, evidence — is composed by the gateway instead.
+Every guard event the gateway emits carries a human-readable reason for its verdict. A policy's `message` is optional author prose and may be absent, so the reason a reader actually needs — verdict, deciding policy, severity, evidence — is composed by the gateway instead.
 
 ## Shape
 
 ```json
 {
   "reasonCode": "BLOCK_ENV_FILE_READ",
-  "ko": "차단했습니다 — 정책 block_env_file_read (심각도 critical). 탐지 SECRET 1건, 위험 점수 96.",
-  "en": "Blocked — policy block_env_file_read (severity critical). Detected SECRET ×1, risk score 96."
+  "ko": "차단했습니다 — 정책 block_env_file_read (심각도 critical). 탐지 SECRET.LLM_API_KEY 1건, 위험 점수 96.",
+  "en": "Blocked — policy block_env_file_read (severity critical). Detected SECRET.LLM_API_KEY ×1, risk score 96."
 }
 ```
 
@@ -30,7 +30,7 @@ Both languages ship together, so the console can pick the one matching its local
 
 ## Evidence
 
-Evidence is limited to **per-type counts and the risk score**. Matched text never appears in either locale (NFR-04). When nothing matched, the sentence says so plainly — `no policy matched, pack default action`.
+Evidence is limited to **per-tag counts and the risk score**. Tags keep their subtype — `PII.RRN_LIKE` and `PII.PHONE` call for different responses, so collapsing both to `PII` would drop the part a reader acts on. Matched text never appears in either locale (NFR-04). When nothing matched, the sentence says so plainly — `no policy matched, pack default action`.
 
 ## Wording per verdict
 
@@ -42,6 +42,14 @@ Evidence is limited to **per-type counts and the risk score**. Matched text neve
 | `warn` | Warned and forwarded | 경고를 기록하고 통과시켰습니다 |
 | `allow` | Allowed | 통과시켰습니다 |
 
-The sentence describes **the verdict the router actually reached**. An approval that times out into a block is recorded as a block, because the event should say what happened rather than what the policy proposed.
+The sentence describes **the verdict the router actually reached**, and why. An approval that times out reads `Blocked (the approval timed out)`: the same `block` verdict means something different when a policy demanded it than when nobody answered in time.
+
+## Naming the deciding policy
+
+When more than one policy matches, the sentence names the policy that **decided**. `matchedPolicyIds` is the full list in priority order, so its first element is often not the one `severity-max` adopted — and `severity`, `reasonCode`, and `message` all come from the deciding policy, so naming the first element would contradict the rest of the same event. Remaining matches are only counted.
+
+## Delivery scope (current limit)
+
+The explanation rides on **events the gateway emits**. The Control Plane's `GuardEvent` (the Replay timeline DTO), the `audit_events` table, and the OpenAPI schema do not carry the field yet. The audit-logging pipeline that forwards gateway events to the Control Plane is itself being built in GMCP-24, so carrying the field across belongs to that work.
 
 The implementation lives in [`packages/gateway/src/pipeline/explanation.ts`](../packages/gateway/src/pipeline/explanation.ts).

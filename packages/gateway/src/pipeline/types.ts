@@ -24,7 +24,16 @@ export interface ToolCallContext {
 /** Policy Engine (⑥) output, as consumed by the action router (§3). */
 export interface PolicyDecision {
   verdict: Action;
+  /** Every policy that matched, in evaluation order (priority ascending). */
   matchedPolicyIds: string[];
+  /**
+   * The policy whose action was adopted, which under `severity-max` is chosen by action
+   * strength and is therefore usually **not** `matchedPolicyIds[0]`. `severity`,
+   * `reasonCode`, and `message` all come from this policy, so anything naming the
+   * deciding policy has to read it here or it will contradict them. Null when nothing
+   * matched and the pack's default action applied.
+   */
+  decidingPolicyId: string | null;
   riskScore: number;
   severity: Severity;
   reasonCode: string;
