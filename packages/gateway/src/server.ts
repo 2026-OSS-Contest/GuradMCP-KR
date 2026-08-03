@@ -4,8 +4,11 @@ import { connect } from "node:net";
 import { evaluate, type Action, type Policy, type PolicyContext } from "@guardmcp/policy-engine";
 import { createAutoExpireApprovalBackend } from "./approval/backend.js";
 import { detect, mask, type Detection } from "./detect.js";
-import { routeByVerdict, type RouterDeps } from "./pipeline/actionRouter.js";
+import { digest, routeByVerdict, toEventDetection, type RouterDeps } from "./pipeline/actionRouter.js";
+import { emitGuardEvent } from "./pipeline/events.js";
+import { explainDecision } from "./pipeline/explanation.js";
 import { metricsSnapshot, recordInspection } from "./pipeline/metrics.js";
+import { inspectToolMetadata, type QuarantinedToolReport, type ToolMetadataInspection } from "./pipeline/toolMetadata.js";
 import type { GuardBlockError, PolicyDecision } from "./pipeline/types.js";
 import { scoreRisk } from "./risk.js";
 import { runtimePolicyPacks } from "./policies.generated.js";
@@ -80,18 +83,35 @@ async function handleMcp(body: Record<string, unknown>, response: ServerResponse
   const sessionId = sessionIdOf(body);
   if (body.method === "tools/list") {
     const upstream = await upstreamJson("/tools/list");
-    const payload = JSON.stringify(upstream);
+    // Quarantine poisoned descriptors first (FR-GW-04): a tool description is guidance
+    // the Agent acts on, so the injection must be removed before anything downstream —
+    // including this gateway's own reply — can carry it.
+    const metadata = inspectToolMetadata(upstream);
+    if (!metadata.recognized) {
+      // Per-tool quarantine did nothing here. Say so, rather than letting an unfamiliar
+      // upstream shape look like a clean inspection.
+      logEvent("warn", "tools/list carried no recognizable tool list; per-tool quarantine was skipped");
+    }
+    const quarantineDecisions = recordQuarantine(metadata, sessionId);
+    const payload = JSON.stringify(metadata.sanitized);
     const decision = evaluatePayload(payload, { direction: "response", tool: "tools/list", serverTrust: "untrusted", args: {} });
+    const summary = summarizeWithQuarantine(decision, quarantineDecisions, metadata);
     const routed = await routeByVerdict(
       { direction: "response", toolName: "tools/list", payload, sessionId, serverTrust: "untrusted" },
       decision,
       routerDeps
     );
     if (routed.verdict === "block") {
-      send(response, 200, rpcBlockError(id, routed.error));
+      // Keep the quarantine visible even when the sanitized payload blocks for its own
+      // reasons; otherwise the Agent loses the record of which tools were removed.
+      send(response, 200, {
+        jsonrpc: "2.0",
+        id,
+        error: { ...routed.error, data: { ...routed.error.data, quarantinedTools: summary.quarantinedTools } }
+      });
       return;
     }
-    send(response, 200, { jsonrpc: "2.0", id, result: JSON.parse(routed.payload), _guardmcp: legacySummary(decision) });
+    send(response, 200, { jsonrpc: "2.0", id, result: JSON.parse(routed.payload), _guardmcp: summary });
     return;
   }
   if (body.method === "tools/call") {
@@ -222,6 +242,7 @@ function toPolicyDecision(result: ReturnType<typeof evaluate>, detections: Detec
   return {
     verdict: result.action,
     matchedPolicyIds: result.matchedPolicyIds,
+    decidingPolicyId: deciding?.id ?? null,
     riskScore,
     severity: deciding?.severity ?? "info",
     // FR-GW-05 §7: an explicit policy `reasonCode` wins; otherwise fall back to the id-derived
@@ -237,6 +258,66 @@ function toPolicyDecision(result: ReturnType<typeof evaluate>, detections: Detec
         allowMaskedApproval: deciding.approval.allow_masked_approval ?? false
       }
     } : {})
+  };
+}
+
+/**
+ * Records one blocked GuardEvent per quarantined tool so the console and the audit
+ * trail show which descriptor was poisoned (GMCP-66 acceptance criterion), and returns
+ * each tool's decision so the caller can fold it into the response summary.
+ *
+ * Each event is built from that tool's **own** inspected text: its digest is the digest
+ * of that text (the §8.4 meaning of `argsDigest`), and its detections are only the ones
+ * found in it, so their offsets stay valid against the payload the event refers to.
+ * The recorded verdict is `block` because the gateway did remove the tool, while
+ * `matchedPolicyIds` reports whichever real policies matched — the quarantine is a
+ * structural defense, so it never invents a policy ID that no pack declares.
+ */
+function recordQuarantine(metadata: ToolMetadataInspection, sessionId: string): PolicyDecision[] {
+  return metadata.quarantined.map((tool) => {
+    const decision = evaluatePayload(tool.payload, {
+      direction: "response", tool: tool.report.name, serverTrust: "untrusted", args: {}
+    });
+    emitGuardEvent({
+      eventId: randomUUID(),
+      sessionId,
+      ts: new Date().toISOString(),
+      direction: "response",
+      toolName: tool.report.name,
+      argsDigest: digest(tool.payload),
+      verdict: "block",
+      riskScore: decision.riskScore,
+      matchedPolicyIds: decision.matchedPolicyIds,
+      detections: tool.detections.map(toEventDetection),
+      // The gateway did remove the tool, so the recorded reason reads as a block
+      // regardless of what the sanitized payload's own verdict turns out to be.
+      explanation: explainDecision(decision, "block")
+    });
+    return decision;
+  });
+}
+
+/**
+ * Folds the quarantine into the summary the Agent reads. Without this a request that
+ * silently lost tools still reported `allow` with an empty policy list, and a client
+ * that switches on `verdict` — as the demo agent does — could not tell that anything
+ * had happened. A quarantine raises the summary to at least `warn`.
+ */
+function summarizeWithQuarantine(
+  decision: PolicyDecision,
+  quarantineDecisions: PolicyDecision[],
+  metadata: ToolMetadataInspection
+): ReturnType<typeof legacySummary> & { quarantinedTools: QuarantinedToolReport[] } {
+  const summary = legacySummary(decision);
+  const quarantinedTools = metadata.quarantined.map(({ report }) => report);
+  if (quarantinedTools.length === 0) return { ...summary, quarantinedTools };
+  const verdict = actionWeight[summary.verdict] > actionWeight.warn ? summary.verdict : "warn";
+  return {
+    ...summary,
+    verdict,
+    riskScore: Math.max(summary.riskScore, ...quarantineDecisions.map(({ riskScore }) => riskScore)),
+    policyIds: [...new Set([...summary.policyIds, ...quarantineDecisions.flatMap(({ matchedPolicyIds }) => matchedPolicyIds)])],
+    quarantinedTools
   };
 }
 
@@ -328,6 +409,11 @@ function tcpReachable(host: string, targetPort: number): Promise<boolean> {
     socket.once("timeout", () => done(false));
     socket.once("error", () => done(false));
   });
+}
+
+/** Structured log line (NFR-06); carries no payload text. */
+function logEvent(level: "info" | "warn", message: string): void {
+  process.stdout.write(`${JSON.stringify({ level, service: "gateway", message })}\n`);
 }
 
 function send(response: ServerResponse, status: number, body: unknown): void {

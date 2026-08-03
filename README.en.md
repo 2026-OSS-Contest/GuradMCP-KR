@@ -39,6 +39,7 @@ AI Agent → GuardMCP-KR Gateway → MCP Tools
 ```
 
 - **Bidirectional inspection:** checks risky tools and arguments on requests, and PII, secrets, and indirect injection on responses.
+- **Tool description inspection:** inspects each descriptor in a `tools/list` response on its own, quarantining only the tools carrying hidden instructions and leaving the rest usable (Tool Description Poisoning defense).
 - **Explainable verdicts:** returns policy IDs, detection types, risk score, and masking result as MCP response metadata. Durable audit storage is future work.
 - **Korean defaults:** covers Korean phone numbers, RRN-like values, business registration numbers, bank accounts, and more.
 - **No-code extension:** policies and detection/attack samples can be contributed as YAML or datasets.
@@ -78,6 +79,7 @@ Do not disclose vulnerabilities in public issues. [SECURITY.md](SECURITY.md#engl
 | Quick Start | [Open](docs/quickstart.en.md) | [열기](docs/quickstart.md) |
 | Policy Authoring Guide | [Open](docs/policy-guide/README.en.md) | [열기](docs/policy-guide/README.md) |
 | Risk score formula | [Open](docs/risk-scoring.en.md) | [열기](docs/risk-scoring.md) |
+| Verdict explanations | [Open](docs/explanation.en.md) | [열기](docs/explanation.md) |
 | Benchmark gate | [Open](docs/benchmark-gate.en.md) | [열기](docs/benchmark-gate.md) |
 | Contribution guide | [Open](CONTRIBUTING.md#english) | [열기](CONTRIBUTING.md#한국어) |
 | Development workflow | [Open](docs/contributing/development-workflow.en.md) | [열기](docs/contributing/development-workflow.md) |

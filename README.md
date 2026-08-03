@@ -39,6 +39,7 @@ AI Agent → GuardMCP-KR Gateway → MCP Tools
 ```
 
 - **양방향 검사:** 요청의 위험한 도구·인자와 응답의 PII·Secret·간접 인젝션을 모두 검사합니다.
+- **도구 설명 검사:** `tools/list` 응답의 각 도구 설명을 개별 검사해, 악성 지시가 심긴 도구만 격리하고 나머지 도구는 그대로 씁니다 (Tool Description Poisoning 방어).
 - **설명 가능한 판정:** MCP 응답 metadata에 정책 ID, 탐지 유형, 위험 점수와 마스킹 결과를 반환합니다. 영구 감사 저장은 후속 범위입니다.
 - **한국형 기본값:** 휴대전화번호, 주민등록번호 유사 패턴, 사업자등록번호, 계좌번호 등 한국형 PII를 다룹니다.
 - **코드 없는 확장:** 정책과 탐지/공격 샘플은 YAML 또는 데이터셋만으로 기여할 수 있습니다.
@@ -78,6 +79,7 @@ npm run bench
 | Quick Start | [열기](docs/quickstart.md) | [Open](docs/quickstart.en.md) |
 | 정책 작성 가이드 | [열기](docs/policy-guide/README.md) | [Open](docs/policy-guide/README.en.md) |
 | 위험 점수 산식 | [열기](docs/risk-scoring.md) | [Open](docs/risk-scoring.en.md) |
+| 판정 설명 문구 | [열기](docs/explanation.md) | [Open](docs/explanation.en.md) |
 | 벤치마크 게이트 | [열기](docs/benchmark-gate.md) | [Open](docs/benchmark-gate.en.md) |
 | 벤치마크 결과 정리 | [열기](docs/benchmark-results.md) | [Open](docs/benchmark-results.md) |
 | 기여 가이드 | [열기](CONTRIBUTING.md#한국어) | [Open](CONTRIBUTING.md#english) |

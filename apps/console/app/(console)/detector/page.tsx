@@ -1,7 +1,6 @@
-import { getTranslations } from "next-intl/server";
-import { ScreenStub } from "@/components/screen-stub";
+import { Detector } from "@/components/detector/detector";
 
-export default async function DetectorPage() {
-  const t = await getTranslations();
-  return <ScreenStub scr="SCR-401" title={t("screens.detector.title")} desc={t("screens.detector.desc")} note={t("common.scaffold")} />;
+/** SCR-401 Detector 테스트기 — PII Redaction Preview (UI specification §5.4). */
+export default function DetectorPage() {
+  return <Detector />;
 }
