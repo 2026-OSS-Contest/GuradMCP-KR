@@ -126,9 +126,10 @@ export function raiseApproval(): void {
   );
 }
 
-export function resolveOldest(): void {
-  const oldest = queue[queue.length - 1];
-  if (oldest) decide(oldest.id, "approve", "stream");
+/** Clears the call `raiseApproval` just added — the pair is what moves the badge and back. */
+export function resolveRaised(): void {
+  const raised = queue[queue.length - 1];
+  if (raised) decide(raised.id, "approve", "gateway");
 }
 
 const STATUS_BY_DECISION: Record<ApprovalDecision, Approval["status"]> = {
@@ -137,8 +138,14 @@ const STATUS_BY_DECISION: Record<ApprovalDecision, Approval["status"]> = {
   approve: "approved"
 };
 
-/** `undefined` means the call was already resolved — the caller answers 409, as the API does. */
-export function decide(id: string, decision: ApprovalDecision, by = "administrator"): Approval | undefined {
+/**
+ * `undefined` means the call was already resolved — the caller answers 409, as the API does.
+ *
+ * `by` defaults to null the way the real endpoint does: `decidedBy` is optional on the wire and
+ * the console has no operator identity to send, so a decision made here records none. Naming one
+ * anyway would leave the 처리자 column looking populated in dev and empty against a gateway.
+ */
+export function decide(id: string, decision: ApprovalDecision, by: string | null = null): Approval | undefined {
   expire();
   const approval = queue.find((entry) => entry.id === id);
   if (!approval) return undefined;

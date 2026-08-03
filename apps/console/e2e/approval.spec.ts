@@ -31,7 +31,9 @@ test("SCR-402 approving masked moves the call into the history", async ({ page }
   await page.getByRole("button", { name: "처리 이력" }).click();
   const row = page.getByRole("row").filter({ hasText: "send_email" });
   await expect(row.getByText("마스킹 후 승인")).toBeVisible();
-  await expect(row.getByText("administrator")).toBeVisible();
+  // 처리자 is blank: `decidedBy` is optional on the wire and the console has no operator identity
+  // to send, so a decision made here names nobody — the same as against a real gateway.
+  await expect(row.getByText("–")).toBeVisible();
 });
 
 test("SCR-402 the three decisions are available from the keyboard", async ({ page }) => {

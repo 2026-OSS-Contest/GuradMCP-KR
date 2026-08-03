@@ -11,7 +11,7 @@ import type {
   SessionsResponse,
   TimelineResponse
 } from "@/lib/api/types";
-import { allApprovals, decide, raiseApproval, resetApprovals, resolveOldest } from "./approvals";
+import { allApprovals, decide, raiseApproval, resetApprovals, resolveRaised } from "./approvals";
 import { EMPTY_OVERVIEW, SERVERS, liveEvent, overviewOf, recentEvents } from "./data";
 import { ATTACK_SCENARIOS, attackRun } from "./attack-lab";
 import { previewOf } from "./detect";
@@ -166,7 +166,7 @@ export const handlers = [
           raiseApproval();
           client.send({ event: "approval.created", data: { id: `apr-${seq}` } });
         } else if (seq % 3 === 1) {
-          resolveOldest();
+          resolveRaised();
           client.send({ event: "approval.resolved", data: { id: `apr-${seq - 1}` } });
         }
       }
