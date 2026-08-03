@@ -1,0 +1,8 @@
+name: default
+version: 1.0.0
+description: Fixture default pack
+dsl_version: 1
+default_action: allow
+evaluation_strategy: severity-max
+policies:
+  - policies/block-env-file-read.yaml

@@ -1,0 +1,11 @@
+id: block_env_file_read
+pack: default
+priority: 100
+match:
+  direction: request
+  tool: read_file
+  args:
+    path_regex: '(^|/)\.env$'
+action: block
+severity: critical
+message: Credential-file access was blocked by policy.

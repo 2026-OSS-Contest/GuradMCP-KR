@@ -3,7 +3,9 @@
 // §수용 기준) are noted per `it` block.
 
 import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
+import { mkdtemp, mkdir, writeFile, chmod, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { loadPolicyPacks } from "../src/index.js";
 
@@ -112,6 +114,31 @@ describe("loadPolicyPacks", () => {
     expect(pack?.errors[0]?.file).toMatch(/second\.yaml$/);
   });
 
+  it("lets a required pack win an id collision against an optional pack that sorts first alphabetically", async () => {
+    // "aaa-attacker" scans before "default", and declares a policy with the
+    // same id as default's real credential-blocking rule. The required pack
+    // must win regardless of scan order, or the real rule silently drops out
+    // of the active set while a spoofed allow-rule takes its place.
+    const registry = await loadPolicyPacks(fixture("cross-pack-duplicate-root"), { requiredPacks: ["default"] });
+
+    const defaultPack = registry.getPack("default");
+    const attackerPack = registry.getPack("aaa-attacker");
+
+    expect(defaultPack?.errors).toEqual([]);
+    expect(defaultPack?.policies.map((policy) => policy.id)).toEqual(["block_env_file_read"]);
+    expect(defaultPack?.policies[0]?.action).toBe("block");
+
+    expect(attackerPack?.policies).toEqual([]);
+    expect(attackerPack?.errors).toHaveLength(1);
+    // Squatting a required pack's id is itself a critical signal, even
+    // though the squatter ("aaa-attacker") isn't itself required.
+    expect(attackerPack?.errors[0]).toMatchObject({ ruleId: "id:duplicate", level: "critical" });
+
+    const active = registry.getActivePolicies().find((policy) => policy.id === "block_env_file_read");
+    expect(active?.action).toBe("block");
+    expect(active?.pack).toBe("default");
+  });
+
   it("excludes a disabled pack's policies from the active set and count (AC5)", async () => {
     const registry = await loadPolicyPacks(HAPPY_PATH_ROOT);
     const before = registry.getActivePolicyCount();
@@ -188,6 +215,46 @@ describe("loadPolicyPacks", () => {
         { packId: "korean-pii", name: "korean-pii", policyCount: 2, enabled: false }
       ])
     );
+  });
+
+  // chmod 000 is a no-op for root (common in containerized CI), so these two
+  // skip visibly rather than silently passing without asserting anything.
+  const runningAsRoot = process.getuid?.() === 0;
+
+  it.skipIf(runningAsRoot)("reports a structured error instead of throwing when a pack manifest can't be read (fail-closed)", async () => {
+    const root = await mkdtemp(join(tmpdir(), "policy-pack-manifest-"));
+    try {
+      const packDir = join(root, "locked-pack");
+      await mkdir(packDir, { recursive: true });
+      const manifestPath = join(packDir, "pack.yaml");
+      await writeFile(manifestPath, "name: locked-pack\n");
+      await chmod(manifestPath, 0o000);
+
+      const registry = await loadPolicyPacks(root, { requiredPacks: [] });
+      const pack = registry.getPack("locked-pack");
+      expect(pack?.errors).toHaveLength(1);
+      expect(pack?.errors[0]).toMatchObject({ ruleId: "manifest:read_failed" });
+    } finally {
+      await chmod(join(root, "locked-pack", "pack.yaml"), 0o644).catch(() => {});
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(runningAsRoot)("reports a structured error instead of throwing when a manifest-less pack directory can't be listed (fail-closed)", async () => {
+    const root = await mkdtemp(join(tmpdir(), "policy-pack-dir-"));
+    try {
+      const packDir = join(root, "locked-pack");
+      await mkdir(packDir, { recursive: true });
+      await chmod(packDir, 0o000);
+
+      const registry = await loadPolicyPacks(root, { requiredPacks: [] });
+      const pack = registry.getPack("locked-pack");
+      expect(pack?.errors).toHaveLength(1);
+      expect(pack?.errors[0]).toMatchObject({ ruleId: "pack_dir:read_failed" });
+    } finally {
+      await chmod(join(root, "locked-pack"), 0o755).catch(() => {});
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("loads the real repository policy-packs/ with default and korean-pii error-free", async () => {

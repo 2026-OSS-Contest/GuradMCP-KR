@@ -144,7 +144,29 @@ export async function loadPolicyPacks(rootDir: string, options: LoadPolicyPacksO
   const loadedPolicies: { packId: string; policy: Policy; filePath: string }[] = [];
 
   for (const entry of entries) {
-    const { meta, policies } = await loadPack(entry, baseDir);
+    // `loadPack` collects errors as data rather than throwing, but it's not
+    // load-bearing to enumerate every failure mode inside it — a single pack
+    // (e.g. one with an adversarial manifest) must never be able to take
+    // down the whole scan, so any escaped throw is caught here too.
+    let meta: PackMeta;
+    let policies: { policy: Policy; filePath: string }[];
+    try {
+      ({ meta, policies } = await loadPack(entry, baseDir));
+    } catch (error) {
+      meta = {
+        name: entry.packId,
+        defaultAction: "allow",
+        enabled: true,
+        errors: [
+          loadError({
+            file: toDisplayPath(baseDir, entry.packDir),
+            ruleId: "pack:load_failed",
+            message: `정책 팩을 불러오지 못했습니다: ${message(error)}`
+          })
+        ]
+      };
+      policies = [];
+    }
     packMeta.set(entry.packId, meta);
     for (const item of policies) loadedPolicies.push({ packId: entry.packId, ...item });
   }
@@ -152,20 +174,35 @@ export async function loadPolicyPacks(rootDir: string, options: LoadPolicyPacksO
   const finalPolicies = new Map<string, Policy[]>();
   for (const packId of packMeta.keys()) finalPolicies.set(packId, []);
 
-  const idFirstSeenAt = new Map<string, string>();
-  for (const { packId, policy, filePath } of loadedPolicies) {
-    const firstSeenAt = idFirstSeenAt.get(policy.id);
-    if (firstSeenAt) {
+  // Required packs must win any id collision regardless of directory scan
+  // order — an optional pack that happens to sort before a required one
+  // (e.g. alphabetically ahead of "default") must never be able to shadow
+  // a required pack's policy id.
+  const requiredPackSet = new Set(requiredPacks);
+  const orderedPolicies = [
+    ...loadedPolicies.filter((item) => requiredPackSet.has(item.packId)),
+    ...loadedPolicies.filter((item) => !requiredPackSet.has(item.packId))
+  ];
+
+  const idFirstSeenAt = new Map<string, { filePath: string; packId: string }>();
+  for (const { packId, policy, filePath } of orderedPolicies) {
+    const firstSeen = idFirstSeenAt.get(policy.id);
+    if (firstSeen) {
+      // A pack (required or not) trying to squat an id a required pack
+      // already claimed is itself a critical signal, independent of
+      // whether the squatter happens to be required.
+      const level = requiredPackSet.has(firstSeen.packId) ? "critical" : undefined;
       packMeta.get(packId)?.errors.push(
         loadError({
           file: filePath,
           ruleId: "id:duplicate",
-          message: `정책 id "${policy.id}"가 이미 사용 중입니다 (처음 정의된 위치: ${firstSeenAt})`
+          message: `정책 id "${policy.id}"가 이미 사용 중입니다 (처음 정의된 위치: ${firstSeen.filePath})`,
+          ...(level ? { level } : {})
         })
       );
       continue;
     }
-    idFirstSeenAt.set(policy.id, filePath);
+    idFirstSeenAt.set(policy.id, { filePath, packId });
     finalPolicies.get(packId)?.push(policy);
   }
 
@@ -219,21 +256,51 @@ async function loadPack(
 
   if (manifestPath) {
     const displayManifestPath = toDisplayPath(baseDir, manifestPath);
-    const text = await readFile(manifestPath, "utf8");
-    const { value, errors: manifestErrors } = parseYamlWithSchema(text, displayManifestPath, packManifestSchema);
-    errors.push(...manifestErrors);
-    if (value) {
-      if (value.name !== undefined) name = value.name;
-      if (value.description !== undefined) description = value.description;
-      if (value.default_action !== undefined) defaultAction = value.default_action;
-      if (value.enabled !== undefined) enabled = value.enabled;
-      if (value.policies !== undefined) {
-        declaredPolicyPaths = await resolveDeclaredPolicyPaths(entry, value.policies, displayManifestPath, errors);
+    let manifestText: string | undefined;
+    try {
+      manifestText = await readFile(manifestPath, "utf8");
+    } catch (error) {
+      errors.push(
+        loadError({
+          file: displayManifestPath,
+          ruleId: "manifest:read_failed",
+          message: `팩 매니페스트를 읽을 수 없습니다: ${message(error)}`
+        })
+      );
+    }
+
+    if (manifestText !== undefined) {
+      const { value, errors: manifestErrors } = parseYamlWithSchema(manifestText, displayManifestPath, packManifestSchema);
+      errors.push(...manifestErrors);
+      if (value) {
+        if (value.name !== undefined) name = value.name;
+        if (value.description !== undefined) description = value.description;
+        if (value.default_action !== undefined) defaultAction = value.default_action;
+        if (value.enabled !== undefined) enabled = value.enabled;
+        if (value.policies !== undefined) {
+          declaredPolicyPaths = await resolveDeclaredPolicyPaths(entry, value.policies, displayManifestPath, errors);
+        }
       }
     }
   }
 
-  const policyFilePaths = declaredPolicyPaths ?? (await listYamlFilesFlat(entry.packDir));
+  let policyFilePaths: string[];
+  if (declaredPolicyPaths) {
+    policyFilePaths = declaredPolicyPaths;
+  } else {
+    try {
+      policyFilePaths = await listYamlFilesFlat(entry.packDir);
+    } catch (error) {
+      errors.push(
+        loadError({
+          file: toDisplayPath(baseDir, entry.packDir),
+          ruleId: "pack_dir:read_failed",
+          message: `팩 디렉터리를 읽을 수 없습니다: ${message(error)}`
+        })
+      );
+      policyFilePaths = [];
+    }
+  }
 
   const policies: { policy: Policy; filePath: string }[] = [];
   for (const filePath of policyFilePaths) {
