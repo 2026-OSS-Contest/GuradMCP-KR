@@ -74,19 +74,23 @@ class GatewayToolInvoker(
     private fun parseVerdict(tool: String, node: JsonNode): McpCallResult {
         val error = node.get("error")
         if (error != null && !error.isNull) {
-            val data = error.get("data")
-            // A JSON-RPC error means nothing executed upstream — always treat it as blocked,
-            // regardless of the verdict string, so a malformed error can't read as allowed.
-            val verdict = data?.get("verdict")?.asString() ?: "block"
+            // FR-GW-05 §3.1: the standardized block payload lives at error.data.guardmcp, with
+            // one deciding `policyId` plus any other matched policies in `matchedPolicyIds`
+            // (§3.2 — that list excludes `policyId` itself). A JSON-RPC error always means
+            // nothing executed upstream, so this is unconditionally treated as blocked.
+            val guardmcp = error.get("data")?.get("guardmcp")
+            val policyId = guardmcp?.get("policyId")?.asString()
             return McpCallResult(
                 tool = tool, mode = mode, source = "gateway",
-                verdict = verdict,
+                verdict = "block",
                 blocked = true,
-                riskScore = data?.get("riskScore")?.asInt() ?: 0,
-                policyIds = stringList(data?.get("policyIds")),
-                detections = detectionTags(data?.get("detections")),
+                riskScore = guardmcp?.get("riskScore")?.asInt() ?: 0,
+                policyIds = listOfNotNull(policyId) + stringList(guardmcp?.get("matchedPolicyIds")),
+                detections = detectionTags(guardmcp?.get("detectionSummary")),
                 resultJson = null,
-                message = error.get("message")?.asString(),
+                // The human-readable reason lives on guardmcp.message; error.message is now the
+                // fixed literal "GuardMCP-KR policy violation" shared by every block cause.
+                message = guardmcp?.get("message")?.asString() ?: error.get("message")?.asString(),
                 rpcCode = error.get("code")?.asInt(),
             )
         }

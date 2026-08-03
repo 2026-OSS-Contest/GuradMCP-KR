@@ -39,31 +39,78 @@ describe("blockWithStandardError (§4.3, FR-GW-05)", () => {
     detections: [{ type: "SECRET", subtype: "LLM_API_KEY", maskedAs: "[SECRET]", start: payload.indexOf(secret), end: payload.indexOf(secret) + secret.length, confidence: 0.95 }]
   };
 
-  it("returns the standard error shape with no payload to forward", async () => {
+  it("returns the standard error shape (§3.1/3.2) with no payload to forward", async () => {
     const routed = await routeByVerdict({ ...baseCtx, payload }, decision, deps());
     expect(routed.verdict).toBe("block");
     if (routed.verdict !== "block") throw new Error("expected block");
-    expect(routed.error.error).toEqual({
-      code: "GUARD_BLOCKED",
+    expect(routed.error.code).toBe(-32001);
+    expect(routed.error.message).toBe("GuardMCP-KR policy violation");
+    const data = routed.error.data.guardmcp;
+    expect(data).toMatchObject({
+      schemaVersion: "1.0",
       policyId: "block_env_file_read",
-      policyIds: ["block_env_file_read", "block_untrusted_injection_response"],
-      reasonCode: "BLOCK_ENV_FILE_READ",
+      matchedPolicyIds: ["block_untrusted_injection_response"],
+      // Not one of the §4 enum values, so it normalizes to the generic bucket.
+      reasonCode: "POLICY_EXPLICIT_BLOCK",
       severity: "critical",
-      message: "Credential-file access was blocked by policy."
+      message: "Credential-file access was blocked by policy.",
+      riskScore: 96,
+      sessionId: baseCtx.sessionId,
+      detectionSummary: [{ type: "SECRET", subtype: "LLM_API_KEY", count: 1 }]
     });
+    expect(data.eventId).toEqual(expect.any(String));
+    expect(new Date(data.timestamp).toString()).not.toBe("Invalid Date");
     expect("payload" in routed).toBe(false);
   });
 
-  it("never includes the raw detected text anywhere in the response (FR-GW-05)", async () => {
+  it("never includes the raw detected text, or any span/offset, anywhere in the response (FR-GW-05 §6)", async () => {
     const routed = await routeByVerdict({ ...baseCtx, payload }, decision, deps());
-    expect(JSON.stringify(routed)).not.toContain(secret);
+    const serialized = JSON.stringify(routed);
+    expect(serialized).not.toContain(secret);
+    // §6: no span/offset object anywhere in the error body — check the JSON *keys*, not arbitrary
+    // substrings, since e.g. riskScore's digits could otherwise collide with an offset value.
+    expect(serialized).not.toContain('"start"');
+    expect(serialized).not.toContain('"end"');
   });
 
   it("falls back to a placeholder policyId when nothing matched", async () => {
     const routed = await routeByVerdict({ ...baseCtx, payload }, { ...decision, matchedPolicyIds: [] }, deps());
     if (routed.verdict !== "block") throw new Error("expected block");
-    expect(routed.error.error.policyId).toBe("unknown_policy");
-    expect(routed.error.error.policyIds).toEqual([]);
+    expect(routed.error.data.guardmcp.policyId).toBe("unknown_policy");
+    expect(routed.error.data.guardmcp.matchedPolicyIds).toBeUndefined();
+  });
+
+  it("shares one eventId between the returned error and the emitted GuardEvent (AC #5)", async () => {
+    const seen: Array<{ eventId: string }> = [];
+    const unsubscribe = onGuardBusMessage((message) => {
+      if (message.type === "guard.event") seen.push(message.data as { eventId: string });
+    });
+    let routed: Awaited<ReturnType<typeof routeByVerdict>>;
+    try {
+      routed = await routeByVerdict({ ...baseCtx, payload }, decision, deps());
+    } finally {
+      unsubscribe();
+    }
+    if (routed.verdict !== "block") throw new Error("expected block");
+    expect(seen).toHaveLength(1);
+    expect(routed.error.data.guardmcp.eventId).toBe(seen[0]?.eventId);
+  });
+
+  it("uses APPROVAL_TIMEOUT_BLOCKED when a require_approval wait expires (§4)", async () => {
+    const approvalDecision: PolicyDecision = {
+      verdict: "require_approval",
+      matchedPolicyIds: ["approve_external_email_with_secret"],
+      decidingPolicyId: "approve_external_email_with_secret",
+      riskScore: 88,
+      severity: "high",
+      reasonCode: "APPROVE_EXTERNAL_EMAIL_WITH_SECRET",
+      message: "External transmission is waiting for human approval.",
+      detections: [],
+      approval: { timeoutSeconds: 0.01, onTimeout: "block", allowMaskedApproval: false }
+    };
+    const routed = await routeByVerdict(baseCtx, approvalDecision, { approvalBackend: new InMemoryApprovalBackend() });
+    if (routed.verdict !== "block") throw new Error("expected block");
+    expect(routed.error.data.guardmcp.reasonCode).toBe("APPROVAL_TIMEOUT_BLOCKED");
   });
 });
 

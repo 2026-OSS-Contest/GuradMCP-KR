@@ -20,9 +20,10 @@ export type {
   EvaluationResult,
   DecisionEvent,
   DecisionInput,
-  DecisionResult
+  DecisionResult,
+  ReasonCode
 } from "./types.js";
-export { actions, severities } from "./types.js";
+export { actions, severities, reasonCodes } from "./types.js";
 
 export {
   matchesPolicy,

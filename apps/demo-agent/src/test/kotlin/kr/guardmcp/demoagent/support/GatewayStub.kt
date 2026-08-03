@@ -41,9 +41,13 @@ class GatewayStub {
 
     fun stop() = server.stop(0)
 
+    // FR-GW-05 shape: fixed code/message, real payload nested under data.guardmcp.
     private fun blockResponse(id: String) = """
-        {"jsonrpc":"2.0","id":"$id","error":{"code":-32001,"message":"GuardMCP blocked unsafe tool arguments",
-        "data":{"verdict":"block","riskScore":0,"policyIds":["block_env_file_read"],"detections":[],"masked":""}}}
+        {"jsonrpc":"2.0","id":"$id","error":{"code":-32001,"message":"GuardMCP-KR policy violation",
+        "data":{"guardmcp":{"schemaVersion":"1.0","eventId":"evt-test-block","policyId":"block_env_file_read",
+        "reasonCode":"SECRET_FILE_ACCESS_BLOCKED","severity":"critical",
+        "message":"Credential-file access was blocked by policy.","riskScore":0,
+        "sessionId":"$id","timestamp":"2026-08-01T00:00:00.000Z"}}}}
     """.trimIndent()
 
     private fun maskResponse(id: String) = """

@@ -5,6 +5,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mask, type Detection } from "../detect.js";
 import type { ApprovalBackend, ApprovalDecision } from "../approval/backend.js";
+import { buildGuardBlockError, summarizeDetections } from "../errors/guard-block-error.js";
 import { emitApprovalCreated, emitApprovalResolved, emitGuardEvent } from "./events.js";
 import { explainDecision, type ApprovalResolution } from "./explanation.js";
 import { recordMaskDiff } from "./maskDiff.js";
@@ -39,10 +40,14 @@ function passthrough(ctx: ToolCallContext, decision: PolicyDecision, verdict: "a
 }
 
 function blockWithStandardError(ctx: ToolCallContext, decision: PolicyDecision): RoutedResult {
+  // Minted once so the error returned to the Agent and the GuardEvent emitted for Replay
+  // share one eventId/timestamp (AC #5: `/replay/{sessionId}?event={eventId}` must resolve).
+  const eventId = randomUUID();
+  const ts = new Date().toISOString();
   try {
-    return computeBlock(decision);
+    return computeBlock(ctx, decision, eventId, ts);
   } finally {
-    emitGuardEvent(buildGuardEvent(ctx, decision, "block"));
+    emitGuardEvent(buildGuardEvent(ctx, decision, "block", { eventId, ts }));
   }
 }
 
@@ -76,8 +81,13 @@ async function awaitApproval(ctx: ToolCallContext, decision: PolicyDecision, bac
   const rawDecision = await backend.awaitDecision(requestId, approval.timeoutSeconds * 1_000);
   emitApprovalResolved({ requestId, eventRef: pendingEvent.eventId, decision: rawDecision });
 
-  const outcome = resolveApprovalOutcome(ctx, decision, rawDecision, approval.allowMaskedApproval);
+  // Same eventId/timestamp pairing rationale as `blockWithStandardError` above.
+  const resolvedEventId = randomUUID();
+  const resolvedTs = new Date().toISOString();
+  const outcome = resolveApprovalOutcome(ctx, decision, rawDecision, approval.allowMaskedApproval, resolvedEventId, resolvedTs);
   emitGuardEvent(buildGuardEvent(ctx, decision, outcome.verdict, {
+    eventId: resolvedEventId,
+    ts: resolvedTs,
     decidedBy: "approval-backend",
     decidedAt: new Date().toISOString(),
     ...(outcome.maskDiffRef ? { maskDiffRef: outcome.maskDiffRef } : {})
@@ -89,36 +99,47 @@ function resolveApprovalOutcome(
   ctx: ToolCallContext,
   decision: PolicyDecision,
   rawDecision: ApprovalDecision,
-  allowMaskedApproval: boolean
+  allowMaskedApproval: boolean,
+  eventId: string,
+  ts: string
 ): { verdict: Action; result: RoutedResult; maskDiffRef?: string; resolution: ApprovalResolution } {
   if (rawDecision === "approve") return { verdict: "allow", result: computePassthrough(ctx, "allow"), resolution: "approved" };
   if (rawDecision === "approve_masked" && allowMaskedApproval) {
     const { result, maskDiffRef } = computeMask(ctx, decision);
     return { verdict: "mask_then_allow", result, maskDiffRef, resolution: "masked" };
   }
-  // "block", "expired", or an approve_masked the policy doesn't allow: fail closed (NFR-03).
-  // A timeout and a refusal both end in a block, so the event records which one it was.
-  return { verdict: "block", result: computeBlock(decision), resolution: rawDecision === "expired" ? "expired" : "denied" };
+  // "expired": the wait itself timed out, so reasonCode APPROVAL_TIMEOUT_BLOCKED (§4) applies.
+  // "block" (reviewer explicitly denied it) and a disallowed approve_masked both had a real
+  // reviewer response — neither is a timeout — so they keep the deciding policy's own reasonCode.
+  // Either way it is a fail-closed block (NFR-03), and the resolution records which one it was.
+  const reasonCode = rawDecision === "expired" ? "APPROVAL_TIMEOUT_BLOCKED" : decision.reasonCode;
+  return {
+    verdict: "block",
+    result: computeBlock(ctx, { ...decision, reasonCode }, eventId, ts),
+    resolution: rawDecision === "expired" ? "expired" : "denied"
+  };
 }
 
 function computePassthrough(ctx: ToolCallContext, verdict: "allow" | "warn"): RoutedResult {
   return { verdict, payload: ctx.payload };
 }
 
-function computeBlock(decision: PolicyDecision): RoutedResult {
-  const policyIds = decision.matchedPolicyIds;
+function computeBlock(ctx: ToolCallContext, decision: PolicyDecision, eventId: string, ts: string): RoutedResult {
+  const policyId = decision.matchedPolicyIds[0] ?? "unknown_policy";
   return {
     verdict: "block",
-    error: {
-      error: {
-        code: "GUARD_BLOCKED",
-        policyId: policyIds[0] ?? "unknown_policy",
-        policyIds,
-        reasonCode: decision.reasonCode,
-        severity: decision.severity,
-        message: decision.message
-      }
-    }
+    error: buildGuardBlockError({
+      eventId,
+      sessionId: ctx.sessionId,
+      timestamp: ts,
+      policyId,
+      reasonCode: decision.reasonCode,
+      severity: decision.severity,
+      message: decision.message,
+      detectionSummary: summarizeDetections(decision.detections),
+      riskScore: decision.riskScore,
+      matchedPolicyIds: decision.matchedPolicyIds.filter((id) => id !== policyId)
+    })
   };
 }
 
@@ -146,6 +167,9 @@ export function digest(payload: string): string {
 }
 
 interface GuardEventExtras {
+  /** Overrides the minted eventId/ts — used by block paths so the error and its GuardEvent match (see callers above). */
+  eventId?: string;
+  ts?: string;
   maskDiffRef?: string;
   decidedBy?: string;
   decidedAt?: string;
@@ -158,10 +182,11 @@ function buildGuardEvent(
   extras: GuardEventExtras = {},
   resolution?: ApprovalResolution
 ): GuardEvent {
+  const { eventId, ts, ...rest } = extras;
   return {
-    eventId: randomUUID(),
+    eventId: eventId ?? randomUUID(),
     sessionId: ctx.sessionId,
-    ts: new Date().toISOString(),
+    ts: ts ?? new Date().toISOString(),
     direction: ctx.direction,
     toolName: ctx.toolName,
     argsDigest: digest(ctx.payload),
@@ -172,6 +197,6 @@ function buildGuardEvent(
     // Every event funnels through here, so generating the explanation at this one point
     // is what makes "100% of block events carry a reason" true rather than best-effort.
     explanation: explainDecision(decision, verdict, resolution),
-    ...extras
+    ...rest
   };
 }

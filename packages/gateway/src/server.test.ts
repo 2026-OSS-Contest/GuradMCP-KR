@@ -9,6 +9,19 @@ const shippedPolicyIds = Object.values(runtimePolicyPacks).flatMap((pack) => pac
 
 const servers: Server[] = [];
 
+/** FR-GW-05 §3.1/3.2 shape, as it arrives over the wire. */
+interface GuardBlockErrorBody {
+  error: {
+    code: number;
+    data: { guardmcp: { policyId: string; matchedPolicyIds?: string[]; reasonCode: string } };
+  };
+}
+
+/** `policyId` (the deciding policy) plus any other policies that also matched (§3.2). */
+function matchedIds(body: GuardBlockErrorBody): string[] {
+  return [body.error.data.guardmcp.policyId, ...(body.error.data.guardmcp.matchedPolicyIds ?? [])];
+}
+
 afterEach(async () => {
   delete process.env.DEMO_MCP_TOOLS_URL;
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
@@ -99,8 +112,13 @@ describe("gateway HTTP boundary", () => {
     });
     unsubscribe();
 
-    const body = await response.json() as { error: { data: { policyIds: string[] } } };
-    expect(body.error.data.policyIds).toEqual(["block_env_file_read"]);
+    const body = await response.json() as GuardBlockErrorBody;
+    expect(body.error.code).toBe(-32001);
+    expect(body.error.data.guardmcp.policyId).toBe("block_env_file_read");
+    expect(body.error.data.guardmcp.matchedPolicyIds).toBeUndefined();
+    // §7 DSL: block-env-file-read.yaml declares reasonCode explicitly, so it must reach the
+    // wire unchanged rather than falling back to the id-derived/POLICY_EXPLICIT_BLOCK default.
+    expect(body.error.data.guardmcp.reasonCode).toBe("SECRET_FILE_ACCESS_BLOCKED");
     expect(upstreamHits).toBe(0);
     expect(guardEvents).toContainEqual(expect.objectContaining({ verdict: "block", matchedPolicyIds: ["block_env_file_read"] }));
   });
@@ -115,9 +133,12 @@ describe("gateway HTTP boundary", () => {
         params: { name: "send_email", arguments: { to: "outside@example.net", body: "연락처 010-9999-8888" } }
       })
     });
-    const body = await response.json() as { error: { code: number; data: { policyIds: string[] } } };
-    expect(body.error.code).toBe(-32003);
-    expect(body.error.data.policyIds).toContain("approve_external_email_with_korean_pii");
+    // FR-GW-05 §3.1: require_approval's auto-expire-to-block (no console attached, §4.5) now
+    // shares the one fixed code/message with every other block path; reasonCode distinguishes it.
+    const body = await response.json() as GuardBlockErrorBody;
+    expect(body.error.code).toBe(-32001);
+    expect(body.error.data.guardmcp.reasonCode).toBe("APPROVAL_TIMEOUT_BLOCKED");
+    expect(matchedIds(body)).toContain("approve_external_email_with_korean_pii");
   });
 
   it("routes an external secret transfer to human approval (Appendix A.2)", async () => {
@@ -130,12 +151,13 @@ describe("gateway HTTP boundary", () => {
         params: { name: "send_email", arguments: { to: "outside@example.net", body: "key sk-ant-demo0000000000000000demo" } }
       })
     });
-    // The block error is the standardized GuardBlockError (FR-GW-05): policy id, reason
-    // code, severity, message — no riskScore. That the risk score reaches the approval
-    // band is asserted directly on scoreRisk in risk.test.ts.
-    const body = await response.json() as { error: { code: number; data: { policyIds: string[] } } };
-    expect(body.error.code).toBe(-32003);
-    expect(body.error.data.policyIds).toContain("approve_external_email_with_secret");
+    // The block error is the standardized GuardBlockError (FR-GW-05 §3): fixed code -32001,
+    // reasonCode APPROVAL_TIMEOUT_BLOCKED, policy id(s), severity, message, riskScore. That the
+    // risk score reaches the approval band is asserted directly on scoreRisk in risk.test.ts.
+    const body = await response.json() as GuardBlockErrorBody;
+    expect(body.error.code).toBe(-32001);
+    expect(body.error.data.guardmcp.reasonCode).toBe("APPROVAL_TIMEOUT_BLOCKED");
+    expect(matchedIds(body)).toContain("approve_external_email_with_secret");
   });
 
   it("quarantines a poisoned tool description and keeps the honest tools (FR-GW-04, T-04)", async () => {

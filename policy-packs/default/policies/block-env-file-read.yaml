@@ -15,3 +15,4 @@ action: block
 severity: critical
 # Never echo the matched path or source content in a block message.
 message: Credential-file access was blocked by policy.
+reasonCode: SECRET_FILE_ACCESS_BLOCKED # FR-GW-05 §4 taxonomy; §7's own worked example.
