@@ -2,6 +2,7 @@ import { HttpResponse, delay, http, sse } from "msw";
 import type {
   AttackRunMode,
   AttackScenariosResponse,
+  DetectDirection,
   Overview,
   RecentEventsResponse,
   SecurityEvent,
@@ -11,6 +12,7 @@ import type {
 } from "@/lib/api/types";
 import { EMPTY_OVERVIEW, SERVERS, approvals, liveEvent, overviewOf, recentEvents } from "./data";
 import { ATTACK_SCENARIOS, attackRun } from "./attack-lab";
+import { previewOf } from "./detect";
 import { SESSIONS, policyDetail, revealOf, timelineOf } from "./replay";
 import { readScenario } from "./scenario";
 
@@ -67,6 +69,19 @@ export const handlers = [
     return run
       ? HttpResponse.json(run)
       : HttpResponse.json({ code: "scenario_not_found", message: "unknown or unavailable scenario" }, { status: 404 });
+  }),
+
+  // SCR-401 Detector (spec §5.4). The control plane serves this for real; the mock covers the
+  // detectors the design draws (RRN, secrets) that the seeded pack does not reach yet.
+  http.post("*/api/v1/detect/preview", async ({ request }) => {
+    const direction = (new URL(request.url).searchParams.get("direction") ?? "request") as DetectDirection;
+    const { text } = (await request.json()) as { text?: string };
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    if (!text?.trim()) {
+      return HttpResponse.json({ code: "invalid_preview_text", message: "text must not be blank" }, { status: 400 });
+    }
+    return HttpResponse.json(previewOf(text, direction));
   }),
 
   // Policy Chip popover (spec §3). Not gated by scenario — a chip resolves even offline-ish.

@@ -167,6 +167,28 @@
     "colVerdict": "Verdict",
     "colRisk": "Risk score (SSE)"
   },
+  "detector": {
+    "direction": "Direction",
+    "directionHint": "Default policy strength differs by direction.",
+    "inputLabel": "Text to inspect",
+    "placeholder": "Enter the text you want to inspect",
+    "notStored": "The text you enter is not stored.",
+    "sample": {
+      "pii": "Korean PII sample",
+      "secret": "Secret sample",
+      "injection": "Injection sample"
+    },
+    "run": "Run inspection",
+    "running": "Inspecting…",
+    "findings": "Detections",
+    "maskedResult": "Masked result",
+    "emptyTitle": "Enter a text, then run the inspection.",
+    "emptyBody": "Paste what you want checked and it reports the security risks it expects, along with the masked result.",
+    "noFindings": "Nothing was detected. Try another text.",
+    "copy": "Copy the masked result",
+    "copied": "Copied.",
+    "error": "Could not run the inspection. Check the gateway connection, then run it again."
+  },
   "screens": {
     "gateway": {
       "title": "Gateway",
