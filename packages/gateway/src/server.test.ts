@@ -143,9 +143,9 @@ describe("gateway HTTP boundary", () => {
     });
     unsubscribe();
 
-    const body = await response.json() as { error: { data: { policyIds: string[]; severity: string } } };
-    expect(body.error.data.policyIds).toEqual(["block_env_file_read"]);
-    expect(body.error.data.severity).toBe("critical");
+    const body = await response.json() as GuardBlockErrorBody & { error: { data: { guardmcp: { severity: string } } } };
+    expect(matchedIds(body)).toEqual(["block_env_file_read"]);
+    expect(body.error.data.guardmcp.severity).toBe("critical");
     // The RPC error itself must never echo the raw or normalized path back to the caller.
     expect(JSON.stringify(body)).not.toContain(".env");
 
