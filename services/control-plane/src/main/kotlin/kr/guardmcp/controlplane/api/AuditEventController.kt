@@ -80,9 +80,9 @@ class AuditEventController(
             // gateway sent — defense in depth against a misconfigured or compromised emitter.
             rawPayload = request.rawPayload?.takeIf { storeRawPayload },
         )
-        repository.insert(record)
+        val stored = repository.insert(record)
         auditLog.logIngested(record)
-        return GuardEventIngestResponse(record.eventId, true)
+        return GuardEventIngestResponse(record.eventId, stored)
     }
 
     companion object {

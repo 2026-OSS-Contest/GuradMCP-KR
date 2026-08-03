@@ -42,9 +42,11 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) {
     private val objectMapper = ObjectMapper()
 
     /** Idempotent: a re-delivered event (gateway's bounded publish queue never retries, but a
-     *  future retry policy might) lands the same row instead of failing the request. */
-    fun insert(event: GuardEventRecord) {
-        jdbcTemplate.update({ connection ->
+     *  future retry policy might) lands the same row instead of failing the request. Returns
+     *  whether this call actually stored a new row, as opposed to hitting the ON CONFLICT DO
+     *  NOTHING no-op for an event_id that's already there. */
+    fun insert(event: GuardEventRecord): Boolean {
+        val rowsAffected = jdbcTemplate.update({ connection ->
             val statement: PreparedStatement = connection.prepareStatement(INSERT_SQL)
             statement.setObject(1, event.eventId)
             statement.setString(2, event.sessionId)
@@ -60,6 +62,7 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) {
             statement.setString(12, event.rawPayload)
             statement
         })
+        return rowsAffected > 0
     }
 
     fun findById(eventId: UUID): GuardEventRecord? =

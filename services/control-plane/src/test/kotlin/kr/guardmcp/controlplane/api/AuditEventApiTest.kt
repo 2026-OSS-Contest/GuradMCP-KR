@@ -37,6 +37,20 @@ class AuditEventApiTest : ApiTestSupport() {
     }
 
     @Test
+    fun `a re-delivered event id is accepted but reported as not newly stored`() {
+        // ON CONFLICT DO NOTHING makes redelivery idempotent (see GuardEventRepository.insert),
+        // but the response must reflect that the second call was a no-op, not a fresh write.
+        val eventId = UUID.randomUUID()
+        val first = send("POST", "/api/v1/events", ingestPayload(eventId))
+        val second = send("POST", "/api/v1/events", ingestPayload(eventId))
+
+        assertEquals(201, first.statusCode())
+        assertEquals(true, parseMap(first.body())["stored"])
+        assertEquals(201, second.statusCode())
+        assertEquals(false, parseMap(second.body())["stored"])
+    }
+
+    @Test
     fun `session id is opaque text, not required to be a uuid`() {
         // Gateway falls back to `req-<uuid>` style session ids when the caller supplies none
         // (server.ts `sessionIdOf`); the column must accept that shape.
