@@ -60,7 +60,7 @@ export function detect(input: string, options: DetectOptions = {}): Detection[] 
   const skipValidation = options.skipValidation === true;
   return [
     ...rules.flatMap((rule) => findRule(rule, normalized, skipValidation)),
-    ...findEncodedInjections(input, skipValidation)
+    ...findEncodedInjections(normalized, skipValidation)
   ];
 }
 
@@ -70,12 +70,23 @@ export function detect(input: string, options: DetectOptions = {}): Detection[] 
 // base64-encoded survives both: the detector sees one opaque token and nothing matches.
 // So decode the encoded runs and re-run the injection rules on what comes out.
 //
-// Two bounds keep this inside the NFR-01 latency budget: a candidate longer than
-// `maxEncodedRunLength` is skipped, and at most `maxEncodedSegments` runs are decoded
-// per payload. Both are cheap ceilings — a real hidden instruction is short.
-const encodedRun = /[A-Za-z0-9+/]{24,}={0,2}/g;
-const maxEncodedRunLength = 4096;
-const maxEncodedSegments = 16;
+// This pass reads the *normalized* text for the same reason the rules do — a single
+// zero-width character inside a blob would otherwise split the run and hide the
+// instruction from the one pass that exists to reveal it. Spans are mapped back to
+// original offsets through resolveSourceSpan, exactly as findRule does.
+//
+// Cost is bounded by a character budget rather than a segment count. A count lets an
+// attacker spend the budget on harmless blobs and starve the real one; a budget makes
+// many small candidates cheap and only a genuinely large volume of base64 exhaust it.
+const encodedRun = /[A-Za-z0-9+/_-]{24,}={0,2}/g;
+/** Size of one decode window; a run longer than this is swept in several windows. */
+const encodedWindowLength = 4096;
+/** Overlap between windows so an instruction straddling a boundary is still read. */
+const encodedWindowOverlap = 256;
+/** Total characters this pass will feed to the decoder for one payload. */
+const encodedCharBudget = 64 * 1024;
+/** Base64 packs 4 characters per 3 bytes, so a shifted blob needs its offset found. */
+const alignments = [0, 1, 2, 3];
 
 /**
  * Reports one detection per encoded run whose decoded text matches an injection rule.
@@ -86,39 +97,72 @@ const maxEncodedSegments = 16;
  * `block_untrusted_injection_response` policy already lists `INJECTION.OBFUSCATED`, so
  * this makes an existing policy axis real instead of introducing a parallel one.
  */
-function findEncodedInjections(input: string, skipValidation: boolean): Detection[] {
+function findEncodedInjections(input: NormalizedInput, skipValidation: boolean): Detection[] {
   const found: Detection[] = [];
-  let decoded = 0;
-  for (const match of input.matchAll(encodedRun)) {
-    if (decoded >= maxEncodedSegments) break;
-    if (match.index === undefined || match[0].length > maxEncodedRunLength) continue;
-    const text = decodeBase64Text(match[0]);
-    if (text === undefined) continue;
-    decoded += 1;
-    const confidence = strongestInjectionConfidence(text, skipValidation);
+  // Every decode *attempt* is charged, including the ones that fail — otherwise a
+  // payload full of undecodable base64 costs unbounded work while appearing to respect
+  // the ceiling.
+  const budget = { left: encodedCharBudget };
+  for (const match of input.text.matchAll(encodedRun)) {
+    if (budget.left <= 0) break;
+    if (match.index === undefined) continue;
+    const confidence = strongestEncodedConfidence(match[0], skipValidation, budget);
     if (confidence === undefined) continue;
-    found.push({
-      type: "INJECTION",
-      subtype: "OBFUSCATED",
-      maskedAs: "[INJECTION]",
-      start: match.index,
-      end: match.index + match[0].length,
-      confidence
-    });
+    const span = input.identity
+      ? { start: match.index, end: match.index + match[0].length }
+      : resolveSourceSpan(input, match.index, match[0].length);
+    if (span) found.push({ type: "INJECTION", subtype: "OBFUSCATED", maskedAs: "[INJECTION]", start: span.start, end: span.end, confidence });
   }
   return found;
 }
 
 /**
+ * Sweeps the run in overlapping windows, decoding each at all four alignments, and
+ * reports the strongest injection match.
+ *
+ * Both dimensions exist because each was a bypass on its own. Decoding only the head of
+ * a long run let an attacker push the instruction past the cut with plain padding, so
+ * the run is swept end to end. Decoding at one alignment let a one-to-three character
+ * prefix shift every byte, so all four quantum offsets are tried. The character budget
+ * caps the combined cost.
+ */
+function strongestEncodedConfidence(run: string, skipValidation: boolean, budget: { left: number }): number | undefined {
+  let strongest: number | undefined;
+  const step = encodedWindowLength - encodedWindowOverlap;
+  for (let start = 0; start < run.length; start += step) {
+    const window = run.slice(start, start + encodedWindowLength);
+    for (const offset of alignments) {
+      if (budget.left <= 0) return strongest;
+      budget.left -= window.length - offset;
+      const text = decodeBase64Text(window.slice(offset));
+      if (text === undefined) continue;
+      const confidence = strongestInjectionConfidence(text, skipValidation);
+      if (confidence !== undefined && (strongest === undefined || confidence > strongest)) strongest = confidence;
+    }
+  }
+  return strongest;
+}
+
+/**
  * Decodes a candidate run, or returns undefined when it is not base64-encoded text.
- * `atob` rejects malformed base64 and the fatal TextDecoder rejects anything that is
- * not valid UTF-8, so binary blobs and hashes fall out here rather than being scanned.
+ * `atob` rejects malformed base64, which keeps non-base64 text out. Decoding is lenient
+ * about the *bytes*, though: a strict UTF-8 pass threw away the whole candidate when a
+ * few leading bytes were junk, which is exactly what a shifted or prefixed blob looks
+ * like. Undecodable bytes become replacement characters instead, and the injection rules
+ * still have to match real words for anything to be reported — so binary blobs and
+ * hashes produce nothing rather than being rejected up front.
+ *
+ * base64url is accepted because it is the standard form in URLs and JWT-style payloads.
  */
 function decodeBase64Text(candidate: string): string | undefined {
+  const standard = candidate.replace(/-/g, "+").replace(/_/g, "/").replace(/=+$/, "");
+  // atob needs a length that is a valid base64 quantum; a stray trailing character
+  // would otherwise throw and discard an otherwise decodable run.
+  const usable = standard.slice(0, standard.length - (standard.length % 4 === 1 ? 1 : 0));
   try {
-    const binary = atob(candidate);
+    const binary = atob(usable);
     if (binary.length < 8) return undefined;
-    return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(binary, (character) => character.charCodeAt(0)));
+    return new TextDecoder("utf-8").decode(Uint8Array.from(binary, (character) => character.charCodeAt(0)));
   } catch {
     return undefined;
   }
