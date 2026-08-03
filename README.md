@@ -80,6 +80,7 @@ npm run bench
 | 정책 작성 가이드 | [열기](docs/policy-guide/README.md) | [Open](docs/policy-guide/README.en.md) |
 | 위험 점수 산식 | [열기](docs/risk-scoring.md) | [Open](docs/risk-scoring.en.md) |
 | 벤치마크 게이트 | [열기](docs/benchmark-gate.md) | [Open](docs/benchmark-gate.en.md) |
+| 벤치마크 결과 정리 | [열기](docs/benchmark-results.md) | [Open](docs/benchmark-results.md) |
 | 기여 가이드 | [열기](CONTRIBUTING.md#한국어) | [Open](CONTRIBUTING.md#english) |
 | 개발 워크플로 | [열기](docs/contributing/development-workflow.md) | [Open](docs/contributing/development-workflow.en.md) |
 | 커밋 컨벤션 | [열기](docs/contributing/commit-convention.md) | [Open](docs/contributing/commit-convention.en.md) |
