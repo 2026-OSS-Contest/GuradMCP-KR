@@ -52,6 +52,16 @@ curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?m
 curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?mode=vulnerable"
 ```
 
+The T-02/T-08 scenario runs the same way: a support-ticket lookup whose phone number, resident
+registration number, and bank account are masked. That lookup is legitimate work, so it ends in
+`mask_then_allow` rather than a block. See the [Korean PII masking demo](korean-pii-demo.en.md).
+
+```bash
+curl --fail --silent --request POST http://localhost:3002/demo/consultation-log
+# To assert the masking rather than just read it
+./scripts/demo-korean-pii.sh
+```
+
 ## Profiles
 
 | Purpose | Command | Contents |
