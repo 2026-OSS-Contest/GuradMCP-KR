@@ -2,12 +2,10 @@ import { expect, test } from "@playwright/test";
 
 // GMCP-21 flow 1: 공격 실행 → 차단 표시 → Replay 확인.
 //
-// SCR-201 (Demo & Live Console, the screen that would trigger an attack scenario) is still a
-// `ScreenStub` on this branch — there is no control in the DOM that "runs" an attack yet, so
-// the 공격 실행 leg cannot be driven from the UI. This spec instead covers its observable
-// effect end-to-end: a blocked event landing in SCR-101's recent-events feed (차단 표시) and
-// deep-linking into the matching SCR-301 Replay detail (Replay 확인). The second test pins down
-// the SCR-201 gap itself so it shows up as a needed follow-up rather than a silent omission.
+// The first test covers the flow's observable effect: a blocked event landing in SCR-101's
+// recent-events feed (차단 표시) and deep-linking into the matching SCR-301 Replay detail
+// (Replay 확인). The second drives the 공격 실행 leg itself, which SCR-201 (Attack Lab) can now
+// do — it used to be a `ScreenStub`, so a second test pinned that gap down instead.
 
 test("GMCP-21 a blocked event on the home page deep-links into its Replay detail", async ({ page }) => {
   await page.goto("/");
@@ -30,11 +28,22 @@ test("GMCP-21 a blocked event on the home page deep-links into its Replay detail
   await expect(detail.getByText("위협 점수")).toBeVisible();
 });
 
-test("GMCP-21 documents the gap: the attack-trigger screen (SCR-201) has no UI yet", async ({ page }) => {
+test("GMCP-21 running an attack on SCR-201 shows the block and leads to its Replay", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "데모 실행" }).click();
   await expect(page).toHaveURL(/\/demo$/);
-  await expect(page.getByText("SCR-201")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Demo & Live Console" })).toBeVisible();
-  await expect(page.getByText(/스캐폴드 단계/)).toBeVisible();
+
+  // 공격 실행: pick a scenario and run it through the guard.
+  await page.getByRole("button", { name: "시나리오 선택" }).click();
+  await page.getByRole("option", { name: /T-01/ }).click();
+  await page.getByRole("button", { name: "적용 실행", exact: true }).click();
+
+  // 차단 표시: the guarded pane names the policy that stopped the call.
+  const guarded = page.getByRole("region", { name: "적용 (Guarded)" });
+  await expect(guarded.getByText("block_env_file_read")).toBeVisible();
+
+  // Replay 확인: the run's summary strip leads to the session it was recorded in.
+  await page.getByRole("link", { name: /Replay에서 보기/ }).click();
+  await expect(page).toHaveURL(/\/replay\/s-0712$/);
+  await expect(page.getByTestId("event-detail").getByText("read_file")).toBeVisible();
 });
