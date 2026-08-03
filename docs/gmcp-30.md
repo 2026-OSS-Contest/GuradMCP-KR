@@ -12,16 +12,18 @@
 
 | 항목 | 기록 |
 | --- | --- |
-| 검증자 / 날짜 |  |
-| OS / CPU 아키텍처 |  |
-| Docker / Compose 버전 |  |
-| clone 시작 시각 |  |
-| `docker compose --profile demo up -d --build` 시작 시각 |  |
-| 모든 필수 서비스 healthy 시각 |  |
-| 콘솔 최초 접속 시각 |  |
-| 데모 이벤트 최초 표시 시각 |  |
-| 총 소요 시간 |  |
-| 실패/우회/문서 혼동 |  |
+| 검증자 / 날짜 | 김규호 / 2026-07-31 (내부 1차 검증) |
+| OS / CPU 아키텍처 | macOS 15 (Darwin 25.5.0) / ARM64 (Apple Silicon) |
+| Docker / Compose 버전 | Docker 29.4.2 |
+| clone 시작 시각 | 미측정 — dev@8dc45bc 신규 git worktree + `npm ci`(성공)로 대체 |
+| `docker compose --profile demo up -d --build` 시작 시각 | 기준 시각 T+0s (demo 프로필 제외한 필수 서비스 기준) |
+| 모든 필수 서비스 healthy 시각 | T+136s (console·gateway·control-plane·postgres·redis 5종 healthy) |
+| 콘솔 최초 접속 시각 | T+142s (`/api/health` UP, gateway·control-plane 의존성 포함) |
+| 데모 이벤트 최초 표시 시각 | 미측정 — demo 프로필 미실행 (외부 검증 시 측정 예정) |
+| 총 소요 시간 | **142초 (< 5분 KPI 통과)** |
+| 실패/우회/문서 혼동 | 로컬 3000/5432 포트 선점(무관 프로세스) → `CONSOLE_PORT` 등 env 오버라이드로 회피 성공, compose 파일 수정 불필요 |
+
+> 위 1차 기록은 내부 검증(팀원 로컬, 캐시 warm 상태의 npm/Docker)이며, DoD의 클린 머신·외부 검증자 재현은 제출 전 별도 수행한다.
 
 ## 합격 기준
 

@@ -44,6 +44,23 @@ export const SERVERS: McpServer[] = [
   }
 ];
 
+/**
+ * The mock's approval ledger. `/overview` and the event stream have to agree about this number:
+ * without a shared count the poll would keep contradicting the events the same mock just sent,
+ * and the status-bar badge would swing between the two.
+ */
+let pending = 2;
+
+export const approvals = {
+  pending: () => pending,
+  raise() {
+    pending += 1;
+  },
+  resolve() {
+    pending = Math.max(0, pending - 1);
+  }
+};
+
 export function overviewOf(servers: McpServer[]): Overview {
   const disconnected = servers.filter((server) => !server.connected).length;
   return {
@@ -56,7 +73,7 @@ export function overviewOf(servers: McpServer[]): Overview {
     protectedTools: 17,
     policies: { active: 24, packs: POLICY_PACKS },
     blocked24h: 6,
-    pendingApprovals: 2
+    pendingApprovals: approvals.pending()
   };
 }
 
