@@ -1,4 +1,7 @@
 import type {
+  AttackRun,
+  AttackRunMode,
+  AttackScenariosResponse,
   Overview,
   PolicyDetail,
   RecentEventsResponse,
@@ -41,3 +44,10 @@ export const getPolicy = (id: string, signal?: AbortSignal) =>
 /** Reveal-original (spec §5.3 no.5): records the access in the audit log. */
 export const revealEvent = (id: string, signal?: AbortSignal) =>
   post<RevealContent>(`/events/${encodeURIComponent(id)}/reveal`, signal);
+
+// SCR-201 Attack Lab (spec §5.2).
+export const getAttackScenarios = (signal?: AbortSignal) =>
+  get<AttackScenariosResponse>("/attacklab/scenarios", signal);
+/** Runs one scenario with the guard off or on; resolves once the run has finished. */
+export const runAttackScenario = (id: string, mode: AttackRunMode, signal?: AbortSignal) =>
+  post<AttackRun>(`/attacklab/run/${encodeURIComponent(id)}?mode=${mode}`, signal);
