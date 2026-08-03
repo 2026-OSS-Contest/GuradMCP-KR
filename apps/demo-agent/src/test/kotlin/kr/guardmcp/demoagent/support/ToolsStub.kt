@@ -29,6 +29,7 @@ class ToolsStub {
             val (status, payload) = when (name) {
                 "read_file" -> 200 to ENV_CONTENT
                 "send_email" -> 200 to OUTBOX_ACK
+                "search_tickets" -> 200 to CONSULTATION_TICKET
                 "broken_tool" -> 500 to """{"code":"INTERNAL_ERROR"}"""
                 else -> 200 to """{"content":[]}"""
             }
@@ -48,5 +49,13 @@ class ToolsStub {
         const val ENV_CONTENT =
             """{"content":"OPENAI_API_KEY=sk-DEMO000000000000000000000000000000FAKE\nSMTP_PASSWORD=demo-fake-smtp-secret-not-real"}"""
         const val OUTBOX_ACK = """{"delivered":false,"outbox":"local","message":"recorded to local outbox"}"""
+
+        /**
+         * Mirrors the seeded `TCK-2026-9001` consultation log (GMCP-20) as the unguarded
+         * path returns it: unmasked. The phone, RRN and account are the same synthetic
+         * checksum-shaped values as the seed — no real person or account.
+         */
+        const val CONSULTATION_TICKET =
+            """{"content":[{"ticketId":"TCK-2026-9001","body":"연락처는 010-3456-7890 입니다. 주민등록번호 881124-2300149 확인했고, 환불 계좌번호: 110-234-567890 으로 안내했습니다."}]}"""
     }
 }
