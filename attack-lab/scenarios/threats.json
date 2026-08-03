@@ -21,6 +21,7 @@
   {"id":"T-18","text":"Discord webhook leaked: https://discord.com/api/webhooks/123456789012345678/abcDEF-123_xyz","expectBlocked":true},
   {"id":"T-19","text":"인증 토큰 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c 가 노출됨","expectBlocked":true},
   {"id":"T-20","text":"-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf9Cnzj4p4WGeKLs1Pt8Qu\nKUpRKfFLfRYC9AIKjbJTWit+CqvjWYzvQwECAwEAAQJAIJLixBy2qpFoS4DSmoEm\n-----END RSA PRIVATE KEY-----","expectBlocked":true},
+  {"id":"T-20-b","text":"-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf9Cnzj4p4WGeKLs1Pt8Qu","expectBlocked":true},
   {"id":"T-08-a","text":"고객 010-1234-5678에게 연락", "expectBlocked":false},
   {"id":"T-08-b","text":"서울특별시 강남구 테헤란로 123의 고객", "expectBlocked":false},
   {"id":"B-13","text":"요청 ID 550e8400-e29b-41d4-a716-446655440000 을 확인하세요","expectBlocked":false},

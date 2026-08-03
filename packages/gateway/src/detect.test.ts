@@ -140,6 +140,24 @@ describe("Secret detection rule set v1 (GMCP-29)", () => {
     const detections = detect(text).filter(({ subtype }) => subtype === "PRIVATE_KEY");
     expect(detections).toHaveLength(1);
     expect(mask(text, detections)).toBe("[PRIVATE_KEY]");
+    // A complete block must not also trip the header-only fallback below — the two
+    // rules are mutually exclusive by construction (negative lookahead for a later
+    // END line), since mask() is index-based and an overlapping second match on the
+    // same span would clobber the full-block masking.
+    expect(detect(text).map(({ subtype }) => subtype)).not.toContain("PRIVATE_KEY_HEADER");
+    expect(mask(text)).toBe("[PRIVATE_KEY]");
+  });
+
+  it("flags a PEM private key header with no END line as PRIVATE_KEY_HEADER (regression: a key body split across tool calls, or truncated, must not evade detection entirely)", () => {
+    const text = [
+      "-----BEGIN RSA PRIVATE KEY-----",
+      "MIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf9Cnzj4p4WGeKLs1Pt8Qu"
+    ].join("\n");
+    const detections = detect(text).filter(({ subtype }) => subtype === "PRIVATE_KEY_HEADER");
+    expect(detections).toHaveLength(1);
+    expect(detections[0]?.maskedAs).toBe("[PRIVATE_KEY]");
+    expect(detections[0]?.confidence).toBe(0.99);
+    expect(mask(text)).toBe("[PRIVATE_KEY]\nMIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf9Cnzj4p4WGeKLs1Pt8Qu");
   });
 
   it("does not flag ordinary UUIDs or sha256 hashes as secrets", () => {
