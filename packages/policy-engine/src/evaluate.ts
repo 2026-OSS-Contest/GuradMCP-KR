@@ -3,8 +3,10 @@
 // evaluatePolicies() sorts active policies by priority ascending (규칙 1) and
 // adopts a single action under one of two pack-level strategies:
 //   - severity-max (default, 규칙 2): the strongest ACTION_RANK among every
-//     matched policy wins; ties go to the lower-priority (earlier-evaluated)
-//     policy.
+//     matched policy wins. Ties on action strength go to the higher
+//     SEVERITY_RANK (critical > ... > info); remaining ties go to the
+//     lower-priority (earlier-evaluated) policy, since `matched` is already
+//     priority/id sorted.
 //   - first-match: the first matched policy's action wins immediately, but
 //     evaluation continues over the rest so `matchedPolicyIds` still records
 //     every match that follows it — 규칙 5 (전체 매칭 ID 기록) has no
@@ -20,7 +22,7 @@
 
 import type { Action, EvaluationResult, Policy, PolicyContext, PolicyPackConfig } from "./types.js";
 import { matchesPolicy } from "./matcher.js";
-import { ACTION_RANK } from "./action-rank.js";
+import { ACTION_RANK, SEVERITY_RANK } from "./action-rank.js";
 
 export function evaluatePolicies(
   rules: Policy[],
@@ -55,7 +57,13 @@ export function evaluatePolicies(
 
   const winner =
     firstMatchWinner ??
-    matched.reduce((strongest, rule) => (ACTION_RANK[rule.action] > ACTION_RANK[strongest.action] ? rule : strongest));
+    matched.reduce((strongest, rule) => {
+      const ruleRank = ACTION_RANK[rule.action];
+      const strongestRank = ACTION_RANK[strongest.action];
+      if (ruleRank !== strongestRank) return ruleRank > strongestRank ? rule : strongest;
+      // Remaining tie stays with `strongest`: priority/id order via sort above.
+      return SEVERITY_RANK[rule.severity] > SEVERITY_RANK[strongest.severity] ? rule : strongest;
+    });
 
   return buildResult(winner, matched, pack);
 }

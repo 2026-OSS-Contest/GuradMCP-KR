@@ -73,6 +73,18 @@ it("tie-breaks equal-rank matches toward the lower-priority policy", () => {
   expect(result.winningPolicyId).toBe("warn_earlier");
 });
 
+it("breaks an equal-rank tie by severity (critical over info) before priority", () => {
+  const rules = [
+    // Lower priority (evaluated first) but weaker severity: should still
+    // lose the tie-break to the higher-severity block below it.
+    policy({ id: "block_info", priority: 10, action: "block", severity: "info" }),
+    policy({ id: "block_critical", priority: 20, action: "block", severity: "critical" })
+  ];
+  const result = evaluatePolicies(rules, context(), pack());
+  expect(result.winningPolicyId).toBe("block_critical");
+  expect(result.severity).toBe("critical");
+});
+
 // --- 규칙 3: default_action ---------------------------------------------------
 
 describe("no policy matches -> default_action", () => {
