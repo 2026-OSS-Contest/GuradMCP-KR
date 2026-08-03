@@ -77,7 +77,7 @@ export function toEventDetail(
   node: ApiTimelineNode,
   sessionId: string,
   contextToolName: string | undefined,
-  chainStatus: ChainStatus
+  chainStatus: ChainStatus | undefined
 ): EventDetail {
   const kind = NODE_TYPE[node.type];
   const detail = node.detail;
@@ -93,7 +93,7 @@ export function toEventDetail(
     detections: detail?.detections.map(
       (d): Detection => ({ type: d.type, subtype: d.subtype, confidence: Math.round(d.confidence * 100) })
     ),
-    chain: detail ? { status: chainStatus, hash: detail.hash } : undefined,
+    chain: detail && chainStatus ? { status: chainStatus, hash: detail.hash } : undefined,
     canReveal: canReveal(kind)
     // body/call/direction/maskDiff/reveal: no source in this API yet, left undefined — see the
     // GMCP-28 wire contract note in ./types.ts.
@@ -114,7 +114,12 @@ export function toTimelineResponse(api: ApiSessionTimelineResponse): TimelineRes
   return { events, details };
 }
 
-/** GET /events/{id}: standalone, so there is no sibling TOOL_CALL or session-wide chain status to draw on. */
+/**
+ * GET /events/{id}: standalone, so there is no sibling TOOL_CALL or session-wide chain status to
+ * draw on. Without the session's chainStatus/brokenAt we have no evidence either way, so the
+ * chain pill is left undefined rather than claiming "verified" — a fabricated verified badge on
+ * a deep-linked, possibly-tampered session is worse than showing nothing.
+ */
 export function toEventDetailFromLookup(api: ApiEventLookupResponse): EventDetail {
-  return toEventDetail(api, api.sessionId, api.toolName, "verified");
+  return toEventDetail(api, api.sessionId, api.toolName, undefined);
 }

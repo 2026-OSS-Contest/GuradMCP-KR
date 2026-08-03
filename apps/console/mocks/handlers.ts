@@ -216,4 +216,19 @@ export const handlers = [
       seq += 1;
     }, STREAM_INTERVAL_MS);
   }),
+
+  // Deep-link support (spec §3.3): a single node lookup by eventId. Registered after the
+  // `/events/stream` sse() handler (which is itself a GET matcher) so a literal ":id" path
+  // param can never shadow the stream route — MSW resolves handlers in array order, first match
+  // wins.
+  http.get("*/api/v1/events/:id", async ({ params }) => {
+    await delay(LATENCY_MS);
+    const event = eventLookup(String(params.id));
+    return event
+      ? HttpResponse.json(event)
+      : HttpResponse.json(
+          { code: "event_not_found", message: "unknown eventId" },
+          { status: 404 },
+        );
+  }),
 ];
