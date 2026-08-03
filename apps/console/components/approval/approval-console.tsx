@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Info } from "lucide-react";
 import { decideApproval, getApprovals } from "@/lib/api/client";
@@ -34,15 +34,17 @@ export function ApprovalConsole() {
   const t = useTranslations("approval");
   const [tab, setTab] = useState<Tab>("queue");
   const [busy, setBusy] = useState<string | null>(null);
-  const [conflict, setConflict] = useState(false);
+  /** What the last decision attempt has to say for itself, if anything. */
+  const [notice, setNotice] = useState<"conflict" | "decideFailed" | null>(null);
   /** Bumped by an approval event so the queue refetches the moment the gateway says so. */
   const [pulse, setPulse] = useState(0);
 
-  const queue = useResource((signal) => getApprovals("pending", signal), {
+  // One unfiltered request: the API has no bucket covering the four terminal statuses, and both
+  // tabs are views of the same list anyway.
+  const approvals = useResource((signal) => getApprovals(signal), {
     intervalMs: POLL_MS,
-    key: `queue-${pulse}`
+    key: `approvals-${pulse}`
   });
-  const history = useResource((signal) => getApprovals("resolved", signal), { key: `history-${pulse}` });
 
   // The stream is the live path; the interval above is what keeps this honest when it is quiet.
   useEffect(() => {
@@ -58,19 +60,29 @@ export function ApprovalConsole() {
     return () => client.close();
   }, []);
 
-  const pending = queue.data?.approvals ?? [];
+  // Memoised so the keyboard handler below re-subscribes when the queue actually changes, not on
+  // every one-second expiry tick.
+  const held = useMemo(() => approvals.data ?? [], [approvals.data]);
+  const pending = useMemo(() => held.filter((approval) => approval.status === "pending"), [held]);
+  const resolved = useMemo(() => held.filter((approval) => approval.status !== "pending"), [held]);
+
+  // Read at keypress time rather than captured, so an expiry between renders still counts.
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
 
   const decide = useCallback(
     async (approval: Approval, decision: ApprovalDecision) => {
       if (busy) return;
       setBusy(approval.id);
-      setConflict(false);
+      setNotice(null);
       try {
         await decideApproval(approval.id, decision);
       } catch (error) {
         // 409: another operator, or the 120s timeout, resolved it first. Nothing to retry — the
-        // refetch below replaces the card with whatever actually happened.
-        if (error instanceof ApiError && error.status === 409) setConflict(true);
+        // refetch below replaces the card with whatever actually happened. Anything else is the
+        // decision not landing at all, which the operator has to be told about: staying silent
+        // reads as success while the call is still held.
+        setNotice(error instanceof ApiError && error.status === 409 ? "conflict" : "decideFailed");
       } finally {
         setBusy(null);
         setPulse((previous) => previous + 1);
@@ -81,20 +93,23 @@ export function ApprovalConsole() {
 
   // Spec §5.6: B / M / A resolve the call at the top of the queue without reaching for the mouse.
   useEffect(() => {
-    const top = pending[0];
-    if (!top || tab !== "queue") return;
+    if (tab !== "queue") return;
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || event.metaKey || event.ctrlKey) return;
       const decision =
         event.key.toLowerCase() === "a" ? "approve" : event.key.toLowerCase() === "b" ? "block" : event.key.toLowerCase() === "m" ? "approve_masked" : undefined;
       if (!decision) return;
+      // Skip anything already past its deadline: the gateway has blocked it server-side, so a
+      // shortcut aimed at the card on top would otherwise spend itself on a 409.
+      const top = pendingRef.current.find((approval) => Date.parse(approval.expiresAt) > Date.now());
+      if (!top) return;
       event.preventDefault();
       void decide(top, decision);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pending, tab, decide]);
+  }, [tab, decide]);
 
   // Expiry is decided here rather than inside the card, so this has to re-render on its own
   // clock; without it a deadline passing goes unnoticed until the next poll happens to land.
@@ -135,20 +150,20 @@ export function ApprovalConsole() {
           </button>
         ))}
 
-        {conflict && (
+        {notice && (
           <p
             role="status"
             className="ml-auto flex items-center gap-2 rounded-lg bg-grayscale-700 px-4 py-3 text-body-text-b3-md text-grayscale-white"
           >
             <Info className="size-4 flex-none" aria-hidden />
-            {t("conflict")}
+            {t(notice)}
           </p>
         )}
       </div>
 
       {tab === "queue" ? (
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-          {queue.error && !queue.data ? (
+          {approvals.error && !approvals.data ? (
             <p role="status" className="py-16 text-center text-body-text-b3-md text-grayscale-400">
               {t("error")}
             </p>
@@ -173,7 +188,7 @@ export function ApprovalConsole() {
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <ApprovalHistory approvals={history.data?.approvals ?? []} />
+          <ApprovalHistory approvals={resolved} />
         </div>
       )}
     </div>

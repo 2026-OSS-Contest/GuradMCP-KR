@@ -1,7 +1,6 @@
 import type {
   Approval,
   ApprovalDecision,
-  ApprovalsResponse,
   AttackRun,
   AttackRunMode,
   AttackScenariosResponse,
@@ -76,9 +75,14 @@ export const runAttackScenario = (id: string, mode: AttackRunMode, signal?: Abor
 export const previewDetection = (text: string, direction: DetectDirection, signal?: AbortSignal) =>
   postJson<DetectionPreview>(`/detect/preview?direction=${direction}`, { text }, signal);
 
-// SCR-402 Approval Console (spec §5.6), served by the control plane today.
-export const getApprovals = (status: "pending" | "resolved", signal?: AbortSignal) =>
-  get<ApprovalsResponse>(`/approvals?status=${status}`, signal);
+/**
+ * SCR-402 Approval Console (spec §5.6), served by the control plane today.
+ *
+ * The endpoint answers with a bare JSON array, not an envelope, and its `status` filter only
+ * accepts one `ApprovalStatus` at a time — there is no `resolved` bucket covering the four
+ * terminal ones. So the screen asks once, unfiltered, and splits the list itself.
+ */
+export const getApprovals = (signal?: AbortSignal) => get<Approval[]>("/approvals", signal);
 
 /**
  * Resolve a held call. Throws `ApiError` with status 409 when someone else — or the 120s

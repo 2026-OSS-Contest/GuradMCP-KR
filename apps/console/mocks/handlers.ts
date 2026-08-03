@@ -11,8 +11,8 @@ import type {
   SessionsResponse,
   TimelineResponse
 } from "@/lib/api/types";
-import { approvalsIn, decide, resetApprovals } from "./approvals";
-import { EMPTY_OVERVIEW, SERVERS, approvals, liveEvent, overviewOf, recentEvents } from "./data";
+import { allApprovals, decide, raiseApproval, resetApprovals, resolveOldest } from "./approvals";
+import { EMPTY_OVERVIEW, SERVERS, liveEvent, overviewOf, recentEvents } from "./data";
 import { ATTACK_SCENARIOS, attackRun } from "./attack-lab";
 import { previewOf } from "./detect";
 import { SESSIONS, policyDetail, revealOf, timelineOf } from "./replay";
@@ -87,13 +87,14 @@ export const handlers = [
   }),
 
   // SCR-402 Approval Console (spec §5.6), served by the control plane today.
-  http.get("*/api/v1/approvals", async ({ request }) => {
-    const status = new URL(request.url).searchParams.get("status") === "resolved" ? "resolved" : "pending";
-    const empty = readScenario() === "empty";
-    resetApprovals(empty);
+  // A bare array, and no `status` filter — the real endpoint has no bucket covering the four
+  // terminal statuses, so the console asks for everything and splits it. The mock matches that
+  // rather than the shape the console would have preferred.
+  http.get("*/api/v1/approvals", async () => {
+    resetApprovals(readScenario() === "empty");
     await delay(LATENCY_MS);
     if (readScenario() === "offline") return HttpResponse.error();
-    return HttpResponse.json({ approvals: approvalsIn(status) });
+    return HttpResponse.json(allApprovals());
   }),
 
   http.post("*/api/v1/approvals/:id/decision", async ({ params, request }) => {
@@ -162,10 +163,10 @@ export const handlers = [
       // An empty console has no approvals to raise, so the stream stays quiet there.
       if (readScenario() !== "empty") {
         if (seq % 3 === 0) {
-          approvals.raise();
+          raiseApproval();
           client.send({ event: "approval.created", data: { id: `apr-${seq}` } });
         } else if (seq % 3 === 1) {
-          approvals.resolve();
+          resolveOldest();
           client.send({ event: "approval.resolved", data: { id: `apr-${seq - 1}` } });
         }
       }

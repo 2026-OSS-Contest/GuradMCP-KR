@@ -209,6 +209,7 @@
     "timedOut": "Blocked after the 120s timeout",
     "movingToHistory": "Moving to history in 2s",
     "conflict": "Another operator already handled this.",
+    "decideFailed": "The decision did not go through. Check the gateway connection and try again.",
     "queueEmpty": "Nothing is waiting for approval.",
     "historyEmpty": "Nothing has been handled yet.",
     "error": "Could not load the approval queue. Check the gateway connection, then try again.",

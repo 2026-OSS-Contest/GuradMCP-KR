@@ -25,9 +25,8 @@ test("SCR-402 approving masked moves the call into the history", async ({ page }
   const card = page.getByRole("article").filter({ hasText: "send_email" });
   await card.getByRole("button", { name: /마스킹 후 승인/ }).click();
 
-  // It leaves the queue and the count drops with it.
+  // It leaves the queue.
   await expect(card).toBeHidden();
-  await expect(page.getByRole("button", { name: /대기열/ })).toContainText("1");
 
   await page.getByRole("button", { name: "처리 이력" }).click();
   const row = page.getByRole("row").filter({ hasText: "send_email" });

@@ -308,6 +308,20 @@ export type ApprovalStatus = "pending" | "approved" | "approved_masked" | "block
 /** The operator's three choices (spec §5.6): 차단 / 마스킹 후 승인 / 그대로 승인. */
 export type ApprovalDecision = "block" | "approve_masked" | "approve";
 
+/** A run of the 마스킹 전 (Raw) pane: plain text, or the value masking would replace. */
+export type RawPart = { text: string } | { sensitive: string };
+
+/**
+ * One numbered line of the Raw pane. Deliberately not `ContentLine`: there a `mask` part carries
+ * the label that stands in for a value (`PHONE`), whereas this pane has to show the value itself.
+ * Sharing the type would mean the same field meant opposite things depending on which pane read
+ * it, and a backend filling it per the documented contract would render `PHONE` as the original.
+ */
+export interface RawLine {
+  no: string;
+  parts: RawPart[];
+}
+
 export interface Approval {
   id: string;
   sessionId: string;
@@ -328,12 +342,8 @@ export interface Approval {
   riskTags?: { type: string; count: number }[];
   /** 0–100, shown beside the tags. */
   threatScore?: number;
-  /** The 마스킹 미리보기 panes, in the same shape SCR-301's Mask Diff uses. */
-  maskPreview?: { raw: ContentLine[]; masked: ContentLine[] };
-}
-
-export interface ApprovalsResponse {
-  approvals: Approval[];
+  /** The 마스킹 미리보기 panes: the values that would go out, beside what would replace them. */
+  maskPreview?: { raw: RawLine[]; masked: ContentLine[] };
 }
 
 export interface TimelineResponse {

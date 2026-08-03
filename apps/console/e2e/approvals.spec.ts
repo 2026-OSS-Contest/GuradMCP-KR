@@ -17,9 +17,10 @@ test("GMCP-21 the status bar's pending badge opens the queue it counts", async (
   await pending.click();
   await expect(page).toHaveURL(/\/approvals$/);
 
-  // The badge counted two held calls, and the queue it lands on holds exactly those two.
-  await expect(page.getByRole("button", { name: /대기열/ })).toContainText("2");
-  await expect(page.getByRole("article")).toHaveCount(2);
+  // The badge counted the calls this queue is holding, and both of them are on it. Asserted by
+  // identity rather than count: the stream raises further calls while the page is open.
+  await expect(page.getByRole("article").filter({ hasText: "send_email" })).toBeVisible();
+  await expect(page.getByRole("article").filter({ hasText: "fetch_url" })).toBeVisible();
 });
 
 test("GMCP-21 rail nav reaches the console, where a call can be approved as it stands", async ({ page }) => {

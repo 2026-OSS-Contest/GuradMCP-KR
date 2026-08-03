@@ -2,20 +2,20 @@
 // real; the mock keeps its own queue so the 120s fail-closed timeout, the resolved history and
 // the 409 a second operator would hit can all be exercised without a gateway.
 
-import type { Approval, ApprovalDecision, ContentLine } from "@/lib/api/types";
+import type { Approval, ApprovalDecision, ContentLine, RawLine } from "@/lib/api/types";
 
 /** Spec §5.6: the gateway fails closed 120 seconds after a call is held. */
 const TIMEOUT_MS = 120_000;
 
 const line = (no: string, parts: ContentLine["parts"]): ContentLine => ({ no, parts });
+const rawLine = (no: string, parts: RawLine["parts"]): RawLine => ({ no, parts });
 
-/** The mask preview the design draws on the send_email card. */
-// A `mask` part marks the run masking would replace: the raw pane underlines it, the masked
-// pane opposite swaps in the chip. Same shape, two readings.
-const RAW: ContentLine[] = [
-  line("01", [{ text: "등록 연락처 " }, { mask: "010-4728-1953" }, { text: " 으로 본인 확인 완료." }]),
-  line("02", [{ text: "변경 계좌: 국민은행 " }, { mask: "942102-01-583274" }, { text: " (예금주: 김민서)" }]),
-  line("03", [{ text: "본인 확인 과정에서 주민등록번호 " }, { mask: "881105-2069417" }, { text: " 확인" }])
+/** The mask preview the design draws on the send_email card. The raw pane carries the values
+ *  themselves (`sensitive`); the masked pane opposite carries the labels that replace them. */
+const RAW: RawLine[] = [
+  rawLine("01", [{ text: "등록 연락처 " }, { sensitive: "010-4728-1953" }, { text: " 으로 본인 확인 완료." }]),
+  rawLine("02", [{ text: "변경 계좌: 국민은행 " }, { sensitive: "942102-01-583274" }, { text: " (예금주: 김민서)" }]),
+  rawLine("03", [{ text: "본인 확인 과정에서 주민등록번호 " }, { sensitive: "881105-2069417" }, { text: " 확인" }])
 ];
 
 const MASKED: ContentLine[] = [
@@ -96,9 +96,39 @@ function expire() {
   }
 }
 
-export function approvalsIn(status: "pending" | "resolved"): Approval[] {
+/** The endpoint is unfiltered, so the mock hands back the whole ledger the way the API does. */
+export function allApprovals(): Approval[] {
   expire();
-  return status === "pending" ? queue : resolved;
+  return [...queue, ...resolved];
+}
+
+/**
+ * What the SCR-000 pending badge counts (spec §4.1). It reads this queue rather than a tally of
+ * its own, so deciding a call here moves the badge — the two cannot drift apart.
+ */
+export function pendingCount(): number {
+  expire();
+  return queue.length;
+}
+
+/** The stream raises a held call and resolves it a tick later; both act on this same queue. */
+export function raiseApproval(): void {
+  expire();
+  queue.push(
+    held({
+      toolName: "db_query",
+      arguments: { table: "members" },
+      riskReason: "대량 조회 요청입니다.",
+      policyId: "approve_bulk_export",
+      riskTags: [{ type: "PII", count: 1 }],
+      threatScore: 64
+    })
+  );
+}
+
+export function resolveOldest(): void {
+  const oldest = queue[queue.length - 1];
+  if (oldest) decide(oldest.id, "approve", "stream");
 }
 
 const STATUS_BY_DECISION: Record<ApprovalDecision, Approval["status"]> = {
