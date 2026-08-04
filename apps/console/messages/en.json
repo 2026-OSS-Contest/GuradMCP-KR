@@ -189,6 +189,36 @@
     "copied": "Copied.",
     "error": "Could not run the inspection. Check the gateway connection, then run it again."
   },
+
+
+  "approval": {
+    "queue": "Queue",
+    "history": "History",
+    "remaining": "{seconds}s left",
+    "riskReason": "Risk",
+    "riskTag": "{type} ×{count}",
+    "threatScore": "Threat score",
+    "policy": "Policy",
+    "maskPreview": "Mask preview",
+    "raw": "Before (Raw)",
+    "masked": "After (Masked)",
+    "approve": "Approve as is",
+    "block": "Block",
+    "approveMasked": "Approve masked",
+    "expired": "Timed out",
+    "timedOut": "Blocked after the 120s timeout",
+    "movingToHistory": "Moving to history in 2s",
+    "conflict": "Another operator already handled this.",
+    "decideFailed": "The decision did not go through. Check the gateway connection and try again.",
+    "queueEmpty": "Nothing is waiting for approval.",
+    "historyEmpty": "Nothing has been handled yet.",
+    "error": "Could not load the approval queue. Check the gateway connection, then try again.",
+    "colTime": "Time",
+    "colTool": "Tool",
+    "colDecision": "Decision",
+    "colDecidedBy": "Handled by",
+    "colTook": "Took"
+  },
   "screens": {
     "gateway": {
       "title": "Gateway",

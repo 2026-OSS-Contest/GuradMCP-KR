@@ -297,6 +297,55 @@ export interface DetectionPreview {
   maskedText: string;
 }
 
+// ── SCR-402 Approval Console (spec §5.6) ────────────────────────────────────
+// `GET /approvals` and `POST /approvals/{id}/decision`, both already served by the control
+// plane. Its own vocabulary is used on the wire; the enrichment the design draws — the risk
+// tags, the threat score, the mask preview — is optional because the control plane does not
+// report it yet, and the card simply leaves out whatever is missing.
+
+export type ApprovalStatus = "pending" | "approved" | "approved_masked" | "blocked" | "expired";
+
+/** The operator's three choices (spec §5.6): 차단 / 마스킹 후 승인 / 그대로 승인. */
+export type ApprovalDecision = "block" | "approve_masked" | "approve";
+
+/** A run of the 마스킹 전 (Raw) pane: plain text, or the value masking would replace. */
+export type RawPart = { text: string } | { sensitive: string };
+
+/**
+ * One numbered line of the Raw pane. Deliberately not `ContentLine`: there a `mask` part carries
+ * the label that stands in for a value (`PHONE`), whereas this pane has to show the value itself.
+ * Sharing the type would mean the same field meant opposite things depending on which pane read
+ * it, and a backend filling it per the documented contract would render `PHONE` as the original.
+ */
+export interface RawLine {
+  no: string;
+  parts: RawPart[];
+}
+
+export interface Approval {
+  id: string;
+  sessionId: string;
+  status: ApprovalStatus;
+  toolName: string;
+  /** Call arguments; the card headlines the first as the call's subject. */
+  arguments: Record<string, string>;
+  riskReason: string;
+  policyId?: string | null;
+  requestedAt: string;
+  /** When the gateway gives up and fails closed — what the countdown counts down to. */
+  expiresAt: string;
+  decision?: ApprovalDecision | null;
+  decidedBy?: string | null;
+  decidedAt?: string | null;
+
+  /** `SECRET 1건`, `INJECTION 1건` — the evidence chips beside the reason. */
+  riskTags?: { type: string; count: number }[];
+  /** 0–100, shown beside the tags. */
+  threatScore?: number;
+  /** The 마스킹 미리보기 panes: the values that would go out, beside what would replace them. */
+  maskPreview?: { raw: RawLine[]; masked: ContentLine[] };
+}
+
 export interface TimelineResponse {
   events: TimelineEvent[];
   /** Full detail for each event id the panel can select. */

@@ -1,5 +1,6 @@
 import { HttpResponse, delay, http, sse } from "msw";
 import type {
+  ApprovalDecision,
   AttackRunMode,
   AttackScenariosResponse,
   DetectDirection,
@@ -10,7 +11,8 @@ import type {
   SessionsResponse,
   TimelineResponse
 } from "@/lib/api/types";
-import { EMPTY_OVERVIEW, SERVERS, approvals, liveEvent, overviewOf, recentEvents } from "./data";
+import { allApprovals, decide, raiseApproval, resetApprovals, resolveRaised } from "./approvals";
+import { EMPTY_OVERVIEW, SERVERS, liveEvent, overviewOf, recentEvents } from "./data";
 import { ATTACK_SCENARIOS, attackRun } from "./attack-lab";
 import { previewOf } from "./detect";
 import { SESSIONS, policyDetail, revealOf, timelineOf } from "./replay";
@@ -84,6 +86,29 @@ export const handlers = [
     return HttpResponse.json(previewOf(text, direction));
   }),
 
+  // SCR-402 Approval Console (spec §5.6), served by the control plane today.
+  // A bare array, and no `status` filter — the real endpoint has no bucket covering the four
+  // terminal statuses, so the console asks for everything and splits it. The mock matches that
+  // rather than the shape the console would have preferred.
+  http.get("*/api/v1/approvals", async () => {
+    resetApprovals(readScenario() === "empty");
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    return HttpResponse.json(allApprovals());
+  }),
+
+  http.post("*/api/v1/approvals/:id/decision", async ({ params, request }) => {
+    const { decision } = (await request.json()) as { decision: ApprovalDecision };
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    const done = decide(String(params.id), decision);
+    // Already decided, or the 120s timeout beat the operator to it — the API answers 409 and the
+    // console reports it rather than retrying.
+    return done
+      ? HttpResponse.json(done)
+      : HttpResponse.json({ code: "approval_already_resolved", message: "already decided" }, { status: 409 });
+  }),
+
   // Policy Chip popover (spec §3). Not gated by scenario — a chip resolves even offline-ish.
   http.get("*/api/v1/policies/:id", async ({ params }) => {
     await delay(LATENCY_MS);
@@ -138,10 +163,10 @@ export const handlers = [
       // An empty console has no approvals to raise, so the stream stays quiet there.
       if (readScenario() !== "empty") {
         if (seq % 3 === 0) {
-          approvals.raise();
+          raiseApproval();
           client.send({ event: "approval.created", data: { id: `apr-${seq}` } });
         } else if (seq % 3 === 1) {
-          approvals.resolve();
+          resolveRaised();
           client.send({ event: "approval.resolved", data: { id: `apr-${seq - 1}` } });
         }
       }
