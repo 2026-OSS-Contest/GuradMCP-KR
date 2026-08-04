@@ -33,8 +33,13 @@ interface ToolRiskRule {
 
 const toolRisks: readonly ToolRisk[] = ["high", "medium", "low"];
 
-/** A detection type sets the floor; an injection outranks a secret, which outranks PII. */
-const detectionBase: Record<DetectionKind, number> = { INJECTION: 70, SECRET: 60, PII: 40 };
+/**
+ * A detection type sets the floor; an injection outranks a secret, which
+ * outranks PII. SENSITIVE_FILE_PATH ranks below PII: it flags a filename
+ * mention, not disclosed data, so it should never outweigh an actual PII or
+ * secret span found alongside it (see detect.ts's DetectionKind comment).
+ */
+const detectionBase: Record<DetectionKind, number> = { INJECTION: 70, SECRET: 60, PII: 40, SENSITIVE_FILE_PATH: 20 };
 const toolWeight: Record<ToolRisk, number> = { high: 15, medium: 8, low: 0 };
 const trustWeight: Record<ServerTrust, number> = { untrusted: 18, limited: 9, trusted: 0 };
 const varietyStep = 6;

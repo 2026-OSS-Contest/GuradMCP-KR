@@ -6,12 +6,13 @@ import { describe, expect, it } from "vitest";
  * touching TypeScript. These checks keep a data-only pull request from shipping a rule
  * the detector would reject at start-up.
  */
-const catalogNames = ["pii", "secret", "injection"] as const;
-const knownValidators = ["luhn", "koreanRrn", "koreanBizNo", "koreanBankAccount"];
+const catalogNames = ["pii", "secret", "injection", "file-path"] as const;
+const knownValidators = ["luhn", "koreanRrn", "koreanBizNo", "koreanBankAccount", "jwtStructure"];
 const declaredTypes: Record<(typeof catalogNames)[number], string> = {
   pii: "PII",
   secret: "SECRET",
-  injection: "INJECTION"
+  injection: "INJECTION",
+  "file-path": "SENSITIVE_FILE_PATH"
 };
 
 describe.each(catalogNames)("%s rule catalog", (name) => {

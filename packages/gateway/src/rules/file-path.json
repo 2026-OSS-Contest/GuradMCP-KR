@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "type": "SENSITIVE_FILE_PATH",
+  "rules": [
+    {
+      "subtype": "SENSITIVE_FILE_PATH",
+      "description": "Credential-bearing file name (.env, id_rsa/id_ed25519, credentials.json) referenced in a tool argument. Signal only; blocking is a policy decision (see block_env_file_read).",
+      "pattern": "(?<=^|[\\s/\"'])(?:\\.env(?:\\.[A-Za-z0-9_-]+)?|id_(?:rsa|ed25519)(?:\\.pub)?|credentials(?:\\.json)?)(?=[\\s/\"']|$)",
+      "flags": "g",
+      "maskedAs": "[SENSITIVE_FILE_PATH]",
+      "confidence": 0.6
+    }
+  ]
+}
