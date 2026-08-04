@@ -1,0 +1,3 @@
+# Intentionally invalid: valid YAML, but a sequence instead of a mapping.
+- foo
+- bar

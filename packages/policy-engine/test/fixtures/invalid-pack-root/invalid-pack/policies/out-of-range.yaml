@@ -1,0 +1,9 @@
+# Intentionally invalid: priority is negative and risk_score.gte exceeds 100.
+id: out_of_range_example
+pack: invalid-pack
+priority: -5
+match:
+  risk_score:
+    gte: 150
+action: warn
+severity: low

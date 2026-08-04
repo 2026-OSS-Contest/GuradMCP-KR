@@ -1,0 +1,8 @@
+id: invalid_pack_valid_example
+pack: invalid-pack
+priority: 500
+match:
+  tool: '*'
+action: warn
+severity: low
+message: This policy is valid and should load despite its siblings failing.

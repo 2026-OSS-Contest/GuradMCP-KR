@@ -1,0 +1,8 @@
+# Intentionally invalid: `pack` does not match the directory it lives in.
+id: mismatched_pack_example
+pack: some-other-pack
+priority: 100
+match:
+  tool: '*'
+action: warn
+severity: low
