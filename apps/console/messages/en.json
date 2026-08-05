@@ -226,6 +226,7 @@
   "policies": {
     "loading": "Loading policies…",
     "error": "Could not load policies. Check the gateway connection and try again.",
+    "toggleFailed": "Could not change the policy. Check the gateway connection and try again.",
     "packs": {
       "title": "Policy packs",
       "toggle": "Enable the {name} policy pack"

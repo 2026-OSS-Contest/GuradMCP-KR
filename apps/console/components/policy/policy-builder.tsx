@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import { Info } from "lucide-react";
 import {
   getDryRunStats,
   getPolicies,
@@ -40,6 +41,8 @@ export function PolicyBuilder() {
   const [confirming, setConfirming] = useState<PolicyRow | null>(null);
   /** Raised by `policy.reloaded`; cleared when the operator takes the refetch. */
   const [reloaded, setReloaded] = useState(false);
+  /** What the last toggle has to say for itself, if anything. */
+  const [notice, setNotice] = useState<"toggleFailed" | null>(null);
   /** Bumped to refetch — on the banner's action, and after every toggle. */
   const [pulse, setPulse] = useState(0);
 
@@ -93,14 +96,15 @@ export function PolicyBuilder() {
   const applyPolicy = useCallback(
     async (row: PolicyRow, enabled: boolean) => {
       setBusy(row.id);
+      setNotice(null);
       try {
         await setPolicyEnabled(row.id, enabled);
-        setPulse((previous) => previous + 1);
       } catch {
-        // The refetch below re-reads the truth either way, so a failed toggle simply snaps back
-        // rather than leaving the switch showing something the gateway never accepted.
-        setPulse((previous) => previous + 1);
+        // Say so. The refetch below snaps the switch back to what the gateway actually holds,
+        // and without a word for it that looks like the click simply missed.
+        setNotice("toggleFailed");
       } finally {
+        setPulse((previous) => previous + 1);
         setBusy(null);
         setConfirming(null);
       }
@@ -122,8 +126,11 @@ export function PolicyBuilder() {
 
   const onPackToggle = useCallback(async (entry: PolicyPack, enabled: boolean) => {
     setBusy(entry.id);
+    setNotice(null);
     try {
       await setPackEnabled(entry.id, enabled);
+    } catch {
+      setNotice("toggleFailed");
     } finally {
       setBusy(null);
       setPulse((previous) => previous + 1);
@@ -150,8 +157,22 @@ export function PolicyBuilder() {
   return (
     <div className="flex flex-1 flex-col">
       {reloaded && <ReloadBanner onRefresh={refresh} />}
-      {/* The design's 1280 grid: 232 / 463 / 347 across the 1040 content column. */}
-      <div className="grid flex-1 grid-cols-1 gap-px bg-grayscale-800 lg:grid-cols-[232px_minmax(0,1fr)_347px]">
+      {notice && (
+        <p
+          role="status"
+          className="text-body-text-b3-md flex items-center gap-2 bg-grayscale-700 px-8 py-3 text-grayscale-white"
+        >
+          <Info className="size-4 flex-none" aria-hidden />
+          {t(notice)}
+        </p>
+      )}
+      {/*
+        Three frames, three layouts. 1280 and 1920 are real columns — 232 / flexible / 347, and
+        at 1920 the YAML pane widens to 560. At 1024 the design floats that pane *over* the
+        table's right edge instead of taking a third of a column that is already too narrow, so
+        below `xl` it is positioned out of flow and the grid carries two columns.
+      */}
+      <div className="relative grid flex-1 grid-cols-1 gap-px bg-grayscale-800 lg:grid-cols-[232px_minmax(0,1fr)] xl:grid-cols-[232px_minmax(0,1fr)_347px] 2xl:grid-cols-[232px_minmax(0,1fr)_560px]">
         <div className="bg-grayscale-950 px-4 py-6">
           <PackTree
             packs={packs}
@@ -175,7 +196,8 @@ export function PolicyBuilder() {
             busy={busy}
           />
         </div>
-        <div className="bg-grayscale-950 px-6 py-6">
+        {/* Out of flow below `xl`, where it floats over the table as the 1024 frame draws it. */}
+        <div className="absolute inset-y-4 right-4 w-86.75 overflow-y-auto rounded-xl bg-grayscale-950 px-6 py-6 ring-1 shadow-xl shadow-black/40 ring-grayscale-800 xl:static xl:w-auto xl:overflow-visible xl:rounded-none xl:shadow-none xl:ring-0">
           <YamlPane policy={policy} yaml={yaml.data?.yaml} loading={yaml.loading} stats={stats.data?.stats ?? []} />
         </div>
       </div>

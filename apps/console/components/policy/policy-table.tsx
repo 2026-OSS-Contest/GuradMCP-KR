@@ -35,13 +35,15 @@ export function PolicyTable({ policies, selected, onSelect, onToggle, busy }: Po
         {t("table.title")}
       </h2>
       {/*
-        The design fixes ID at 78px and PRI at 54px and lets the remaining four columns split
-        what is left equally — which `table-fixed` does for any column given no width. Header
-        labels clip rather than wrap, exactly as the 1280 frame draws them.
+        PRI is 54px in every frame and the remaining four columns always split what is left
+        equally — which `table-fixed` does for any column given no width. ID is the one that
+        moves: 132px at 1024, 78px at 1280 (where the YAML pane is beside the table rather than
+        over it, so the table is at its narrowest), and 301px from 1920. Header labels clip
+        rather than wrap, exactly as the frames draw them.
       */}
       <table className="w-full table-fixed border-collapse">
         <colgroup>
-          <col className="w-19.5" />
+          <col className="w-33 xl:w-19.5 2xl:w-75.25" />
           <col className="w-13.5" />
           <col />
           <col />

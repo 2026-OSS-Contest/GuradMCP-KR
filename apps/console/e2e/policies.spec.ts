@@ -145,3 +145,38 @@ test("SCR-302 says what to do when the gateway is unreachable", async ({ page })
 
   await expect(page.getByText(/게이트웨이 연결을 확인한 뒤/)).toBeVisible();
 });
+
+test("SCR-302 says so when a toggle does not reach the gateway", async ({ page }) => {
+  await page.goto("/policies");
+  const toggle = page.getByRole("switch", { name: "approve_external_email 정책 사용" });
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+
+  // Drop the gateway *after* the screen has loaded, by writing the scenario straight to storage
+  // rather than through the switcher — the switcher would announce it and refetch everything,
+  // and what is under test is a write failing against a screen that already has its data.
+  await page.evaluate(() => window.localStorage.setItem("guardmcp.mock-scenario", "offline"));
+  await toggle.click();
+
+  await expect(page.getByRole("status").filter({ hasText: /정책을 변경하지 못했습니다/ })).toBeVisible();
+  // The switch reports what the gateway holds, not what was clicked.
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+});
+
+test("SCR-302 floats the YAML pane over the table at 1024", async ({ page }) => {
+  // The 1024 frame gives the pane no column of its own — it overlays the table's right edge,
+  // because a third column there would leave the table too narrow to read.
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await page.goto("/policies");
+
+  const table = await page.getByRole("table").boundingBox();
+  const pane = await page.getByRole("region", { name: "YAML" }).boundingBox();
+  expect(table).not.toBeNull();
+  expect(pane).not.toBeNull();
+  expect(pane!.x).toBeLessThan(table!.x + table!.width);
+
+  // At 1280 it takes a column instead, and stops overlapping.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const wide = await page.getByRole("table").boundingBox();
+  const paneWide = await page.getByRole("region", { name: "YAML" }).boundingBox();
+  expect(paneWide!.x).toBeGreaterThanOrEqual(wide!.x + wide!.width - 1);
+});
