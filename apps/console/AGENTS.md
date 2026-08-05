@@ -34,6 +34,17 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## API and mock data
 
+- **Follow the real implementation or the written spec — never invent a contract.** Before
+  adding a call, check `services/control-plane/src/main/kotlin/**/api/*Controller.kt` for the
+  route, verb and DTOs, and the domain types beside it for the wire enums. Match the path, the
+  HTTP method, the field names and the response shape exactly, including whether it answers a
+  bare array or an envelope. If an endpoint genuinely does not exist, say so in the type or
+  client comment and name the ticket that owns it — do not quietly design a nicer endpoint the
+  backend will never serve. A screen that talks to a shape nobody implements looks finished and
+  is not.
+- Where the design needs a field the control plane does not report, keep it **optional** on the
+  wire type, supply it from `mocks/`, and make the screen degrade when it is absent. That is why
+  `PolicyRow.enabled` and `SecurityEvent`'s risk enrichment are optional.
 - Screens fetch from `lib/api/client.ts` (`/api/v1/…`). The contracts in `lib/api/types.ts` are
   what the **UI specification** asks for, not what the control plane returns today — most of
   §6.2 is still unimplemented.
@@ -81,3 +92,48 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   ```bash
   VERCEL_ORG_ID=<org> VERCEL_PROJECT_ID=<project> vercel deploy --prod --token <token> --yes
   ```
+
+  Do **not** run `vercel link` to get those ids — it writes `.vercel/` and appends to the root
+  `.gitignore`. Read them from an existing deployment instead: `vercel project ls` names the
+  project (`guardmcp-kr-console`), and `vercel project inspect guardmcp-kr-console` prints its
+  Root Directory and Node version without touching the tree.
+
+### Two things break a Vercel build, every time
+
+Both are dormant in normal development and only bite on Vercel. Neither fix is committed,
+because both are only wanted for a deploy — apply them, deploy, then revert.
+
+1. **`output: "standalone"` fails the build.** `next.config.ts` sets it for the Docker image
+   (`containers.yml`), but Vercel's builder then cannot find `.next/next-server.js.nft.json`
+   and dies with `ENOENT` *after* reporting a successful compile — so the log looks fine until
+   the last line. Guard it on Vercel's own env var:
+
+   ```ts
+   output: process.env.VERCEL ? undefined : "standalone",
+   ```
+
+2. **MSW cannot start in a production build.** `mocks/scenario.ts` gates `MOCK_API` on
+   `NODE_ENV === "development"`, and Vercel builds with `NODE_ENV=production`. No environment
+   variable alone can switch the mocks on: without a code change the deployed console renders
+   its shell, fetches `/api/v1/…` against its own origin and 404s everywhere. To deploy a
+   mock-backed demo, widen the gate and pass the flag at **build** time — `NEXT_PUBLIC_*` is
+   inlined during the build, so `--build-env` is required and `--env` does nothing:
+
+   ```ts
+   const MOCKS_WANTED =
+     process.env.NODE_ENV === "development" || process.env.NEXT_PUBLIC_ENABLE_MOCK_API === "1";
+   export const MOCK_API = MOCKS_WANTED && !process.env.NEXT_PUBLIC_API_BASE_URL;
+   ```
+
+   ```bash
+   vercel deploy --prod --yes --build-env NEXT_PUBLIC_ENABLE_MOCK_API=1
+   ```
+
+   `msw` is a devDependency, which is fine — Vercel installs devDependencies — and
+   `public/mockServiceWorker.js` is committed, so nothing else is needed.
+
+- Setting `NEXT_PUBLIC_API_BASE_URL` switches the mocks off no matter what else is set; leave it
+  unset for a mock-backed deploy.
+- Verify a deploy by loading it and checking that `/api/v1/overview` answers **200**. The app
+  serves no such route itself, so a 200 there means the service worker is intercepting; a 404
+  means the build shipped without mocks.

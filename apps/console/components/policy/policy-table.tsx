@@ -2,28 +2,15 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import type { PolicyAction, PolicyRow, PolicySeverity, Verdict } from "@/lib/api/types";
+import type { PolicyRow, Severity } from "@/lib/api/types";
 import { Tag } from "@/components/ui/tag";
 import { Switch } from "@/components/ui/switch";
 import { VerdictBadge } from "@/components/verdict-badge";
+import { toVerdict } from "@/lib/verdict";
 import { cn } from "@/lib/utils";
 
-/**
- * The DSL has one more action than the UI has verdicts: `mask_then_allow` and `warn` both read
- * as 경고. `lib/verdict.ts` covers the control plane's narrower `GuardAction`, so the extra case
- * is handled here rather than widening that mapping for a vocabulary only this screen sees.
- */
-const VERDICT_OF: Record<PolicyAction, Verdict> = {
-  allow: "allow",
-  mask_then_allow: "warn",
-  warn: "warn",
-  require_approval: "require_approval",
-  block: "block"
-};
-
-/** Severity ink, straight off the design's text fills. `info` has no frame, so it reads muted. */
-const SEVERITY_INK: Record<PolicySeverity, string> = {
-  info: "text-grayscale-300",
+/** Severity ink, straight off the design's text fills. */
+const SEVERITY_INK: Record<Severity, string> = {
   low: "text-green-700",
   medium: "text-blue-600",
   high: "text-yellow-500",
@@ -87,7 +74,8 @@ export function PolicyTable({ policies, selected, onSelect, onToggle, busy }: Po
           {policies.map((policy) => {
             // A dry-run policy is evaluated but acts on nothing, so the whole row reads muted —
             // the same treatment a disabled one gets.
-            const muted = !policy.enabled;
+            const enabled = policy.enabled ?? true;
+            const muted = !enabled;
             return (
               <tr
                 key={policy.id}
@@ -111,7 +99,7 @@ export function PolicyTable({ policies, selected, onSelect, onToggle, busy }: Po
                   {policy.dryRun ? (
                     <Tag className="text-caption-text-c-md">{t("table.dryRun")}</Tag>
                   ) : (
-                    <VerdictBadge verdict={VERDICT_OF[policy.action]} size="sm" compact />
+                    <VerdictBadge verdict={toVerdict(policy.action)} size="sm" compact />
                   )}
                 </td>
                 <td className={cn(
@@ -124,7 +112,7 @@ export function PolicyTable({ policies, selected, onSelect, onToggle, busy }: Po
                   {/* The row is a select target; the switch inside it must not also select. */}
                   <span onClick={(event) => event.stopPropagation()}>
                     <Switch
-                      checked={policy.enabled}
+                      checked={enabled}
                       disabled={busy === policy.id}
                       onChange={(next) => onToggle(policy, next)}
                       label={t("table.toggle", { id: policy.id })}
@@ -132,7 +120,7 @@ export function PolicyTable({ policies, selected, onSelect, onToggle, busy }: Po
                   </span>
                 </td>
                 <td className="text-body-text-b2-md py-4 tabular-nums">
-                  {policy.firedLast30d === null ? (
+                  {policy.firedLast30d === null || policy.firedLast30d === undefined ? (
                     <span className="text-grayscale-300">–</span>
                   ) : (
                     // Straight to the sessions this policy decided. Replay does not read the

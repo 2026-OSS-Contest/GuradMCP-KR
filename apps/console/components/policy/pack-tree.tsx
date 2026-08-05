@@ -24,12 +24,12 @@ interface Node {
  * Cycles cannot hang this: every pack is emitted exactly once, and `seen` is what guarantees it.
  */
 function flatten(packs: PolicyPack[]): Node[] {
-  const byName = new Map(packs.map((pack) => [pack.name, pack]));
+  const byName = new Map(packs.map((pack) => [pack.id, pack]));
   const children = new Map<string, PolicyPack[]>();
   const roots: PolicyPack[] = [];
 
   for (const pack of packs) {
-    const parent = pack.extends.map(parentName).find((name) => byName.has(name) && name !== pack.name);
+    const parent = (pack.extends ?? []).map(parentName).find((id) => byName.has(id) && id !== pack.id);
     if (parent) children.set(parent, [...(children.get(parent) ?? []), pack]);
     else roots.push(pack);
   }
@@ -37,10 +37,10 @@ function flatten(packs: PolicyPack[]): Node[] {
   const out: Node[] = [];
   const seen = new Set<string>();
   const emit = (pack: PolicyPack, depth: number) => {
-    if (seen.has(pack.name)) return;
-    seen.add(pack.name);
+    if (seen.has(pack.id)) return;
+    seen.add(pack.id);
     out.push({ pack, depth });
-    for (const child of children.get(pack.name) ?? []) emit(child, depth + 1);
+    for (const child of children.get(pack.id) ?? []) emit(child, depth + 1);
   };
   for (const root of roots) emit(root, 0);
   // Anything a cycle kept out of the walk still belongs on screen.
@@ -50,6 +50,8 @@ function flatten(packs: PolicyPack[]): Node[] {
 
 export interface PackTreeProps {
   packs: PolicyPack[];
+  /** Policies each pack contributes, keyed by pack id. The control plane reports no count. */
+  counts: Record<string, number>;
   selected: string | null;
   onSelect: (name: string) => void;
   onToggle: (pack: PolicyPack, enabled: boolean) => void;
@@ -57,7 +59,7 @@ export interface PackTreeProps {
   busy?: string | null;
 }
 
-export function PackTree({ packs, selected, onSelect, onToggle, busy }: PackTreeProps) {
+export function PackTree({ packs, counts, selected, onSelect, onToggle, busy }: PackTreeProps) {
   const t = useTranslations("policies");
   const nodes = useMemo(() => flatten(packs), [packs]);
 
@@ -68,11 +70,11 @@ export function PackTree({ packs, selected, onSelect, onToggle, busy }: PackTree
       </h2>
       <ul className="flex flex-col gap-1">
         {nodes.map(({ pack, depth }) => (
-          <li key={pack.name}>
+          <li key={pack.id}>
             <div
               className={cn(
                 "flex items-center gap-3 rounded-lg py-2 pr-3",
-                selected === pack.name && "bg-grayscale-800"
+                selected === pack.id && "bg-grayscale-800"
               )}
               // The tree's nesting is the only thing depth changes, so it stays inline rather
               // than becoming a class per level.
@@ -80,15 +82,15 @@ export function PackTree({ packs, selected, onSelect, onToggle, busy }: PackTree
             >
               <Switch
                 checked={pack.enabled}
-                disabled={busy === pack.name}
+                disabled={busy === pack.id}
                 onChange={(next) => onToggle(pack, next)}
-                label={t("packs.toggle", { name: pack.name })}
+                label={t("packs.toggle", { name: pack.id })}
               />
               <button
                 type="button"
-                onClick={() => onSelect(pack.name)}
-                aria-current={selected === pack.name}
-                title={pack.name}
+                onClick={() => onSelect(pack.id)}
+                aria-current={selected === pack.id}
+                title={pack.id}
                 className={cn(
                   // Two lines then an ellipsis, as the design clamps `developer-relaxed`.
                   "line-clamp-2 min-w-0 flex-1 cursor-pointer text-left break-all",
@@ -98,10 +100,10 @@ export function PackTree({ packs, selected, onSelect, onToggle, busy }: PackTree
                   pack.enabled ? "text-grayscale-white" : "text-grayscale-500"
                 )}
               >
-                {pack.name}
+                {pack.id}
               </button>
               <span className="text-caption-text-c-rg flex-none text-grayscale-400 tabular-nums">
-                {pack.policyCount}
+                {counts[pack.id] ?? 0}
               </span>
             </div>
           </li>

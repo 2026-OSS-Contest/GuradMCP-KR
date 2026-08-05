@@ -8,10 +8,10 @@ import type {
   DetectionPreview,
   DryRunStatsResponse,
   Overview,
-  PoliciesResponse,
   PolicyDetail,
   PolicyPack,
   PolicyRow,
+  PolicyUpdate,
   RecentEventsResponse,
   RevealContent,
   ServersResponse,
@@ -52,9 +52,9 @@ async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): P
   return (await response.json()) as T;
 }
 
-async function patchJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+async function putJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`${BASE}/api/v1${path}`, {
-    method: "PATCH",
+    method: "PUT",
     signal,
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify(body)
@@ -107,22 +107,33 @@ export const decideApproval = (id: string, decision: ApprovalDecision, signal?: 
   postJson<Approval>(`/approvals/${encodeURIComponent(id)}/decision`, { decision }, signal);
 
 /**
- * SCR-302 Policy Builder (spec §5.5). No control plane serves these yet — `GET /policies` is
- * GMCP-80's — so today they only ever reach the mock.
+ * SCR-302 Policy Builder (spec §5.5), served by the control plane today.
+ *
+ * Packs and policies are two endpoints, not one payload, and each answers with a bare array —
+ * so the screen asks for both and joins them on `packId` itself.
  */
-export const getPolicies = (signal?: AbortSignal) => get<PoliciesResponse>("/policies", signal);
+export const getPolicyPacks = (signal?: AbortSignal) => get<PolicyPack[]>("/policy-packs", signal);
+export const getPolicies = (signal?: AbortSignal) => get<PolicyRow[]>("/policies", signal);
 
-/** Dry-run counts for the panel under the YAML. Absent policies simply have no entry. */
-export const getDryRunStats = (signal?: AbortSignal) =>
-  get<DryRunStatsResponse>("/policies/dry-run-stats", signal);
+/** Flip a whole pack. The one policy mutation the control plane fully supports. */
+export const setPackEnabled = (id: string, enabled: boolean, signal?: AbortSignal) =>
+  putJson<PolicyPack>(`/policy-packs/${encodeURIComponent(id)}`, { enabled }, signal);
+
+/** Retune a policy. `priority` must be positive or the endpoint answers 400. */
+export const updatePolicy = (id: string, update: PolicyUpdate, signal?: AbortSignal) =>
+  putJson<PolicyRow>(`/policies/${encodeURIComponent(id)}`, update, signal);
 
 /**
- * Flip one policy on or off. This is the *only* mutation the console makes: authoring stays in
- * the YAML files, so there is no create, no edit and no delete.
+ * Flip one policy on or off.
+ *
+ * The path and verb are the real ones, but `enabled` is **not** a field
+ * `PolicyUpdateRequest` declares, so a real control plane accepts the call and changes nothing.
+ * Only the mock honours it. Until the control plane grows the field, this is the SCR-302 toggle
+ * the design asks for and nothing more.
  */
 export const setPolicyEnabled = (id: string, enabled: boolean, signal?: AbortSignal) =>
-  patchJson<PolicyRow>(`/policies/${encodeURIComponent(id)}`, { enabled }, signal);
+  putJson<PolicyRow>(`/policies/${encodeURIComponent(id)}`, { enabled }, signal);
 
-/** Flip a whole pack; every policy it contributes follows it. */
-export const setPackEnabled = (name: string, enabled: boolean, signal?: AbortSignal) =>
-  patchJson<PolicyPack>(`/policy-packs/${encodeURIComponent(name)}`, { enabled }, signal);
+/** Dry-run counts for the panel under the YAML. Mock-only — GMCP-77 owns the real feature. */
+export const getDryRunStats = (signal?: AbortSignal) =>
+  get<DryRunStatsResponse>("/policies/dry-run-stats", signal);

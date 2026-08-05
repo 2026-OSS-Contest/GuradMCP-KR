@@ -6,6 +6,7 @@ import {
   getDryRunStats,
   getPolicies,
   getPolicy,
+  getPolicyPacks,
   setPackEnabled,
   setPolicyEnabled
 } from "@/lib/api/client";
@@ -42,11 +43,20 @@ export function PolicyBuilder() {
   /** Bumped to refetch — on the banner's action, and after every toggle. */
   const [pulse, setPulse] = useState(0);
 
+  // Packs and policies are two endpoints answering bare arrays, so the join happens here.
+  const packsResource = useResource((signal) => getPolicyPacks(signal), { key: `policy-packs-${pulse}` });
   const policies = useResource((signal) => getPolicies(signal), { key: `policies-${pulse}` });
   const stats = useResource((signal) => getDryRunStats(signal), { key: `dry-run-${pulse}` });
 
-  const packs = useMemo(() => policies.data?.packs ?? [], [policies.data]);
-  const rows = useMemo(() => policies.data?.policies ?? [], [policies.data]);
+  const packs = useMemo(() => packsResource.data ?? [], [packsResource.data]);
+  const rows = useMemo(() => policies.data ?? [], [policies.data]);
+
+  /** The count beside each pack; the control plane reports none, so the join supplies it. */
+  const counts = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const row of rows) out[row.packId] = (out[row.packId] ?? 0) + 1;
+    return out;
+  }, [rows]);
 
   // The gateway reloaded the packs on disk, so the screen is describing a policy set that is no
   // longer running. Offer the refetch rather than yanking the view out from under the operator.
@@ -68,8 +78,8 @@ export function PolicyBuilder() {
 
   // Selection follows the data rather than being seeded once: the first load has no packs yet,
   // and a reload can retire whatever was selected.
-  const pack = selectedPack && packs.some((entry) => entry.name === selectedPack) ? selectedPack : packs[0]?.name ?? null;
-  const visible = useMemo(() => rows.filter((row) => row.pack === pack), [rows, pack]);
+  const pack = selectedPack && packs.some((entry) => entry.id === selectedPack) ? selectedPack : packs[0]?.id ?? null;
+  const visible = useMemo(() => rows.filter((row) => row.packId === pack), [rows, pack]);
   const policy = useMemo(
     () => visible.find((row) => row.id === selectedPolicy) ?? visible[0] ?? null,
     [visible, selectedPolicy]
@@ -111,20 +121,20 @@ export function PolicyBuilder() {
   );
 
   const onPackToggle = useCallback(async (entry: PolicyPack, enabled: boolean) => {
-    setBusy(entry.name);
+    setBusy(entry.id);
     try {
-      await setPackEnabled(entry.name, enabled);
+      await setPackEnabled(entry.id, enabled);
     } finally {
       setBusy(null);
       setPulse((previous) => previous + 1);
     }
   }, []);
 
-  if (policies.loading && !policies.data) {
+  if ((policies.loading || packsResource.loading) && !(policies.data && packsResource.data)) {
     return <p className="text-body-text-b3-md p-8 text-grayscale-400">{t("loading")}</p>;
   }
 
-  if (policies.error && !policies.data) {
+  if ((policies.error || packsResource.error) && !(policies.data && packsResource.data)) {
     return <p className="text-body-text-b3-md p-8 text-grayscale-400">{t("error")}</p>;
   }
 
@@ -145,6 +155,7 @@ export function PolicyBuilder() {
         <div className="bg-grayscale-950 px-4 py-6">
           <PackTree
             packs={packs}
+            counts={counts}
             selected={pack}
             onSelect={(name) => {
               setSelectedPack(name);

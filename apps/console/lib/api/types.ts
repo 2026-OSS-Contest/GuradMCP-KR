@@ -353,53 +353,66 @@ export interface TimelineResponse {
 }
 
 // ── SCR-302 Policy Builder (spec §5.5, FR-POL-02/04) ────────────────────────
-// Nothing here is served by the control plane yet: `GET /policies` belongs to GMCP-80, and
-// hot-reload and dry-run to GMCP-76/77. The mock is the only server today. Editing stays
-// file-based — the console reads packs and flips `enabled`, and does nothing else.
-
-/** The DSL's action vocabulary (`packages/policy-engine`), one wider than `GuardAction`. */
-export type PolicyAction = "allow" | "mask_then_allow" | "warn" | "require_approval" | "block";
-
-/** The DSL's severities — one wider than the detector's `Severity`, which has no `info`. */
-export type PolicySeverity = "info" | Severity;
+// `GET /policy-packs`, `GET /policies`, `PUT /policy-packs/{packId}` and `PUT /policies/{policyId}`
+// are all served by the control plane today (`PolicyController`). Both GETs answer with a bare
+// array rather than an envelope, and they speak the same `GuardAction`/`Severity` vocabulary as
+// the detector — not the wider one the YAML DSL accepts, which has `warn` and `info` besides.
+//
+// The fields marked optional below are what the design draws and the control plane does not
+// report. They are enrichment, exactly as on SCR-402: present under the mock, absent against a
+// real gateway, and every one of them degrades to something the screen can still render.
 
 export interface PolicyPack {
-  name: string;
-  version: string;
-  description?: string;
-  /** Packs this one `extends`; the tree indents a pack beneath the parent that lists it. */
-  extends: string[];
+  id: string;
+  /** A write counter the control plane bumps, not a semver string. */
+  version: number;
   enabled: boolean;
-  /** Policies the pack contributes — the count beside its name in the tree. */
-  policyCount: number;
+  description: string;
+  /** ISO-8601. Bumped alongside `version` on every write, including a policy's. */
+  updatedAt: string;
+
+  /**
+   * Packs this one extends, which is what indents the tree. The control plane's `PolicyPack`
+   * has no such field, so without it the tree renders flat — correct, just less informative.
+   */
+  extends?: string[];
 }
 
 export interface PolicyRow {
   id: string;
-  pack: string;
+  packId: string;
   priority: number;
-  action: PolicyAction;
-  severity: PolicySeverity;
-  enabled: boolean;
+  action: GuardAction;
+  severity: Severity;
+  description: string;
+
   /**
-   * Dry-run policies evaluate without acting. The DSL has no field for it yet (GMCP-77), so it
-   * rides beside `action` rather than inside it, and the table chips it in the action's place.
+   * Whether the policy is live. **The control plane has no per-policy enable/disable**:
+   * `PolicyUpdateRequest` takes `action`, `severity` and `priority` and nothing else, and only
+   * a *pack* can be switched off. The design draws a per-row toggle regardless, so the field is
+   * optional and the screen treats a missing value as enabled.
    */
+  enabled?: boolean;
+  /** Evaluated but acting on nothing (GMCP-77). No DSL field and no endpoint reports it yet. */
   dryRun?: boolean;
-  /** Times the policy fired over the last 30 days; `null` when it never has — the table's "–". */
-  firedLast30d: number | null;
-  /** Repo-relative path of the file defining it, shown as the YAML panel's caption. */
-  path: string;
+  /** Times it fired over the last 30 days; `null` when it never has — the table's "–". */
+  firedLast30d?: number | null;
+  /** Repo-relative path of the file defining it, shown as the YAML pane's caption. */
+  path?: string;
 }
 
-export interface PoliciesResponse {
-  packs: PolicyPack[];
-  policies: PolicyRow[];
-  /** Changes when the packs on disk are reloaded — what the hot-reload banner watches. */
-  revision?: string;
+/** The body `PUT /policies/{policyId}` accepts. Every field is optional and independently applied. */
+export interface PolicyUpdate {
+  action?: GuardAction;
+  severity?: Severity;
+  /** Must be positive; the control plane answers 400 `invalid_policy_priority` otherwise. */
+  priority?: number;
 }
 
-/** Dry-run panel: what a policy *would* have decided over the window, having acted on nothing. */
+/**
+ * Dry-run panel: what a policy *would* have decided over the window, having acted on nothing.
+ * No endpoint serves this — GMCP-77 owns the feature — so it exists under the mock only.
+ */
 export interface DryRunStat {
   policyId: string;
   /** 가상 판정 — the matches the policy would have produced. */

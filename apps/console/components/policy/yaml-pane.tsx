@@ -87,7 +87,8 @@ export function YamlPane({ policy, yaml, loading, stats }: YamlPaneProps) {
             <h2 id="yaml-title" className="text-body-text-b3-md text-grayscale-300">
               {t("yaml.title")}
             </h2>
-            {policy && <p className="text-caption-mono-c-rg break-all text-grayscale-white">{policy.path}</p>}
+            {/* The control plane reports no source path, so the caption is simply absent there. */}
+            {policy?.path && <p className="text-caption-mono-c-rg break-all text-grayscale-white">{policy.path}</p>}
           </div>
           <button
             type="button"

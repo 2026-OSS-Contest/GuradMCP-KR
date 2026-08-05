@@ -20,7 +20,6 @@ import {
   POLICY_YAML,
   currentPacks,
   currentPolicies,
-  currentRevision,
   policyYaml,
   seedPolicies,
   togglePack,
@@ -123,42 +122,49 @@ export const handlers = [
       : HttpResponse.json({ code: "approval_already_resolved", message: "already decided" }, { status: 409 });
   }),
 
-  // SCR-302 Policy Builder (spec §5.5). Nothing here is served by a control plane yet — the
-  // endpoints belong to GMCP-80, and hot-reload and dry-run to GMCP-76/77.
+  // SCR-302 Policy Builder (spec §5.5), served by the control plane's `PolicyController`. Both
+  // GETs answer with a bare array, and both writes are PUT — the mock matches that rather than
+  // the envelope the screen would have preferred.
   //
-  // `dry-run-stats` is registered ahead of `/policies/:id` below, or that parameter swallows it.
+  // Dry-run is the exception: no endpoint serves it (GMCP-77), so this path exists here only.
+  // It is registered ahead of `/policies/:id` below, or that parameter swallows it.
   http.get("*/api/v1/policies/dry-run-stats", async () => {
     await delay(LATENCY_MS);
     if (readScenario() === "offline") return HttpResponse.error();
     return HttpResponse.json({ stats: readScenario() === "empty" ? [] : DRY_RUN_STATS });
   }),
 
-  // An empty console has no `policy-packs/` directory at all, which is the screen's empty state.
+  // An empty console has no packs loaded at all, which is the screen's empty state.
+  http.get("*/api/v1/policy-packs", async () => {
+    seedPolicies(readScenario() === "empty");
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    return HttpResponse.json(currentPacks());
+  }),
+
   http.get("*/api/v1/policies", async () => {
     seedPolicies(readScenario() === "empty");
     await delay(LATENCY_MS);
     if (readScenario() === "offline") return HttpResponse.error();
-    return HttpResponse.json({
-      packs: currentPacks(),
-      policies: currentPolicies(),
-      revision: currentRevision()
-    });
+    return HttpResponse.json(currentPolicies());
   }),
 
-  // The console's only mutation: flip a policy or a pack. Authoring stays in the YAML files.
-  http.patch("*/api/v1/policies/:id", async ({ params, request }) => {
-    const { enabled } = (await request.json()) as { enabled: boolean };
+  // `PolicyUpdateRequest` takes action/severity/priority; `enabled` is the console's own
+  // addition, which the real endpoint would accept and ignore. Here it is what actually moves.
+  http.put("*/api/v1/policies/:id", async ({ params, request }) => {
+    const { enabled } = (await request.json()) as { enabled?: boolean };
     await delay(LATENCY_MS);
     if (readScenario() === "offline") return HttpResponse.error();
+    if (enabled === undefined) return new HttpResponse(null, { status: 400 });
     const row = togglePolicy(String(params.id), enabled);
     return row ? HttpResponse.json(row) : new HttpResponse(null, { status: 404 });
   }),
 
-  http.patch("*/api/v1/policy-packs/:name", async ({ params, request }) => {
+  http.put("*/api/v1/policy-packs/:id", async ({ params, request }) => {
     const { enabled } = (await request.json()) as { enabled: boolean };
     await delay(LATENCY_MS);
     if (readScenario() === "offline") return HttpResponse.error();
-    const pack = togglePack(String(params.name), enabled);
+    const pack = togglePack(String(params.id), enabled);
     return pack ? HttpResponse.json(pack) : new HttpResponse(null, { status: 404 });
   }),
 
@@ -186,7 +192,7 @@ export const handlers = [
     "guard.event": SecurityEvent;
     "approval.created": { id: string };
     "approval.resolved": { id: string };
-    "policy.reloaded": { revision: string };
+    "policy.reloaded": { packId: string };
   }>("*/api/v1/events/stream", ({ client, request }) => {
     if (readScenario() === "offline") return void client.error();
 
@@ -231,7 +237,8 @@ export const handlers = [
       // Someone edited a pack on disk and the gateway reloaded it. Rare on purpose: the SCR-302
       // banner it raises is a call to action, and one arriving every few seconds is noise.
       if (seq > 0 && seq % POLICY_RELOAD_EVERY === 0) {
-        client.send({ event: "policy.reloaded", data: { revision: currentRevision() } });
+        // The gateway names the pack it reloaded; the console only needs to know one did.
+        client.send({ event: "policy.reloaded", data: { packId: currentPacks()[0]?.id ?? "default" } });
       }
       seq += 1;
     }, STREAM_INTERVAL_MS);
