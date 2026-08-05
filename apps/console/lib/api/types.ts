@@ -163,6 +163,14 @@ export interface EventDetail {
   body?: { heading: string; lines: ContentLine[] };
   // Tool-call node: the target and the JSON arguments.
   call?: { target: string; argsCount: number; argsJson: string };
+  /**
+   * FR-SEC-04 (GMCP-73): the path-like arg (path/file_path/filename), after the
+   * gateway's normalization pipeline (URL-decode, NFKC, null-byte truncation,
+   * `~`/`$HOME` expansion, `.`/`..` resolution, lowercase). Lets the operator
+   * see the raw → normalized → matched-policy trail across the tool-call node's
+   * args and its `direction.policy`.
+   */
+  normalizedPath?: string;
   // Tool-call / tool-result node: the direction verdict.
   direction?: DirectionVerdict;
 

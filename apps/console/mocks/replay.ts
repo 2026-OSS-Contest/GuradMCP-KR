@@ -132,6 +132,7 @@ function detailOf(event: TimelineEvent): EventDetail {
         verdict: "block",
         tool: event.title,
         call: { target: ".env", argsCount: 1, argsJson: '{\n  "path": ".env"\n}' },
+        normalizedPath: ".env",
         direction: { heading: "요청 방향 판정", verdict: "block", policy: "block_env_file_read" }
       };
     case "verdict":

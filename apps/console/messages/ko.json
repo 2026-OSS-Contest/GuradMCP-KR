@@ -123,6 +123,7 @@
       "target": "대상",
       "args": "인자",
       "argsCount": "{count}개",
+      "normalizedPath": "정규화 경로",
       "morePolicies": "외 {count}"
     },
     "policy": {

@@ -1,0 +1,16 @@
+id: block_env_file_read_bypass_null_byte
+description: FR-SEC-04 §4 case #4 — a trailing null byte (id_rsa%00.png) truncates to id_rsa and is blocked.
+coverage:
+  policy_id: block_env_file_read
+  expectation: match
+event:
+  direction: request
+  tool: read_file
+  server_trust: trusted
+  args:
+    path: "id_rsa%00.png"
+  detections: []
+  risk_score: 10
+expected:
+  action: block
+  matched_policy_ids: [block_env_file_read]
