@@ -87,7 +87,7 @@ export function DetectorInput({
   const over = bytes > MAX_BYTES;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 py-6">
       <div ref={hintRef} className="relative flex flex-none items-center gap-2">
         <span className="text-body-text-b3-md text-grayscale-300">{t("direction")}</span>
         <button
@@ -171,13 +171,15 @@ export function DetectorInput({
         </span>
       </div>
 
+      {/* The design keeps all four on one row: 40px tall, 16px side padding, 12px apart, 488px
+          across — which fits the 520px input column at 1280 without wrapping. */}
       <div className="flex flex-none flex-wrap items-center gap-3">
         {(["pii", "secret", "injection"] as const).map((kind) => (
           <button
             key={kind}
             type="button"
             onClick={() => onSample(kind)}
-            className="flex h-11 items-center rounded-xl bg-grayscale-800 px-5 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-grayscale-700"
+            className="flex h-10 flex-none items-center rounded-xl bg-grayscale-800 px-4 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-grayscale-700"
           >
             {t(`sample.${kind}`)}
           </button>
@@ -187,7 +189,7 @@ export function DetectorInput({
           onClick={onRun}
           disabled={running || !text.trim() || over}
           className={cn(
-            "ml-auto flex h-11 flex-none items-center rounded-xl bg-blue-800 px-6 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-blue-700",
+            "flex h-10 flex-none items-center rounded-xl bg-blue-800 px-4 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-blue-700",
             (running || !text.trim() || over) && "cursor-not-allowed opacity-50"
           )}
         >
