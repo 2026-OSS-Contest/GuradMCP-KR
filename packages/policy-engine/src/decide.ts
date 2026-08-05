@@ -1,32 +1,20 @@
 // Decision Engine (GMCP-12, FR-POL-02).
 //
 // decide() is pipeline stage ⑥: it takes the Risk Scorer's output (stage ⑤)
-// and the already loaded/activated policy list, evaluates them in priority
-// order, and returns a single verdict plus the full list of matched policy
-// IDs. It is a pure function — no masking, no approval-queue writes; those
-// are stage ⑦'s responsibility (spec §6).
+// and the already loaded/activated policy list, evaluates them, and returns
+// a single verdict plus the full list of matched policy IDs. It is a pure
+// function — no masking, no approval-queue writes; those are stage ⑦'s
+// responsibility (spec §6).
 //
-// See docs/task-docs/GMCP-12/decision-engine.md §5 for the algorithm this
-// mirrors line-for-line, and §6 for the matchedPolicyIds/first-match/
-// tie-break rules encoded below.
+// As of GMCP-75 this is a thin adapter over `evaluatePolicies()`
+// (evaluate.ts), which owns the actual priority/strategy/default_action
+// algorithm (부록 A.3). This module just translates the DecisionInput/
+// DecisionResult shapes GMCP-12 already exposes to the rest of the gateway.
 
-import type { Action, DecisionInput, DecisionResult, Policy, PolicyContext } from "./types.js";
-import { matchesPolicy } from "./matcher.js";
-
-const ACTION_RANK: Record<Action, number> = {
-  block: 4,
-  require_approval: 3,
-  warn: 2,
-  mask_then_allow: 1,
-  allow: 0
-};
+import type { DecisionInput, DecisionResult, PolicyContext, PolicyPackConfig } from "./types.js";
+import { evaluatePolicies } from "./evaluate.js";
 
 export function decide(input: DecisionInput): DecisionResult {
-  const strategy = input.strategy ?? "severity-max";
-  const sorted = [...input.activePolicies]
-    .filter((policy) => policy.enabled !== false)
-    .sort((left, right) => left.priority - right.priority);
-
   const context: PolicyContext = {
     direction: input.event.direction,
     tool: input.event.toolName,
@@ -36,39 +24,33 @@ export function decide(input: DecisionInput): DecisionResult {
     riskScore: input.riskScore
   };
 
-  const matched: Policy[] = [];
-  for (const policy of sorted) {
-    if (!matchesPolicy(policy, context)) continue;
-    matched.push(policy);
-    // first-match stops evaluating further policies entirely, so anything
-    // after the break point is never considered "matched" (spec §6).
-    if (strategy === "first-match") break;
-  }
+  const pack: PolicyPackConfig = {
+    name: "decide-adapter",
+    strategy: input.strategy ?? "severity-max",
+    default_action: input.defaultAction,
+    strict: input.strictMode,
+    rules: input.activePolicies
+  };
 
-  if (matched.length === 0) {
-    const verdict: Action = input.strictMode ? "warn" : input.defaultAction ?? "allow";
+  const result = evaluatePolicies(input.activePolicies, context, pack);
+
+  if (result.usedDefault) {
     return {
-      verdict,
+      verdict: result.action,
       matchedPolicyIds: [],
       decidingPolicyId: null,
-      reason: input.strictMode
-        ? "strict 모드: 매칭 정책 없음 → warn"
-        : `매칭 정책 없음 → default_action(${verdict})`
+      reason:
+        input.strictMode && input.defaultAction === undefined
+          ? "strict 모드: 매칭 정책 없음 → warn"
+          : `매칭 정책 없음 → default_action(${result.action})`
     };
   }
 
-  // For first-match, `matched` always has exactly one element, so this
-  // trivially picks it. For severity-max, strict `>` means the first policy
-  // (priority-ascending) to reach a given rank keeps it — the tie-break
-  // rule from spec §6.
-  const deciding = matched.reduce((strongest, policy) =>
-    ACTION_RANK[policy.action] > ACTION_RANK[strongest.action] ? policy : strongest
-  );
-
+  const deciding = input.activePolicies.find((policy) => policy.id === result.winningPolicyId);
   return {
-    verdict: deciding.action,
-    matchedPolicyIds: matched.map((policy) => policy.id),
-    decidingPolicyId: deciding.id,
-    reason: deciding.message ?? `정책 ${deciding.id} 매칭`
+    verdict: result.action,
+    matchedPolicyIds: result.matchedPolicyIds,
+    decidingPolicyId: result.winningPolicyId,
+    reason: deciding?.message ?? `정책 ${result.winningPolicyId} 매칭`
   };
 }
