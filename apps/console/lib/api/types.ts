@@ -35,6 +35,8 @@ export interface McpServer {
   connected: boolean;
   trust: TrustLevel;
   tools: ToolEntry[];
+  /** Where the gateway reaches it — the SCR-501 server table's second column. */
+  endpoint?: string;
 }
 
 export interface SecurityEvent {
@@ -359,3 +361,27 @@ export interface TimelineResponse {
   /** Full detail for each event id the panel can select. */
   details: Record<string, EventDetail>;
 }
+
+// ── SCR-501 Settings (spec §5.7, GMCP-88) ───────────────────────────────────
+// Neither `GET /settings` nor `PUT /servers/{id}` exists on the control plane — both belong to
+// GMCP-80, whose `PolicyController` counterpart has no settings sibling yet. So this screen is
+// mock-only today. The paths and verbs below are the ones it will use, so wiring the real
+// backend needs no UI change.
+
+/** What the gateway does when it cannot reach its own guard (GMCP-68). */
+export type FailMode = "fail_closed" | "fail_open";
+
+export interface GatewaySettings {
+  failMode: FailMode;
+  /**
+   * Whether the audit log keeps the raw text beside the masked form. Off by default: turning it
+   * on means the console starts storing exactly what it exists to redact, so the screen asks.
+   */
+  storeRawOptIn: boolean;
+  locale: "ko" | "en";
+  /** Seconds a held call waits before the gateway fails it closed. The design's default is 120. */
+  approvalTimeoutSeconds: number;
+}
+
+/** `PUT /settings` — every field independent, so one control never resends another's value. */
+export type SettingsUpdate = Partial<GatewaySettings>;

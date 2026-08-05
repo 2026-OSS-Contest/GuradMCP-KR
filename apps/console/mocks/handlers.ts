@@ -9,13 +9,15 @@ import type {
   SecurityEvent,
   ServersResponse,
   SessionsResponse,
-  TimelineResponse
+  TimelineResponse,
+  TrustLevel
 } from "@/lib/api/types";
 import { allApprovals, decide, raiseApproval, resetApprovals, resolveRaised } from "./approvals";
 import { EMPTY_OVERVIEW, SERVERS, liveEvent, overviewOf, recentEvents } from "./data";
 import { ATTACK_SCENARIOS, attackRun } from "./attack-lab";
 import { previewOf } from "./detect";
 import { SESSIONS, policyDetail, revealOf, timelineOf } from "./replay";
+import { currentServers, currentSettings, patchSettings, setTrust } from "./settings";
 import { readScenario } from "./scenario";
 
 // Long enough that a slow render is visible, short enough that the 500ms skeleton rule
@@ -46,7 +48,33 @@ export const handlers = [
     return respond(empty ? EMPTY_OVERVIEW : overviewOf(SERVERS));
   }),
 
-  http.get("*/api/v1/servers", async () => respond({ servers: readScenario() === "empty" ? [] : SERVERS })),
+  http.get("*/api/v1/servers", async () =>
+    respond({ servers: readScenario() === "empty" ? [] : currentServers() })
+  ),
+
+  // SCR-501 Settings (spec §5.7). No control plane serves these — they are GMCP-80's — so the
+  // mock is the whole server. Raising a server's trust is the one write that widens what an
+  // upstream may do, which is why the screen confirms it and a downgrade goes straight through.
+  http.put("*/api/v1/servers/:id", async ({ params, request }) => {
+    const { trust } = (await request.json()) as { trust: TrustLevel };
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    const server = setTrust(String(params.id), trust);
+    return server ? HttpResponse.json(server) : new HttpResponse(null, { status: 404 });
+  }),
+
+  http.get("*/api/v1/settings", async () => {
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    return HttpResponse.json(currentSettings());
+  }),
+
+  http.put("*/api/v1/settings", async ({ request }) => {
+    const update = (await request.json()) as Record<string, unknown>;
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    return HttpResponse.json(patchSettings(update));
+  }),
 
   http.get("*/api/v1/events/recent", async () => respond({ events: readScenario() === "empty" ? [] : recentEvents() })),
 

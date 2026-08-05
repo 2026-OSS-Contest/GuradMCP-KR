@@ -190,8 +190,6 @@
     "copied": "복사했습니다.",
     "error": "검사를 실행하지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 실행하세요."
   },
-
-
   "approval": {
     "queue": "대기열",
     "history": "처리 이력",
@@ -219,6 +217,65 @@
     "colDecision": "결정",
     "colDecidedBy": "처리자",
     "colTook": "소요시간"
+  },
+  "settings": {
+    "loading": "설정을 불러오는 중입니다.",
+    "error": "설정을 불러오지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 시도하세요.",
+    "saveFailed": "설정을 저장하지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 시도하세요.",
+    "cancel": "취소",
+    "servers": {
+      "title": "UPSTREAM 서버",
+      "name": "이름",
+      "endpoint": "엔드포인트",
+      "trust": "신뢰 등급",
+      "snapshot": "Tool 스냅샷",
+      "trustOf": "{name} 신뢰 등급",
+      "snapshotChanged": "변경 감지 {count}",
+      "snapshotClean": "정상",
+      "disconnected": "연결 끊김"
+    },
+    "failPolicy": {
+      "title": "장애 정책",
+      "default": "기본",
+      "fail_closed": {
+        "label": "Fail-Closed",
+        "desc": "게이트웨이 장애 시 모든 Tool Call 차단"
+      },
+      "fail_open": {
+        "label": "Fail-Open",
+        "desc": "위협 발견 시마다 체크"
+      }
+    },
+    "log": {
+      "title": "로그",
+      "storeRaw": "원문 저장 opt-in"
+    },
+    "general": {
+      "title": "일반",
+      "locale": "언어",
+      "localeName": {
+        "ko": "한국어",
+        "en": "English"
+      },
+      "approvalTimeout": "승인 타임아웃",
+      "seconds": "초"
+    },
+    "failOpenDialog": {
+      "title": "위험 고지",
+      "body": "Fail-Open으로 변경하면 게이트웨이 장애 발생 시에도 Tool Call이 계속 허용되어 위협이 발견될 때마다 직접 허용 여부를 확인해야 합니다. 계속 진행하시겠습니까?",
+      "acknowledge": "해당 내용을 인지했습니다.",
+      "confirm": "저장"
+    },
+    "storeRawDialog": {
+      "title": "원문 저장 활성화",
+      "body": "원문 저장 opt-in 활성화 시 원문이 저장되어 이후 기능에 활용됩니다. 계속 진행하시겠습니까?",
+      "confirm": "적용"
+    },
+    "trustDialog": {
+      "title": "신뢰 등급 상향",
+      "body": "{name}의 신뢰 등급을 {trust}로 올리면 해당 서버에 적용되던 제한이 완화됩니다. 계속 진행하시겠습니까?",
+      "confirm": "적용"
+    }
   },
   "screens": {
     "gateway": {

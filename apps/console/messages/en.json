@@ -190,8 +190,6 @@
     "copied": "Copied.",
     "error": "Could not run the inspection. Check the gateway connection, then run it again."
   },
-
-
   "approval": {
     "queue": "Queue",
     "history": "History",
@@ -219,6 +217,65 @@
     "colDecision": "Decision",
     "colDecidedBy": "Handled by",
     "colTook": "Took"
+  },
+  "settings": {
+    "loading": "Loading settings…",
+    "error": "Could not load settings. Check the gateway connection and try again.",
+    "saveFailed": "Could not save the setting. Check the gateway connection and try again.",
+    "cancel": "Cancel",
+    "servers": {
+      "title": "Upstream servers",
+      "name": "Name",
+      "endpoint": "Endpoint",
+      "trust": "Trust",
+      "snapshot": "Tool snapshot",
+      "trustOf": "Trust level for {name}",
+      "snapshotChanged": "{count} changed",
+      "snapshotClean": "Unchanged",
+      "disconnected": "Disconnected"
+    },
+    "failPolicy": {
+      "title": "Failure policy",
+      "default": "Default",
+      "fail_closed": {
+        "label": "Fail-Closed",
+        "desc": "Block every tool call while the gateway is down"
+      },
+      "fail_open": {
+        "label": "Fail-Open",
+        "desc": "Ask about each threat as it is found"
+      }
+    },
+    "log": {
+      "title": "Log",
+      "storeRaw": "Store raw text (opt-in)"
+    },
+    "general": {
+      "title": "General",
+      "locale": "Language",
+      "localeName": {
+        "ko": "한국어",
+        "en": "English"
+      },
+      "approvalTimeout": "Approval timeout",
+      "seconds": "s"
+    },
+    "failOpenDialog": {
+      "title": "Risk notice",
+      "body": "With fail-open, tool calls keep going through even while the gateway is down, and you will have to decide on each threat yourself as it is found. Continue?",
+      "acknowledge": "I understand.",
+      "confirm": "Save"
+    },
+    "storeRawDialog": {
+      "title": "Enable raw storage",
+      "body": "With raw storage on, the original text is kept and used by later features. Continue?",
+      "confirm": "Apply"
+    },
+    "trustDialog": {
+      "title": "Raise trust level",
+      "body": "Raising {name} to {trust} relaxes the limits that applied to that server. Continue?",
+      "confirm": "Apply"
+    }
   },
   "screens": {
     "gateway": {

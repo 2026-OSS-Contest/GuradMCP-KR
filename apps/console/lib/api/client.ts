@@ -6,13 +6,17 @@ import type {
   AttackScenariosResponse,
   DetectDirection,
   DetectionPreview,
+  GatewaySettings,
+  McpServer,
   Overview,
   PolicyDetail,
   RecentEventsResponse,
   RevealContent,
   ServersResponse,
   SessionsResponse,
-  TimelineResponse
+  SettingsUpdate,
+  TimelineResponse,
+  TrustLevel
 } from "./types";
 
 /** Empty in development, where MSW answers these same-origin requests. */
@@ -40,6 +44,17 @@ async function post<T>(path: string, signal?: AbortSignal): Promise<T> {
 async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`${BASE}/api/v1${path}`, {
     method: "POST",
+    signal,
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) throw new ApiError(response.status, response.statusText);
+  return (await response.json()) as T;
+}
+
+async function putJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(`${BASE}/api/v1${path}`, {
+    method: "PUT",
     signal,
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify(body)
@@ -83,6 +98,21 @@ export const previewDetection = (text: string, direction: DetectDirection, signa
  * terminal ones. So the screen asks once, unfiltered, and splits the list itself.
  */
 export const getApprovals = (signal?: AbortSignal) => get<Approval[]>("/approvals", signal);
+
+/**
+ * SCR-501 Settings (spec §5.7). **No control plane serves these** — `GET /settings` and
+ * `PUT /servers/{id}` belong to GMCP-80, so today they only ever reach the mock. The paths and
+ * verbs are the ones the real endpoints will use, so wiring the backend needs no change here.
+ */
+export const getSettings = (signal?: AbortSignal) => get<GatewaySettings>("/settings", signal);
+
+/** Each control sends only what it changed, so one never resends another's value. */
+export const updateSettings = (update: SettingsUpdate, signal?: AbortSignal) =>
+  putJson<GatewaySettings>("/settings", update, signal);
+
+/** Retune one upstream's trust tier. Raising it widens what the server is allowed to do. */
+export const setServerTrust = (id: string, trust: TrustLevel, signal?: AbortSignal) =>
+  putJson<McpServer>(`/servers/${encodeURIComponent(id)}`, { trust }, signal);
 
 /**
  * Resolve a held call. Throws `ApiError` with status 409 when someone else — or the 120s
