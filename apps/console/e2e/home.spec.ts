@@ -74,7 +74,9 @@ test("rail nav navigates between SCR routes", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "Policies" }).click();
   await expect(page).toHaveURL(/\/policies$/);
-  await expect(page.getByRole("heading", { name: "Policies", level: 1 })).toBeVisible();
+  // SCR-302 carries no page title — none of the implemented screens do, only `ScreenStub` did —
+  // so arriving is confirmed by the screen's own first pane having rendered.
+  await expect(page.getByRole("region", { name: "정책팩" })).toBeVisible();
 });
 
 test("health endpoint reports readiness", async ({ request }) => {
