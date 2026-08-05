@@ -170,6 +170,7 @@
   "detector": {
     "direction": "Direction",
     "directionHint": "Default policy strength differs by direction.",
+    "directionHintDismiss": "Got it",
     "inputLabel": "Text to inspect",
     "placeholder": "Enter the text you want to inspect",
     "notStored": "The text you enter is not stored.",
@@ -189,8 +190,6 @@
     "copied": "Copied.",
     "error": "Could not run the inspection. Check the gateway connection, then run it again."
   },
-
-
   "approval": {
     "queue": "Queue",
     "history": "History",

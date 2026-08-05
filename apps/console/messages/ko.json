@@ -170,6 +170,7 @@
   "detector": {
     "direction": "방향",
     "directionHint": "방향별 기본 정책 강도가 다릅니다.",
+    "directionHintDismiss": "확인",
     "inputLabel": "검사할 텍스트",
     "placeholder": "검사하고 싶은 텍스트를 입력해주세요",
     "notStored": "입력한 텍스트는 저장되지 않습니다.",
@@ -189,8 +190,6 @@
     "copied": "복사했습니다.",
     "error": "검사를 실행하지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 실행하세요."
   },
-
-
   "approval": {
     "queue": "대기열",
     "history": "처리 이력",

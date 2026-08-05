@@ -100,11 +100,24 @@ export function DetectorInput({
           <Info className="size-4" aria-hidden />
         </button>
         {hint && (
+          /*
+            The design's Tooltip is a shared coach-mark: title, body, icon, a 확인 dismiss and
+            `{n}/{n}` step pagination. This instance fills only the title — its body reads
+            "서브 텍스트" and its pagination "{n}", both unfilled placeholders — so the dismiss
+            is the one other part that is actually specified here.
+          */
           <span
             role="tooltip"
-            className="absolute left-16 z-20 rounded-lg bg-grayscale-700 px-3 py-2 text-body-text-b3-md whitespace-nowrap text-grayscale-white shadow-lg"
+            className="text-body-text-b3-md absolute left-16 z-20 flex items-center gap-10 rounded-lg bg-grayscale-700 py-1 pr-2 pl-3 whitespace-nowrap text-grayscale-white shadow-lg"
           >
             {t("directionHint")}
+            <button
+              type="button"
+              onClick={() => setHint(false)}
+              className="text-caption-text-c-rg flex-none cursor-pointer text-grayscale-300 transition-colors hover:text-grayscale-white"
+            >
+              {t("directionHintDismiss")}
+            </button>
           </span>
         )}
       </div>

@@ -132,10 +132,17 @@ test("SCR-401 floats the results over the input at 1024", async ({ page }) => {
   expect(panelWide!.x).toBeGreaterThanOrEqual(wide!.x + wide!.width - 1);
 });
 
-test("SCR-401 explains the direction toggle on demand", async ({ page }) => {
+test("SCR-401 explains the direction toggle on demand, and takes 확인 for an answer", async ({ page }) => {
   await page.goto("/detector");
   await page.getByRole("button", { name: "방향별 기본 정책 강도가 다릅니다." }).click();
-  await expect(page.getByRole("tooltip")).toHaveText("방향별 기본 정책 강도가 다릅니다.");
+
+  const tooltip = page.getByRole("tooltip");
+  await expect(tooltip).toContainText("방향별 기본 정책 강도가 다릅니다.");
+
+  // The design's coach-mark carries its own dismiss, so reading it does not depend on knowing
+  // that clicking away or pressing Escape would also work.
+  await tooltip.getByRole("button", { name: "확인" }).click();
+  await expect(tooltip).toBeHidden();
 });
 
 test("SCR-401 says what to do when the gateway is unreachable", async ({ page }) => {
