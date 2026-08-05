@@ -27,7 +27,13 @@
     "allow": "허용",
     "warn": "경고",
     "requireApproval": "승인 대기",
-    "block": "차단"
+    "block": "차단",
+    "short": {
+      "allow": "허용",
+      "warn": "경고",
+      "requireApproval": "승인",
+      "block": "차단"
+    }
   },
   "time": {
     "justNow": "방금 전",
@@ -189,8 +195,6 @@
     "copied": "복사했습니다.",
     "error": "검사를 실행하지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 실행하세요."
   },
-
-
   "approval": {
     "queue": "대기열",
     "history": "처리 이력",
@@ -218,6 +222,57 @@
     "colDecision": "결정",
     "colDecidedBy": "처리자",
     "colTook": "소요시간"
+  },
+  "policies": {
+    "loading": "정책을 불러오는 중입니다.",
+    "error": "정책을 불러오지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 시도하세요.",
+    "packs": {
+      "title": "정책팩",
+      "toggle": "{name} 정책팩 사용"
+    },
+    "table": {
+      "title": "정책 테이블",
+      "id": "ID",
+      "priority": "PRI",
+      "action": "Action",
+      "severity": "Severity",
+      "enabled": "Enabled",
+      "fired": "30일 발동 수",
+      "dryRun": "dry-run",
+      "toggle": "{id} 정책 사용"
+    },
+    "yaml": {
+      "title": "YAML",
+      "copy": "YAML 복사",
+      "none": "정책을 선택하면 정의가 표시됩니다.",
+      "loading": "정의를 불러오는 중입니다."
+    },
+    "dryRun": {
+      "title": "Dry-Run 통계",
+      "window": "최근 {days}일",
+      "none": "dry-run 중인 정책이 없습니다.",
+      "wouldFire": "가상 판정",
+      "unit": "건"
+    },
+    "reload": {
+      "message": "정책이 갱신되었습니다.",
+      "action": "새로고침"
+    },
+    "confirmDisable": {
+      "title": "정책을 비활성화할까요?",
+      "body": "{id}는 차단 또는 critical 등급 정책입니다. 비활성화하면 해당 보호가 즉시 사라집니다.",
+      "cancel": "취소",
+      "confirm": "비활성화"
+    },
+    "empty": {
+      "title": "아직 정책이 없습니다",
+      "body": "정책 작성 가이드의 예제를 복사해 첫 정책을 만들고, validation과 benchmark로 안전하게 확인하세요.",
+      "primary": "정책 작성 가이드 열기",
+      "primaryAria": "정책 작성 가이드 새 창에서 열기",
+      "secondary": "기본 정책팩 예제 보기",
+      "secondaryAria": "기본 정책팩 예제 새 창에서 열기",
+      "note": "코드를 작성하지 않아도 YAML 정책으로 기여할 수 있습니다."
+    }
   },
   "screens": {
     "gateway": {

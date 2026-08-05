@@ -351,3 +351,63 @@ export interface TimelineResponse {
   /** Full detail for each event id the panel can select. */
   details: Record<string, EventDetail>;
 }
+
+// ── SCR-302 Policy Builder (spec §5.5, FR-POL-02/04) ────────────────────────
+// Nothing here is served by the control plane yet: `GET /policies` belongs to GMCP-80, and
+// hot-reload and dry-run to GMCP-76/77. The mock is the only server today. Editing stays
+// file-based — the console reads packs and flips `enabled`, and does nothing else.
+
+/** The DSL's action vocabulary (`packages/policy-engine`), one wider than `GuardAction`. */
+export type PolicyAction = "allow" | "mask_then_allow" | "warn" | "require_approval" | "block";
+
+/** The DSL's severities — one wider than the detector's `Severity`, which has no `info`. */
+export type PolicySeverity = "info" | Severity;
+
+export interface PolicyPack {
+  name: string;
+  version: string;
+  description?: string;
+  /** Packs this one `extends`; the tree indents a pack beneath the parent that lists it. */
+  extends: string[];
+  enabled: boolean;
+  /** Policies the pack contributes — the count beside its name in the tree. */
+  policyCount: number;
+}
+
+export interface PolicyRow {
+  id: string;
+  pack: string;
+  priority: number;
+  action: PolicyAction;
+  severity: PolicySeverity;
+  enabled: boolean;
+  /**
+   * Dry-run policies evaluate without acting. The DSL has no field for it yet (GMCP-77), so it
+   * rides beside `action` rather than inside it, and the table chips it in the action's place.
+   */
+  dryRun?: boolean;
+  /** Times the policy fired over the last 30 days; `null` when it never has — the table's "–". */
+  firedLast30d: number | null;
+  /** Repo-relative path of the file defining it, shown as the YAML panel's caption. */
+  path: string;
+}
+
+export interface PoliciesResponse {
+  packs: PolicyPack[];
+  policies: PolicyRow[];
+  /** Changes when the packs on disk are reloaded — what the hot-reload banner watches. */
+  revision?: string;
+}
+
+/** Dry-run panel: what a policy *would* have decided over the window, having acted on nothing. */
+export interface DryRunStat {
+  policyId: string;
+  /** 가상 판정 — the matches the policy would have produced. */
+  wouldFire: number;
+  /** Days the count covers; the design captions it 최근 30일. */
+  windowDays: number;
+}
+
+export interface DryRunStatsResponse {
+  stats: DryRunStat[];
+}

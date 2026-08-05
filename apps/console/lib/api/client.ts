@@ -6,8 +6,12 @@ import type {
   AttackScenariosResponse,
   DetectDirection,
   DetectionPreview,
+  DryRunStatsResponse,
   Overview,
+  PoliciesResponse,
   PolicyDetail,
+  PolicyPack,
+  PolicyRow,
   RecentEventsResponse,
   RevealContent,
   ServersResponse,
@@ -40,6 +44,17 @@ async function post<T>(path: string, signal?: AbortSignal): Promise<T> {
 async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`${BASE}/api/v1${path}`, {
     method: "POST",
+    signal,
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) throw new ApiError(response.status, response.statusText);
+  return (await response.json()) as T;
+}
+
+async function patchJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(`${BASE}/api/v1${path}`, {
+    method: "PATCH",
     signal,
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify(body)
@@ -90,3 +105,24 @@ export const getApprovals = (signal?: AbortSignal) => get<Approval[]>("/approval
  */
 export const decideApproval = (id: string, decision: ApprovalDecision, signal?: AbortSignal) =>
   postJson<Approval>(`/approvals/${encodeURIComponent(id)}/decision`, { decision }, signal);
+
+/**
+ * SCR-302 Policy Builder (spec §5.5). No control plane serves these yet — `GET /policies` is
+ * GMCP-80's — so today they only ever reach the mock.
+ */
+export const getPolicies = (signal?: AbortSignal) => get<PoliciesResponse>("/policies", signal);
+
+/** Dry-run counts for the panel under the YAML. Absent policies simply have no entry. */
+export const getDryRunStats = (signal?: AbortSignal) =>
+  get<DryRunStatsResponse>("/policies/dry-run-stats", signal);
+
+/**
+ * Flip one policy on or off. This is the *only* mutation the console makes: authoring stays in
+ * the YAML files, so there is no create, no edit and no delete.
+ */
+export const setPolicyEnabled = (id: string, enabled: boolean, signal?: AbortSignal) =>
+  patchJson<PolicyRow>(`/policies/${encodeURIComponent(id)}`, { enabled }, signal);
+
+/** Flip a whole pack; every policy it contributes follows it. */
+export const setPackEnabled = (name: string, enabled: boolean, signal?: AbortSignal) =>
+  patchJson<PolicyPack>(`/policy-packs/${encodeURIComponent(name)}`, { enabled }, signal);
