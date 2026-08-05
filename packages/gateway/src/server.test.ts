@@ -270,7 +270,7 @@ describe("gateway HTTP boundary", () => {
 // trust grade, must produce different verdicts — the fail-safe / trust-weighting contract this
 // feature exists to guarantee.
 describe("server trust affects verdict (FR-GW-02 §8.1)", () => {
-  async function sendPersonalDataByEmail(): Promise<{ error?: { code: number; data: { policyIds: string[] } } }> {
+  async function sendPersonalDataByEmail(): Promise<{ error?: GuardBlockErrorBody["error"] }> {
     const upstream = createServer((_request, response) => response.end(JSON.stringify({ content: [{ status: "sent" }] })));
     process.env.DEMO_MCP_TOOLS_URL = await listen(upstream);
     const url = await listen(createServer(handler));
@@ -282,7 +282,7 @@ describe("server trust affects verdict (FR-GW-02 §8.1)", () => {
         params: { name: "send_email", arguments: { to: "outside@example.net", body: "연락처 010-9999-8888" } }
       })
     });
-    return response.json() as Promise<{ error?: { code: number; data: { policyIds: string[] } } }>;
+    return response.json() as Promise<{ error?: GuardBlockErrorBody["error"] }>;
   }
 
   it("TC-1: a trusted server's call is allowed through (base risk stays below the approval threshold)", async () => {
@@ -294,23 +294,31 @@ describe("server trust affects verdict (FR-GW-02 §8.1)", () => {
   it("TC-2: the same call from a limited server crosses into the approval band", async () => {
     replaceServerRegistry([{ id: GATEWAY_SERVER_ID, trustLevel: "limited" }]);
     const body = await sendPersonalDataByEmail();
-    expect(body.error?.code).toBe(-32003); // require_approval
-    expect(body.error?.data.policyIds).toContain("approve_external_email_with_korean_pii");
-    expect(body.error?.data.policyIds).not.toContain("require_approval_untrusted_high_risk_tool");
+    // require_approval auto-expires to the standardized block (FR-GW-05 §3.1): fixed code
+    // -32001 for every block path, with reasonCode carrying the require_approval-vs-other distinction.
+    expect(body.error?.code).toBe(-32001);
+    expect(body.error?.data.guardmcp.reasonCode).toBe("APPROVAL_TIMEOUT_BLOCKED");
+    const policyIds = body.error ? matchedIds({ error: body.error }) : [];
+    expect(policyIds).toContain("approve_external_email_with_korean_pii");
+    expect(policyIds).not.toContain("require_approval_untrusted_high_risk_tool");
   });
 
   it("TC-3: an untrusted server's high-risk tool call requires approval via the T-06 defense policy", async () => {
     replaceServerRegistry([{ id: GATEWAY_SERVER_ID, trustLevel: "untrusted" }]);
     const body = await sendPersonalDataByEmail();
-    expect(body.error?.code).toBe(-32003); // require_approval
-    expect(body.error?.data.policyIds).toContain("require_approval_untrusted_high_risk_tool");
+    expect(body.error?.code).toBe(-32001);
+    expect(body.error?.data.guardmcp.reasonCode).toBe("APPROVAL_TIMEOUT_BLOCKED");
+    const policyIds = body.error ? matchedIds({ error: body.error }) : [];
+    expect(policyIds).toContain("require_approval_untrusted_high_risk_tool");
   });
 
   it("TC-4: a server that was never synced (cache miss) is treated exactly like untrusted", async () => {
     // No replaceServerRegistry call — the cache is empty, so this must fail safe on its own.
     const body = await sendPersonalDataByEmail();
-    expect(body.error?.code).toBe(-32003); // require_approval
-    expect(body.error?.data.policyIds).toContain("require_approval_untrusted_high_risk_tool");
+    expect(body.error?.code).toBe(-32001);
+    expect(body.error?.data.guardmcp.reasonCode).toBe("APPROVAL_TIMEOUT_BLOCKED");
+    const policyIds = body.error ? matchedIds({ error: body.error }) : [];
+    expect(policyIds).toContain("require_approval_untrusted_high_risk_tool");
   });
 });
 

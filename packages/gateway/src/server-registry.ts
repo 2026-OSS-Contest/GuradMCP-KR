@@ -97,7 +97,10 @@ export function startServerRegistrySync(baseUrl: string | undefined): ServerRegi
       } catch (error) {
         if (stopped) return;
         // Reconnect with backoff rather than propagate: a transient Control Plane outage must
-        // not crash the gateway, and the cache fails safe (untrusted) in the meantime (§5.2).
+        // not crash the gateway. The cache is fail-open during the outage — it keeps serving
+        // each server's last-synced grade rather than resetting to `untrusted`, so a trust
+        // downgrade pushed while disconnected won't take effect until reconnect (§5.2). Only an
+        // id the cache has never seen falls back to `untrusted` (see `getServerTrust` above).
         process.stdout.write(`${JSON.stringify({ level: "warn", service: "gateway", message: "server-registry stream disconnected", error: String(error) })}\n`);
       }
       if (stopped) return;
