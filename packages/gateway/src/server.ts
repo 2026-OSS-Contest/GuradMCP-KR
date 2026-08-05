@@ -5,7 +5,14 @@ import {
   type ServerResponse,
 } from "node:http";
 import { connect } from "node:net";
-import { evaluate, extractPathArg, normalizePath, type Action, type Policy, type PolicyContext } from "@guardmcp/policy-engine";
+import {
+  evaluate,
+  extractPathArg,
+  normalizePath,
+  type Action,
+  type Policy,
+  type PolicyContext,
+} from "@guardmcp/policy-engine";
 import { createAutoExpireApprovalBackend } from "./approval/backend.js";
 import { detect, mask, type Detection } from "./detect.js";
 import {
@@ -24,12 +31,22 @@ import {
   type QuarantinedToolReport,
   type ToolMetadataInspection,
 } from "./pipeline/toolMetadata.js";
-import type { GuardBlockError, PolicyDecision } from "./pipeline/types.js";
+import type {
+  GuardBlockError,
+  PolicyDecision,
+  ServerTrust,
+} from "./pipeline/types.js";
 import { scoreRisk } from "./risk.js";
+import { getServerTrust, startServerRegistrySync } from "./server-registry.js";
 import { runtimePolicyPacks } from "./policies.generated.js";
 
 const port = Number(process.env.PORT ?? 3001);
 const maxBodyBytes = 1024 * 1024;
+
+// The demo gateway routes to a single upstream (DEMO_MCP_TOOLS_URL); this is that upstream's
+// identity in the Control Plane's server registry (FR-GW-02 §3.1, §4.1).
+const gatewayServerId = process.env.GATEWAY_SERVER_ID ?? "demo-mcp-tools";
+startServerRegistrySync(process.env.CONTROL_PLANE_URL);
 
 // No approval console is wired up yet (GMCP-82); see ./approval/backend.ts.
 const routerDeps: RouterDeps = {
@@ -86,7 +103,7 @@ async function route(
       const decision = evaluatePayload(text, {
         direction: "response",
         tool: "inspect",
-        serverTrust: "untrusted",
+        serverTrust: getServerTrust(gatewayServerId),
         args: {},
       });
       send(response, 200, {
@@ -135,6 +152,7 @@ async function handleMcp(
     return;
   }
   const sessionId = sessionIdOf(body);
+  const serverTrust = getServerTrust(gatewayServerId);
   if (body.method === "tools/list") {
     const upstream = await upstreamJson("/tools/list");
     // Quarantine poisoned descriptors first (FR-GW-04): a tool description is guidance
@@ -149,12 +167,17 @@ async function handleMcp(
         "tools/list carried no recognizable tool list; per-tool quarantine was skipped",
       );
     }
-    const quarantineDecisions = recordQuarantine(metadata, sessionId);
+    const quarantineDecisions = recordQuarantine(
+      metadata,
+      sessionId,
+      gatewayServerId,
+      serverTrust,
+    );
     const payload = JSON.stringify(metadata.sanitized);
     const decision = evaluatePayload(payload, {
       direction: "response",
       tool: "tools/list",
-      serverTrust: "untrusted",
+      serverTrust,
       args: {},
     });
     const summary = summarizeWithQuarantine(
@@ -168,7 +191,8 @@ async function handleMcp(
         toolName: "tools/list",
         payload,
         sessionId,
-        serverTrust: "untrusted",
+        serverId: gatewayServerId,
+        serverTrust,
       },
       decision,
       routerDeps,
@@ -209,7 +233,7 @@ async function handleMcp(
     const requestDecision = evaluatePayload(requestPayload, {
       direction: "request",
       tool,
-      serverTrust: "untrusted",
+      serverTrust,
       args: isRecord(argumentsValue) ? argumentsValue : {},
     });
     const requestRouted = await routeByVerdict(
@@ -218,7 +242,8 @@ async function handleMcp(
         toolName: tool,
         payload: requestPayload,
         sessionId,
-        serverTrust: "untrusted",
+        serverId: gatewayServerId,
+        serverTrust,
       },
       requestDecision,
       routerDeps,
@@ -242,7 +267,7 @@ async function handleMcp(
     const responseDecision = evaluatePayload(responsePayload, {
       direction: "response",
       tool,
-      serverTrust: "untrusted",
+      serverTrust,
       args: {},
     });
     const responseRouted = await routeByVerdict(
@@ -251,7 +276,8 @@ async function handleMcp(
         toolName: tool,
         payload: responsePayload,
         sessionId,
-        serverTrust: "untrusted",
+        serverId: gatewayServerId,
+        serverTrust,
       },
       responseDecision,
       routerDeps,
@@ -374,7 +400,7 @@ function toPolicyDecision(
   result: ReturnType<typeof evaluate>,
   detections: Detection[],
   riskScore: number,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
 ): PolicyDecision {
   const deciding = result.policies.reduce<Policy | undefined>(
     (strongest, policy) =>
@@ -403,14 +429,19 @@ function toPolicyDecision(
       deciding?.message ??
       "No policy matched; the pack's default action was applied.",
     detections,
-    ...(rawPath !== undefined ? { normalizedPath: normalizePath(rawPath).normalized } : {}),
-    ...(deciding?.approval ? {
-      approval: {
-        timeoutSeconds: deciding.approval.timeout_seconds,
-        onTimeout: deciding.approval.on_timeout,
-        allowMaskedApproval: deciding.approval.allow_masked_approval ?? false
-      }
-    } : {})
+    ...(rawPath !== undefined
+      ? { normalizedPath: normalizePath(rawPath).normalized }
+      : {}),
+    ...(deciding?.approval
+      ? {
+          approval: {
+            timeoutSeconds: deciding.approval.timeout_seconds,
+            onTimeout: deciding.approval.on_timeout,
+            allowMaskedApproval:
+              deciding.approval.allow_masked_approval ?? false,
+          },
+        }
+      : {}),
   };
 }
 
@@ -429,12 +460,14 @@ function toPolicyDecision(
 function recordQuarantine(
   metadata: ToolMetadataInspection,
   sessionId: string,
+  serverId: string,
+  serverTrust: ServerTrust,
 ): PolicyDecision[] {
   return metadata.quarantined.map((tool) => {
     const decision = evaluatePayload(tool.payload, {
       direction: "response",
       tool: tool.report.name,
-      serverTrust: "untrusted",
+      serverTrust,
       args: {},
     });
     emitGuardEvent({
@@ -451,6 +484,8 @@ function recordQuarantine(
       // The gateway did remove the tool, so the recorded reason reads as a block
       // regardless of what the sanitized payload's own verdict turns out to be.
       explanation: explainDecision(decision, "block"),
+      targetServerId: serverId,
+      targetServerTrust: serverTrust,
     });
     return decision;
   });

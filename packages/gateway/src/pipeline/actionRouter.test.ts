@@ -10,6 +10,7 @@ const baseCtx: ToolCallContext = {
   toolName: "read_file",
   payload: JSON.stringify({ path: ".env" }),
   sessionId: "s-1",
+  serverId: "demo-mcp-tools",
   serverTrust: "untrusted"
 };
 

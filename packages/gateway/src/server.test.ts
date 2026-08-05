@@ -3,11 +3,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { onGuardBusMessage } from "./pipeline/events.js";
 import { runtimePolicyPacks } from "./policies.generated.js";
 import { handler } from "./server.js";
+import { clearServerRegistry, replaceServerRegistry } from "./server-registry.js";
 
 /** Every policy id any shipped pack declares; a reported id outside this set is invented. */
 const shippedPolicyIds = Object.values(runtimePolicyPacks).flatMap((pack) => pack.policies.map(({ id }) => id));
 
 const servers: Server[] = [];
+const GATEWAY_SERVER_ID = "demo-mcp-tools"; // packages/gateway/src/server.ts's default GATEWAY_SERVER_ID
 
 /** FR-GW-05 §3.1/3.2 shape, as it arrives over the wire. */
 interface GuardBlockErrorBody {
@@ -24,6 +26,7 @@ function matchedIds(body: GuardBlockErrorBody): string[] {
 
 afterEach(async () => {
   delete process.env.DEMO_MCP_TOOLS_URL;
+  clearServerRegistry();
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
 });
 
@@ -260,6 +263,54 @@ describe("gateway HTTP boundary", () => {
     expect(response.status).toBe(502);
     const body = await response.json() as { error: { code: number } };
     expect(body.error.code).toBe(-32053);
+  });
+});
+
+// FR-GW-02 §8.1 TC-1..TC-4: the identical send_email call, varied only by the target server's
+// trust grade, must produce different verdicts — the fail-safe / trust-weighting contract this
+// feature exists to guarantee.
+describe("server trust affects verdict (FR-GW-02 §8.1)", () => {
+  async function sendPersonalDataByEmail(): Promise<{ error?: { code: number; data: { policyIds: string[] } } }> {
+    const upstream = createServer((_request, response) => response.end(JSON.stringify({ content: [{ status: "sent" }] })));
+    process.env.DEMO_MCP_TOOLS_URL = await listen(upstream);
+    const url = await listen(createServer(handler));
+    const response = await fetch(`${url}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", id: 10, method: "tools/call",
+        params: { name: "send_email", arguments: { to: "outside@example.net", body: "연락처 010-9999-8888" } }
+      })
+    });
+    return response.json() as Promise<{ error?: { code: number; data: { policyIds: string[] } } }>;
+  }
+
+  it("TC-1: a trusted server's call is allowed through (base risk stays below the approval threshold)", async () => {
+    replaceServerRegistry([{ id: GATEWAY_SERVER_ID, trustLevel: "trusted" }]);
+    const body = await sendPersonalDataByEmail();
+    expect(body.error).toBeUndefined();
+  });
+
+  it("TC-2: the same call from a limited server crosses into the approval band", async () => {
+    replaceServerRegistry([{ id: GATEWAY_SERVER_ID, trustLevel: "limited" }]);
+    const body = await sendPersonalDataByEmail();
+    expect(body.error?.code).toBe(-32003); // require_approval
+    expect(body.error?.data.policyIds).toContain("approve_external_email_with_korean_pii");
+    expect(body.error?.data.policyIds).not.toContain("require_approval_untrusted_high_risk_tool");
+  });
+
+  it("TC-3: an untrusted server's high-risk tool call requires approval via the T-06 defense policy", async () => {
+    replaceServerRegistry([{ id: GATEWAY_SERVER_ID, trustLevel: "untrusted" }]);
+    const body = await sendPersonalDataByEmail();
+    expect(body.error?.code).toBe(-32003); // require_approval
+    expect(body.error?.data.policyIds).toContain("require_approval_untrusted_high_risk_tool");
+  });
+
+  it("TC-4: a server that was never synced (cache miss) is treated exactly like untrusted", async () => {
+    // No replaceServerRegistry call — the cache is empty, so this must fail safe on its own.
+    const body = await sendPersonalDataByEmail();
+    expect(body.error?.code).toBe(-32003); // require_approval
+    expect(body.error?.data.policyIds).toContain("require_approval_untrusted_high_risk_tool");
   });
 });
 
