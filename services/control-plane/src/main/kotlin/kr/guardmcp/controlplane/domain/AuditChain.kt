@@ -44,15 +44,7 @@ class AuditChain(private val clock: Clock) {
         synchronized(lock) {
             val eventId = UUID.randomUUID()
             val ts = clock.instant()
-            val payload = linkedMapOf(
-                "eventId" to eventId.toString(),
-                "ts" to ts.toString(),
-                "serverId" to serverId,
-                "fromTrust" to fromTrust.wire,
-                "toTrust" to toTrust.wire,
-                "direction" to direction,
-                "confirmedBy" to confirmedBy,
-            )
+            val payload = canonicalPayload(eventId, ts, serverId, fromTrust, toTrust, direction, confirmedBy)
             val hash = sha256Hex("$lastHash|${mapper.writeValueAsString(payload)}")
             val event = TrustLevelChangeEvent(eventId, ts, serverId, fromTrust, toTrust, direction, confirmedBy, lastHash, hash)
             trustChanges += event
@@ -67,10 +59,25 @@ class AuditChain(private val clock: Clock) {
         var previous = GENESIS_HASH
         for (event in trustChanges) {
             if (event.prevHash != previous) return@synchronized false
+            val payload = canonicalPayload(event.eventId, event.ts, event.serverId, event.fromTrust, event.toTrust, event.direction, event.confirmedBy)
+            val expectedHash = sha256Hex("$previous|${mapper.writeValueAsString(payload)}")
+            if (event.hash != expectedHash) return@synchronized false
             previous = event.hash
         }
         true
     }
+
+    /** Canonical payload shape hashed into each link (§3.2); shared so `recordTrustChange` and `verify` never drift apart. */
+    private fun canonicalPayload(eventId: UUID, ts: Instant, serverId: String, fromTrust: TrustLevel, toTrust: TrustLevel, direction: String, confirmedBy: String?) =
+        linkedMapOf(
+            "eventId" to eventId.toString(),
+            "ts" to ts.toString(),
+            "serverId" to serverId,
+            "fromTrust" to fromTrust.wire,
+            "toTrust" to toTrust.wire,
+            "direction" to direction,
+            "confirmedBy" to confirmedBy,
+        )
 
     companion object {
         val GENESIS_HASH = "0".repeat(64)
