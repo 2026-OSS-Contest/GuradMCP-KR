@@ -132,6 +132,23 @@ test("SCR-401 floats the results over the input at 1024", async ({ page }) => {
   expect(panelWide!.x).toBeGreaterThanOrEqual(wide!.x + wide!.width - 1);
 });
 
+test("SCR-401 stacks rather than covering its controls when narrower than the frames", async ({ page }) => {
+  // The frames stop at 1024. Narrower than that the floating panel would sit on top of the run
+  // button and half the samples, so the two panes stack instead.
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.goto("/detector");
+
+  const panel = await page.getByRole("region", { name: "탐지 결과" }).boundingBox();
+  const input = await page.getByRole("textbox", { name: "검사할 텍스트" }).boundingBox();
+  expect(panel!.y).toBeGreaterThan(input!.y + input!.height - 1);
+
+  // And every control the screen offers is still reachable.
+  await expect(page.getByRole("button", { name: "검사 실행" })).toBeVisible();
+  for (const sample of ["한국형 PII 샘플", "SECRET 샘플", "인젝션 샘플"]) {
+    await expect(page.getByRole("button", { name: sample })).toBeVisible();
+  }
+});
+
 test("SCR-401 explains the direction toggle on demand, and takes 확인 for an answer", async ({ page }) => {
   await page.goto("/detector");
   await page.getByRole("button", { name: "방향별 기본 정책 강도가 다릅니다." }).click();
