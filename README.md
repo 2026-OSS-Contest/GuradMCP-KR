@@ -80,6 +80,7 @@ npm run bench
 | 정책 작성 가이드 | [열기](docs/policy-guide/README.md) | [Open](docs/policy-guide/README.en.md) |
 | 위험 점수 산식 | [열기](docs/risk-scoring.md) | [Open](docs/risk-scoring.en.md) |
 | 판정 설명 문구 | [열기](docs/explanation.md) | [Open](docs/explanation.en.md) |
+| 국내 서비스 자격증명 탐지 | [열기](docs/korean-service-tokens.md) | [Open](docs/korean-service-tokens.en.md) |
 | 한국어 개인정보 마스킹 데모 | [열기](docs/korean-pii-demo.md) | [Open](docs/korean-pii-demo.en.md) |
 | 벤치마크 게이트 | [열기](docs/benchmark-gate.md) | [Open](docs/benchmark-gate.en.md) |
 | 벤치마크 결과 정리 | [열기](docs/benchmark-results.md) | [Open](docs/benchmark-results.md) |

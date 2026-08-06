@@ -80,6 +80,7 @@ Do not disclose vulnerabilities in public issues. [SECURITY.md](SECURITY.md#engl
 | Policy Authoring Guide | [Open](docs/policy-guide/README.en.md) | [열기](docs/policy-guide/README.md) |
 | Risk score formula | [Open](docs/risk-scoring.en.md) | [열기](docs/risk-scoring.md) |
 | Verdict explanations | [Open](docs/explanation.en.md) | [열기](docs/explanation.md) |
+| Korean service credentials | [Open](docs/korean-service-tokens.en.md) | [열기](docs/korean-service-tokens.md) |
 | Korean PII masking demo | [Open](docs/korean-pii-demo.en.md) | [열기](docs/korean-pii-demo.md) |
 | Benchmark gate | [Open](docs/benchmark-gate.en.md) | [열기](docs/benchmark-gate.md) |
 | Contribution guide | [Open](CONTRIBUTING.md#english) | [열기](CONTRIBUTING.md#한국어) |
