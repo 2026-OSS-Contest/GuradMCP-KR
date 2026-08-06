@@ -2,10 +2,12 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
 import { Info } from "lucide-react";
 import { getServers, getSettings, setServerTrust, updateSettings } from "@/lib/api/client";
 import type { FailMode, GatewaySettings, McpServer, SettingsUpdate, TrustLevel } from "@/lib/api/types";
 import { useResource } from "@/lib/api/use-resource";
+import { LOCALE_COOKIE } from "@/i18n/config";
 import { FailPolicy } from "./fail-policy";
 import { PreferenceCards } from "./preference-cards";
 import { RiskDialog } from "./risk-dialog";
@@ -28,6 +30,7 @@ type Pending =
  */
 export function SettingsScreen() {
   const t = useTranslations("settings");
+  const router = useRouter();
   const [pulse, setPulse] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
@@ -65,6 +68,20 @@ export function SettingsScreen() {
       setPulse((previous) => previous + 1);
     }
   }, []);
+
+  /**
+   * next-intl resolves the language from the `NEXT_LOCALE` cookie on the server, so persisting
+   * the preference to the gateway changes a stored value and nothing on screen. The cookie is
+   * what switches the page; the refresh is what re-renders it with the other message file.
+   */
+  const changeLocale = useCallback(
+    async (locale: GatewaySettings["locale"]) => {
+      document.cookie = `${LOCALE_COOKIE}=${locale}; path=/; max-age=31536000; samesite=lax`;
+      await save({ locale });
+      router.refresh();
+    },
+    [save, router]
+  );
 
   const onFailModeChange = (mode: FailMode) => {
     if (mode === "fail_open") return setPending({ kind: "failOpen" });
@@ -116,7 +133,7 @@ export function SettingsScreen() {
           <PreferenceCards
             settings={current}
             onStoreRawChange={onStoreRawChange}
-            onLocaleChange={(locale) => void save({ locale })}
+            onLocaleChange={(locale) => void changeLocale(locale)}
             onTimeoutChange={(approvalTimeoutSeconds) => void save({ approvalTimeoutSeconds })}
             disabled={busy === "settings"}
           />

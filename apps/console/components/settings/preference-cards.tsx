@@ -3,11 +3,11 @@
 import { useTranslations } from "next-intl";
 import type { GatewaySettings } from "@/lib/api/types";
 import { Switch } from "@/components/ui/switch";
+import { locales } from "@/i18n/config";
 
 /** The windows the design offers for a held call. 120s is the gateway's own default. */
 const TIMEOUTS = [60, 120, 300] as const;
 
-const LOCALES = ["ko", "en"] as const;
 
 /**
  * The right column of SCR-501: what the audit log keeps, and the two preferences that are not
@@ -64,7 +64,7 @@ export function PreferenceCards({
               onChange={(event) => onLocaleChange(event.target.value as GatewaySettings["locale"])}
               className="text-body-text-b3-md w-32 cursor-pointer rounded-(--primitive-radius-rounded-lg) bg-grayscale-800 px-3 py-2 text-grayscale-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {LOCALES.map((locale) => (
+              {locales.map((locale) => (
                 <option key={locale} value={locale} className="bg-grayscale-800">
                   {t(`general.localeName.${locale}`)}
                 </option>

@@ -102,6 +102,21 @@ test("SCR-501 saves the preferences that carry no risk", async ({ page }) => {
   await expect(page.getByRole("combobox", { name: "승인 타임아웃" })).toHaveValue("300");
 });
 
+test("SCR-501 switches the console's language", async ({ page }) => {
+  await page.goto("/settings");
+  await expect(page.getByRole("link", { name: "Setting" })).toBeVisible();
+
+  await page.getByRole("combobox", { name: "언어" }).selectOption("en");
+
+  // next-intl resolves the locale from a cookie on the server, so this only works if the control
+  // writes that cookie — storing the preference on the gateway alone leaves the page in Korean.
+  await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Endpoint" })).toBeVisible();
+  // And it survives a reload, which is the point of a cookie rather than component state.
+  await page.reload();
+  await expect(page.getByRole("columnheader", { name: "Endpoint" })).toBeVisible();
+});
+
 test("SCR-501 says what to do when the gateway is unreachable", async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem("guardmcp.mock-scenario", "offline"));
   await page.goto("/settings");
