@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { AlertTriangle, Check, Circle } from "lucide-react";
 import type { McpServer, TrustLevel } from "@/lib/api/types";
+import { Select } from "@/components/ui/select";
 import { Tag } from "@/components/ui/tag";
 import { cn } from "@/lib/utils";
 
@@ -69,24 +70,19 @@ export function ServerTable({ servers, onTrustChange, busy }: ServerTableProps) 
                     {server.endpoint ?? "–"}
                   </td>
                   <td className="px-4 py-4">
-                    <select
+                    <Select
                       value={server.trust}
                       disabled={busy === server.id}
-                      aria-label={t("servers.trustOf", { name: server.name })}
-                      onChange={(event) => onTrustChange(server, event.target.value as TrustLevel)}
-                      className={cn(
-                        "text-body-text-b3-md w-full cursor-pointer rounded-(--primitive-radius-rounded-lg) bg-grayscale-800 px-3 py-2",
-                        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600",
-                        TRUST_INK[server.trust],
-                        busy === server.id && "cursor-not-allowed opacity-50"
-                      )}
+                      label={t("servers.trustOf", { name: server.name })}
+                      onChange={(next) => onTrustChange(server, next as TrustLevel)}
+                      className={cn("text-body-text-b3-md h-6 w-33", TRUST_INK[server.trust])}
                     >
                       {TRUST_LEVELS.map((level) => (
                         <option key={level} value={level} className="bg-grayscale-800 text-grayscale-white">
                           {level}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </td>
                   <td className="px-4 py-4">
                     {/* A disconnected server reports nothing, so its snapshot state is unknown

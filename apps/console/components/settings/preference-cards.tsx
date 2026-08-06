@@ -1,7 +1,8 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import type { GatewaySettings } from "@/lib/api/types";
+import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { locales } from "@/i18n/config";
 
@@ -33,6 +34,9 @@ export function PreferenceCards({
   disabled
 }: PreferenceCardsProps) {
   const t = useTranslations("settings");
+  // The cookie is what the page is actually rendered in; `settings.locale` is a stored preference
+  // that a fresh gateway — or a reset mock — can disagree with. Show the one in effect.
+  const locale = useLocale();
 
   return (
     <div className="flex flex-col gap-4">
@@ -56,37 +60,41 @@ export function PreferenceCards({
           {t("general.title")}
         </h2>
         <div className="flex flex-col gap-4 rounded-(--primitive-radius-rounded-xl) bg-grayscale-900 px-4 py-5">
-          <label className="flex items-center gap-4">
-            <span className="text-body-text-b2-md flex-1 text-grayscale-white">{t("general.locale")}</span>
-            <select
-              value={settings.locale}
+          <label className="flex items-center gap-3">
+            <span className="text-body-text-b2-md w-35 flex-none text-grayscale-white">{t("general.locale")}</span>
+            <Select
+              value={locale}
               disabled={disabled}
-              onChange={(event) => onLocaleChange(event.target.value as GatewaySettings["locale"])}
-              className="text-body-text-b3-md w-32 cursor-pointer rounded-(--primitive-radius-rounded-lg) bg-grayscale-800 px-3 py-2 text-grayscale-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+              label={t("general.locale")}
+              onChange={(next) => onLocaleChange(next as GatewaySettings["locale"])}
+              className="text-body-text-b3-md h-8 w-25"
             >
-              {locales.map((locale) => (
-                <option key={locale} value={locale} className="bg-grayscale-800">
-                  {t(`general.localeName.${locale}`)}
+              {locales.map((code) => (
+                <option key={code} value={code} className="bg-grayscale-800">
+                  {t(`general.localeName.${code}`)}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
 
-          <label className="flex items-center gap-4">
-            <span className="text-body-text-b2-md flex-1 text-grayscale-white">{t("general.approvalTimeout")}</span>
-            <select
+          <label className="flex items-center gap-3">
+            <span className="text-body-text-b2-md w-35 flex-none text-grayscale-white">
+              {t("general.approvalTimeout")}
+            </span>
+            <Select
               value={settings.approvalTimeoutSeconds}
               disabled={disabled}
-              onChange={(event) => onTimeoutChange(Number(event.target.value))}
-              className="text-body-text-b3-md w-32 cursor-pointer rounded-(--primitive-radius-rounded-lg) bg-grayscale-800 px-3 py-2 text-grayscale-white tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+              label={t("general.approvalTimeout")}
+              onChange={(next) => onTimeoutChange(Number(next))}
+              className="text-body-text-b3-md h-8 w-25 tabular-nums"
             >
               {TIMEOUTS.map((seconds) => (
                 <option key={seconds} value={seconds} className="bg-grayscale-800">
                   {seconds}
                 </option>
               ))}
-            </select>
-            <span className="text-body-text-b3-md flex-none text-grayscale-400">{t("general.seconds")}</span>
+            </Select>
+            <span className="text-body-text-b3-md -ml-1 flex-none text-grayscale-400">{t("general.seconds")}</span>
           </label>
         </div>
       </section>
