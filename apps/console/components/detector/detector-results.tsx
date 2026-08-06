@@ -24,7 +24,7 @@ const TAG_TONE: Record<Verdict, string> = {
   allow: "bg-(--primitive-opacity-allow-alpha-10) text-verdict-allow"
 };
 
-export function labelOf(finding: DetectionFinding): string {
+function labelOf(finding: DetectionFinding): string {
   return finding.type ?? TYPE_BY_POLICY[finding.policyId] ?? finding.policyId.toUpperCase();
 }
 
