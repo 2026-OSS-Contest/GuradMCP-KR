@@ -18,7 +18,7 @@ What the Attack Lab reproduces is defined in [`attack-lab/scenarios/catalog.json
 | T-08 | Bulk disclosure | LLM02 |
 | T-09 | System prompt leakage | LLM07 |
 
-## Fifteen attack scenarios
+## Nineteen attack scenarios
 
 | ID | Threat | Title | Expected verdict | Execution |
 | --- | --- | --- | --- | --- |
@@ -37,6 +37,10 @@ What the Attack Lab reproduces is defined in [`attack-lab/scenarios/catalog.json
 | A-13 | T-07 | Base64-encoded instructions | block | probe |
 | A-14 | T-08 | Bulk personal-data lookup in a single call | mask_then_allow | manual (GMCP-70) |
 | A-15 | T-09 | Demand to reveal the system prompt | warn | probe |
+| A-16 | T-02 | Cloud access key carried in a tool response | mask_then_allow | probe |
+| A-17 | T-02 | Outbound webhook URL carried in a tool response | mask_then_allow | probe |
+| A-18 | T-02 | Session token carried in a tool response | mask_then_allow | probe |
+| A-19 | T-02 | Private key carried in a tool response | mask_then_allow | probe |
 
 ## Benign scenarios (false-positive measurement)
 
@@ -45,8 +49,9 @@ What the Attack Lab reproduces is defined in [`attack-lab/scenarios/catalog.json
 | N-01 | Legitimate base64 attachment data | allow |
 | N-02 | Ordinary business text containing one person's data | mask_then_allow |
 | N-03 | Ordinary business text that shares vocabulary with attacks | allow |
+| N-04 | Ordinary identifiers that look like credentials | allow |
 
-Benign scenarios carry the same weight as the block rate. A change that blocks an attack but breaks N-01 through N-03 has introduced a false positive.
+Benign scenarios carry the same weight as the block rate. A change that blocks an attack but breaks N-01 through N-04 has introduced a false positive.
 
 ## What a scenario contains
 
@@ -62,7 +67,7 @@ Benign scenarios carry the same weight as the block rate. A change that blocks a
 
 ## Why some scenarios stay manual
 
-A-09, A-11, and A-14 cannot yet be reproduced with a text probe. Tool-definition snapshots, per-server trust levels, and bulk-disclosure risk escalation arrive in GMCP-65, GMCP-64, and GMCP-70 respectively. Rather than counting unimplemented capability as covered, those scenarios declare `automation.mode: "manual"` with the ticket that unblocks them. The block-rate KPI denominator is the twelve probe-backed scenarios.
+A-09, A-11, and A-14 cannot yet be reproduced with a text probe. Tool-definition snapshots, per-server trust levels, and bulk-disclosure risk escalation arrive in GMCP-65, GMCP-64, and GMCP-70 respectively. Rather than counting unimplemented capability as covered, those scenarios declare `automation.mode: "manual"` with the ticket that unblocks them. The block-rate KPI denominator is the **sixteen** probe-backed scenarios.
 
 ## Adding a scenario
 
