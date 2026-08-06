@@ -117,6 +117,23 @@ test("SCR-501 switches the console's language", async ({ page }) => {
   await expect(page.getByRole("columnheader", { name: "Endpoint" })).toBeVisible();
 });
 
+test("SCR-501 is operable from the keyboard alone", async ({ page }) => {
+  await page.goto("/settings");
+  await expect(page.getByRole("radio", { name: /Fail-Closed/ })).toHaveAttribute("aria-checked", "true");
+
+  // A radiogroup is one tab stop and the arrows choose within it.
+  await page.getByRole("radio", { name: /Fail-Closed/ }).focus();
+  await page.keyboard.press("ArrowDown");
+
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toBeVisible();
+  // Focus moves into the disclosure, and Escape hands it back to what opened it.
+  await expect(dialog.getByRole("checkbox")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("radio", { name: /Fail-Closed/ })).toBeFocused();
+});
+
 test("SCR-501 says what to do when the gateway is unreachable", async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem("guardmcp.mock-scenario", "offline"));
   await page.goto("/settings");

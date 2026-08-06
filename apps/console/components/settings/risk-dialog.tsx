@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
 /**
@@ -36,10 +36,40 @@ export function RiskDialog({
   const t = useTranslations("settings");
   const [acknowledged, setAcknowledged] = useState(false);
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onCancel();
+    // A disclosure that gates a dangerous setting is no use to someone who cannot reach its
+    // controls, so focus moves in, stays inside while Tab cycles, and returns on close.
+    const opener = document.activeElement as HTMLElement | null;
+    const focusables = () =>
+      Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          "button:not([disabled]), input:not([disabled])"
+        ) ?? []
+      );
+    focusables()[0]?.focus();
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") return onCancel();
+      if (event.key !== "Tab") return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      opener?.focus();
+    };
   }, [onCancel]);
 
   const blocked = Boolean(acknowledgement) && !acknowledged;
@@ -47,6 +77,7 @@ export function RiskDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={onCancel}>
       <div
+        ref={dialogRef}
         role="alertdialog"
         aria-labelledby="risk-dialog-title"
         aria-describedby="risk-dialog-body"

@@ -14,17 +14,11 @@ const DEFAULTS: GatewaySettings = {
   approvalTimeoutSeconds: 120
 };
 
-/** The window the approval console counts down; the design offers these and nothing between. */
-export const APPROVAL_TIMEOUTS = [60, 120, 300] as const;
 
 let settings: GatewaySettings = { ...DEFAULTS };
 /** Trust changes are applied to a copy, so a reload does not carry them into the next test. */
-let trust = new Map<string, TrustLevel>();
+const trust = new Map<string, TrustLevel>();
 
-export function resetSettings(): void {
-  settings = { ...DEFAULTS };
-  trust = new Map();
-}
 
 export const currentSettings = (): GatewaySettings => settings;
 

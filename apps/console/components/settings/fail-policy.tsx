@@ -23,6 +23,19 @@ const MODES: readonly FailMode[] = ["fail_closed", "fail_open"];
 export function FailPolicy({ value, onChange, disabled }: FailPolicyProps) {
   const t = useTranslations("settings");
 
+  /**
+   * A radiogroup moves with the arrow keys, not just Tab and Enter — WAI-ARIA expects the group
+   * to be one stop and the arrows to choose within it.
+   */
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    const keys = ["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft"];
+    if (disabled || !keys.includes(event.key)) return;
+    event.preventDefault();
+    const step = event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : -1;
+    const next = MODES[(MODES.indexOf(value) + step + MODES.length) % MODES.length];
+    onChange(next);
+  };
+
   return (
     <section aria-labelledby="fail-policy-title" className="flex flex-col gap-4">
       <h2 id="fail-policy-title" className="text-body-text-b3-md text-grayscale-300">
@@ -31,6 +44,7 @@ export function FailPolicy({ value, onChange, disabled }: FailPolicyProps) {
       <div
         role="radiogroup"
         aria-labelledby="fail-policy-title"
+        onKeyDown={onKeyDown}
         className="flex flex-1 flex-col gap-3 rounded-(--primitive-radius-rounded-xl) bg-grayscale-900 p-3"
       >
         {MODES.map((mode) => {
@@ -41,6 +55,7 @@ export function FailPolicy({ value, onChange, disabled }: FailPolicyProps) {
               type="button"
               role="radio"
               aria-checked={selected}
+              tabIndex={selected ? 0 : -1}
               disabled={disabled}
               onClick={() => onChange(mode)}
               className={cn(
