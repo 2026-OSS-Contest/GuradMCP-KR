@@ -19,6 +19,35 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Tokens live **inside the app** (`app/`), not in a separate workspace package.
 - Style with token utilities (`bg-grayscale-900`, `text-verdict-block`) instead of hardcoded
   colors. To reference a raw primitive use the Tailwind v4 form: `bg-(--primitive-...)`.
+- **The radius names do not line up.** `theme.css` derives Tailwind's radius scale from shadcn's
+  `--radius`, so `rounded-sm` is 8px, `rounded-lg` 12px and `rounded-xl` 16px — while the design's
+  own `rounded-sm`/`lg`/`xl` are 4px, 8px and 12px. Every Tailwind radius is therefore one step
+  too large. The design uses exactly four values (4 · 8 · 12 · 1000), so reference the primitive —
+  `rounded-(--primitive-radius-rounded-xl)` — until that mapping is aligned.
+
+## Matching a screen to its Figma frames
+
+Each frame in `tools/figma-export/out/<scr-id>/<frame>/` exports three files, and they answer
+different questions. Use all three — checking one and inferring the rest is how details get lost.
+
+- **`.png`** — composition only. A 2px underline or a 6%-alpha ground is invisible at this size,
+  so never conclude "it matches" from the image.
+- **`.json`** — geometry and tokens: `x`/`y`/`w`/`h`, `fills` with their `variable` names,
+  `radius`/`radiusVar`, `layout.pad`/`gap`, `font`/`fontSize`. It answers only what you ask it,
+  so a property you did not think to query stays invisible.
+- **`.html`** — **the authority for styling.** It is the frame rendered with resolved CSS: the
+  typography class on each element (`text-body-text-b3-md`), and every inline run as its own
+  `<span style="color:…">`. If the design tints a word and nothing more, this is where you see
+  that there is no ground and no underline. Read it before writing any text-run styling.
+
+Two more rules that come from the same failure:
+
+- **Revising an existing screen means auditing the whole screen**, not just the lines you touch.
+  Code that predates you is not evidence of anything; the frames are.
+- Compare *every* exported frame, including the state variants. Their filenames say what state
+  they are (`-empty`, `-reload`, `-입력-전`), and a screen can be right in one state and wrong in
+  another — the SCR-401 result panes split evenly until findings arrive, and only the completed
+  frame shows it.
 
 ## Fonts
 
