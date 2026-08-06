@@ -10,11 +10,15 @@ import { cn } from "@/lib/utils";
 /** Spec §5.4: the input is capped, and the counter reports bytes rather than characters. */
 export const MAX_BYTES = 64 * 1024;
 
+// The matched runs are tinted and nothing more: the frame's own HTML renders each as a bare
+// `<span style="color:…">`, so no ground and no underline. The two the design shows use the 300
+// step rather than the 500 the verdict tokens point at — a lighter tint reads as emphasis inside
+// a sentence, where the badge colours are meant to read as labels. The other two follow it.
 const TONE = {
-  block: "text-verdict-block",
-  warn: "text-verdict-warn",
+  block: "text-red-300",
+  warn: "text-yellow-300",
   require_approval: "text-violet-100",
-  allow: "text-verdict-allow"
+  allow: "text-green-300"
 } as const;
 
 /** Splits the text at the finding offsets so each match can carry its verdict's colour. */
@@ -146,16 +150,15 @@ export function DetectorInput({
         <div
           ref={mirror}
           aria-hidden
-          className="pointer-events-none absolute inset-0 overflow-hidden p-4 text-body-text-b2-md break-words whitespace-pre-wrap text-grayscale-white"
+          className="pointer-events-none absolute inset-0 overflow-hidden p-4 text-body-text-b3-md break-words whitespace-pre-wrap text-grayscale-white"
         >
           {segments(text, findings).map((part, index) =>
             part.finding ? (
               <mark
                 key={index}
-                className={cn(
-                  "bg-(--primitive-opacity-white-alpha-6) underline decoration-2 underline-offset-4",
-                  TONE[toVerdict(part.finding.action)]
-                )}
+                // `mark` brings a yellow ground and black type of its own; the design wants
+                // neither, so both are cleared rather than left to the user agent.
+                className={cn("bg-transparent", TONE[toVerdict(part.finding.action)])}
               >
                 {part.text}
               </mark>
@@ -173,7 +176,7 @@ export function DetectorInput({
           placeholder={t("placeholder")}
           aria-label={t("inputLabel")}
           spellCheck={false}
-          className="relative size-full resize-none bg-transparent p-4 text-body-text-b2-md break-words whitespace-pre-wrap text-transparent caret-white outline-none placeholder:text-grayscale-400"
+          className="relative size-full resize-none bg-transparent p-4 text-body-text-b3-md break-words whitespace-pre-wrap text-transparent caret-white outline-none placeholder:text-grayscale-400"
         />
       </div>
 
