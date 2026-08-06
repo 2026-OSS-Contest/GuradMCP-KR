@@ -141,7 +141,7 @@ export function DetectorInput({
         ))}
       </div>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl bg-grayscale-900">
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-(--primitive-radius-rounded-xl) bg-grayscale-900">
         {/* Mirror layer: same metrics as the textarea, so a highlight lands on its word. */}
         <div
           ref={mirror}
@@ -192,7 +192,7 @@ export function DetectorInput({
             key={kind}
             type="button"
             onClick={() => onSample(kind)}
-            className="flex h-10 flex-none items-center rounded-xl bg-grayscale-800 px-4 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-grayscale-700"
+            className="flex h-10 flex-none items-center rounded-(--primitive-radius-rounded-xl) bg-grayscale-800 px-4 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-grayscale-700"
           >
             {t(`sample.${kind}`)}
           </button>
@@ -202,7 +202,7 @@ export function DetectorInput({
           onClick={onRun}
           disabled={running || !text.trim() || over}
           className={cn(
-            "flex h-10 flex-none items-center rounded-xl bg-blue-800 px-4 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-blue-700",
+            "flex h-10 flex-none items-center rounded-(--primitive-radius-rounded-xl) bg-blue-800 px-4 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-blue-700",
             (running || !text.trim() || over) && "cursor-not-allowed opacity-50"
           )}
         >

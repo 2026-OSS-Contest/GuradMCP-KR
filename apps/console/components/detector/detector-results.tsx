@@ -57,9 +57,21 @@ export function DetectorResults({
     setTimeout(() => setCopied(false), 2_000);
   };
 
+  const hasFindings = Boolean(preview && preview.findings.length > 0);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <section aria-label={t("findings")} className="flex min-h-0 flex-1 flex-col gap-3">
+      {/*
+        The two halves share the column evenly until there is something to report, which is what
+        the 입력 전 and 입력 완료 frames draw. Once findings arrive the list shrinks to them —
+        the 탐지 완료 frame puts the masked heading at y=272 rather than the 555 of the other two —
+        and the masked text takes what it gives up. Capped at half so a long list scrolls instead
+        of pushing the masked pane back off the screen.
+      */}
+      <section
+        aria-label={t("findings")}
+        className={cn("flex min-h-0 flex-col gap-3", hasFindings ? "max-h-1/2 flex-none" : "flex-1")}
+      >
         <h2 className="flex-none text-body-text-b2-md text-grayscale-300">{t("findings")}</h2>
 
         {!preview ? (
@@ -85,7 +97,7 @@ export function DetectorResults({
                 >
                   <span
                     className={cn(
-                      "flex-none rounded-md px-2 py-1 font-mono text-caption-mono-c-rg",
+                      "flex-none rounded-(--primitive-radius-rounded-sm) px-2 py-0.5 font-mono text-caption-mono-c-rg",
                       TAG_TONE[toVerdict(finding.action)]
                     )}
                   >
@@ -126,14 +138,14 @@ export function DetectorResults({
           </p>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto rounded-xl bg-grayscale-900 p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-(--primitive-radius-rounded-xl) bg-grayscale-900 p-4">
           {preview && (
             <p className="text-body-text-b2-md break-words whitespace-pre-wrap text-grayscale-white">
               {maskedParts(preview.maskedText).map((part, index) =>
                 part.chip ? (
                   <span
                     key={index}
-                    className="mx-1 rounded-md px-2 py-0.5 font-mono text-caption-mono-c-rg text-verdict-allow shadow-[inset_0_0_0_1px_var(--primitive-opacity-allow-alpha-10)]"
+                    className="mx-1 rounded-(--primitive-radius-rounded-sm) bg-(--primitive-opacity-white-alpha-10) px-2 py-0.5 font-mono text-caption-mono-c-rg text-green-200"
                   >
                     {part.chip}
                   </span>
