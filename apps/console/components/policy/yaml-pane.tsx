@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Check, Copy } from "lucide-react";
+import { Check } from "lucide-react";
+import { CopyIcon } from "@/components/icons";
 import type { PolicyRow, PolicyStats } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
@@ -102,7 +103,7 @@ export function YamlPane({ policy, yaml, loading, stats }: YamlPaneProps) {
               yaml ? "cursor-pointer hover:text-grayscale-white" : "cursor-not-allowed opacity-40"
             )}
           >
-            {copied ? <Check aria-hidden className="size-5" /> : <Copy aria-hidden className="size-5" />}
+            {copied ? <Check aria-hidden className="size-5" /> : <CopyIcon aria-hidden className="size-5" />}
           </button>
         </div>
 

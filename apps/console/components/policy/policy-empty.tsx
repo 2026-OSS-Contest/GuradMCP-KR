@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { ClipboardList } from "lucide-react";
+import { PolicyEmptyIcon } from "@/components/icons";
 
 /**
  * SCR-302 empty state. The wording, both links and the accessible names come from the UX copy
@@ -20,9 +20,7 @@ export function PolicyEmpty() {
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-      <span aria-hidden className="rounded-full bg-grayscale-800 p-4 text-grayscale-500">
-        <ClipboardList className="size-6" />
-      </span>
+      <PolicyEmptyIcon aria-hidden className="size-10" />
       <h2 className="text-body-text-b1-bd text-grayscale-white">{t("title")}</h2>
       <p className="text-body-text-b3-md max-w-prose text-grayscale-300">{t("body")}</p>
       <div className="mt-2 flex flex-wrap items-center justify-center gap-3">

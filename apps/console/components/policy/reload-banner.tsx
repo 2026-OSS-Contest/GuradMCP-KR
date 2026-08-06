@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Info } from "lucide-react";
+import { BannerInfoIcon } from "@/components/icons";
 
 /**
  * SCR-302 hot-reload banner: the packs on disk changed under the operator (GMCP-76), so what is
@@ -22,7 +22,7 @@ export function ReloadBanner({ onRefresh }: ReloadBannerProps) {
       role="status"
       className="flex h-[37px] flex-none items-center gap-4 bg-(--primitive-opacity-warn-alpha-10) px-8"
     >
-      <Info aria-hidden className="size-4 flex-none text-yellow-100" />
+      <BannerInfoIcon aria-hidden className="size-4 flex-none" />
       <p className="text-body-text-b3-md flex-1 text-yellow-100">{t("message")}</p>
       <button
         type="button"
