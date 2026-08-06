@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { previewDetection } from "@/lib/api/client";
 import type { DetectDirection, DetectionFinding, DetectionPreview } from "@/lib/api/types";
 import { DETECTOR_SAMPLES, type DetectorSample } from "@/lib/detector-samples";
-import { DetectorInput, MAX_BYTES } from "./detector-input";
+import { DetectorInput, clampToBytes } from "./detector-input";
 import { DetectorResults } from "./detector-results";
 
 /**
@@ -62,11 +62,12 @@ export function Detector() {
    * per keystroke would be a request per keystroke, and the highlights would strobe.
    */
   useEffect(() => {
-    // Over the cap the button refuses the run, and the automatic half has to refuse it too —
-    // otherwise typing past 64KB quietly posts what the button is there to prevent.
-    if (!text.trim() || new TextEncoder().encode(text).length > MAX_BYTES) return;
+    if (!text.trim()) return;
     const controller = new AbortController();
-    const timer = setTimeout(() => void run(text, direction, controller.signal), DEBOUNCE_MS);
+    // Both halves inspect the same clamped prefix, so the automatic run cannot post more than
+    // the button would. The findings then carry offsets into a prefix of what is on screen,
+    // which is why the highlights still land on their words without remapping.
+    const timer = setTimeout(() => void run(clampToBytes(text), direction, controller.signal), DEBOUNCE_MS);
     return () => {
       clearTimeout(timer);
       controller.abort();
@@ -103,7 +104,7 @@ export function Detector() {
         }}
         findings={preview?.findings ?? []}
         running={running}
-        onRun={() => void run(text, direction)}
+        onRun={() => void run(clampToBytes(text), direction)}
         onSample={sample}
         inputRef={inputRef}
       />

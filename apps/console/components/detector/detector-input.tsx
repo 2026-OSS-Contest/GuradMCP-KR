@@ -7,8 +7,23 @@ import type { DetectDirection, DetectionFinding } from "@/lib/api/types";
 import { toVerdict } from "@/lib/verdict";
 import { cn } from "@/lib/utils";
 
-/** Spec §5.4: the input is capped, and the counter reports bytes rather than characters. */
+/** Spec §5.5: the input is capped, and the counter reports bytes rather than characters. */
 export const MAX_BYTES = 64 * 1024;
+
+/**
+ * The prefix of `text` that fits the cap, cut on a character boundary.
+ *
+ * Slicing the encoded bytes can land mid-character — Korean runs three bytes each — and the
+ * decoder marks such a tail with U+FFFD. Re-encoding is what tells a substituted one from a
+ * U+FFFD that was in the text to begin with: the substitute grows the byte length past the cap,
+ * an original cannot.
+ */
+export function clampToBytes(text: string, max = MAX_BYTES): string {
+  const bytes = new TextEncoder().encode(text);
+  if (bytes.length <= max) return text;
+  const cut = new TextDecoder().decode(bytes.subarray(0, max));
+  return new TextEncoder().encode(cut).length > max ? cut.slice(0, -1) : cut;
+}
 
 // The matched runs are tinted and nothing more: the frame's own HTML renders each as a bare
 // `<span style="color:…">`, so no ground and no underline. The two the design shows use the 300
@@ -180,6 +195,15 @@ export function DetectorInput({
         />
       </div>
 
+      {/* Spec §5.5: past the cap the text is truncated and the truncation is announced. Saying
+          which part went uninspected is the whole point of the warning — a silent cut would let
+          "탐지 없음" stand for text nobody looked at. */}
+      {over && (
+        <p role="status" className="flex-none text-caption-text-c-rg text-verdict-block">
+          {t("truncated", { limit: MAX_BYTES / 1024 })}
+        </p>
+      )}
+
       <div className="flex flex-none items-center gap-3 text-caption-text-c-rg text-grayscale-400">
         <span className="flex-1">{t("notStored")}</span>
         <span className={cn("flex-none font-mono", over && "text-verdict-block")}>
@@ -203,10 +227,10 @@ export function DetectorInput({
         <button
           type="button"
           onClick={onRun}
-          disabled={running || !text.trim() || over}
+          disabled={running || !text.trim()}
           className={cn(
             "flex h-10 flex-none items-center rounded-(--primitive-radius-rounded-xl) bg-blue-800 px-4 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-blue-700",
-            (running || !text.trim() || over) && "cursor-not-allowed opacity-50"
+            (running || !text.trim()) && "cursor-not-allowed opacity-50"
           )}
         >
           {running ? t("running") : t("run")}

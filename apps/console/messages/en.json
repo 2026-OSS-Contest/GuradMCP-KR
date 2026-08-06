@@ -174,10 +174,11 @@
     "inputLabel": "Text to inspect",
     "placeholder": "Enter the text you want to inspect",
     "notStored": "The text you enter is not stored.",
+    "truncated": "Past {limit}KB, only the beginning was inspected. The truncated remainder was not checked.",
     "sample": {
-      "pii": "Korean PII sample",
-      "secret": "Secret sample",
-      "injection": "Injection sample"
+      "pii": "Korean PII",
+      "secret": "Secret",
+      "injection": "Injection"
     },
     "run": "Run inspection",
     "running": "Inspecting…",

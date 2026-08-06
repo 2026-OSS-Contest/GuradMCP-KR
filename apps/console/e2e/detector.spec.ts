@@ -89,15 +89,38 @@ test("SCR-401 each sample loads its own material", async ({ page }) => {
   await expect(findings.getByText("attacker@evil.example")).toBeVisible();
 });
 
-test("SCR-401 refuses to run a text past the 64KB cap", async ({ page }) => {
+test("SCR-401 inspects the first 64KB of a longer text and says the rest went unchecked", async ({ page }) => {
   await page.goto("/detector");
 
-  // One byte per character, so this is 65KB of a 64KB allowance.
-  await page.getByRole("textbox", { name: "검사할 텍스트" }).fill("a".repeat(65 * 1024));
+  // Korean runs three bytes a character, so this filler is 66KB on its own: the first number
+  // falls inside the cap and the second past it. Announcing the cut is what stops the result
+  // from reading as "nothing found" for text nobody looked at.
+  const filler = "가".repeat(22 * 1024);
+  await page.getByRole("textbox", { name: "검사할 텍스트" }).fill(`010-1234-5678 ${filler} 010-9999-8888`);
 
-  await expect(page.getByRole("button", { name: "검사 실행" })).toBeDisabled();
-  // The debounce has to refuse it too, or typing past the cap posts what the button prevents.
-  await expect(page.getByText("텍스트를 입력 후 검사 실행 버튼을 클릭하세요.")).toBeVisible();
+  await expect(page.getByText(/앞부분만 검사했습니다/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "검사 실행" })).toBeEnabled();
+
+  const findings = page.getByRole("region", { name: "탐지 결과" });
+  await expect(findings.getByText("010-1234-5678")).toBeVisible();
+  await expect(findings.getByText("010-9999-8888")).toBeHidden();
+});
+
+test("SCR-401 names the secret's issuer and the file a blocked path leads to", async ({ page }) => {
+  await page.goto("/detector");
+
+  // Neither subtype is in the payload — `DetectionFinding` carries no such field. Both are read
+  // out of the matched text, so they hold up against the real control plane too.
+  await page
+    .getByRole("textbox", { name: "검사할 텍스트" })
+    .fill("AKIA0123456789ABCD 를 .env 에 넣어두었습니다");
+
+  const findings = page.getByRole("region", { name: "탐지 결과" });
+  await expect(findings.getByText("AWS")).toBeVisible();
+  await expect(findings.getByText("DOTENV")).toBeVisible();
+
+  // The masked stand-in names the same issuer rather than a fixed one.
+  await expect(page.getByRole("region", { name: "마스킹 결과" }).getByText("SECRET_AWS")).toBeVisible();
 });
 
 test("SCR-401 copies the masked text", async ({ page }) => {

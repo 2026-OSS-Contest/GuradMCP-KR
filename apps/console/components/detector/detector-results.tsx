@@ -4,17 +4,9 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { CopyIcon, DetectorEmptyIcon } from "@/components/icons";
 import type { DetectionFinding, DetectionPreview, Verdict } from "@/lib/api/types";
+import { labelOf, subtypeOf } from "@/lib/detection-labels";
 import { toVerdict } from "@/lib/verdict";
 import { cn } from "@/lib/utils";
-
-/** Fallback labels for a control plane that reports a policy id but no detector label. */
-const TYPE_BY_POLICY: Record<string, string> = {
-  mask_korean_phone: "PHONE",
-  mask_korean_rrn: "RRN",
-  mask_secret_token: "SECRET",
-  block_env_file_read: "PATH",
-  approve_external_email: "EMAIL"
-};
 
 // Straight off the design: red-700 / yellow-600 grounds, white type on both.
 const TAG_TONE: Record<Verdict, string> = {
@@ -23,10 +15,6 @@ const TAG_TONE: Record<Verdict, string> = {
   require_approval: "bg-(--primitive-opacity-require-approval-alpha-25) text-violet-100",
   allow: "bg-(--primitive-opacity-allow-alpha-10) text-verdict-allow"
 };
-
-function labelOf(finding: DetectionFinding): string {
-  return finding.type ?? TYPE_BY_POLICY[finding.policyId] ?? finding.policyId.toUpperCase();
-}
 
 /** Masked output arrives as text with `[LABEL]` stand-ins; those become chips, the rest is copy. */
 function maskedParts(masked: string) {
@@ -86,20 +74,26 @@ export function DetectorResults({
           </p>
         ) : (
           <ul className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-            {preview.findings.map((finding) => (
+            {preview.findings.map((finding) => {
+              const subtype = subtypeOf(finding);
+              return (
               <li key={`${finding.policyId}-${finding.start}`}>
                 <button
                   type="button"
                   onClick={() => onSelectFinding(finding)}
                   className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-white/5 shadow-[inset_0_-1px_0_0_var(--primitive-opacity-white-alpha-10)]"
                 >
+                  {/* The design's Tag carries two texts side by side — the label, and a trailing
+                      value the 승인 대기 badge fills with its count. The subtype goes in that
+                      second slot, quieter than the label it qualifies. */}
                   <span
                     className={cn(
-                      "flex-none rounded-(--primitive-radius-rounded-sm) px-2 py-0.5 font-mono text-caption-mono-c-rg",
+                      "flex flex-none items-center gap-1.5 rounded-(--primitive-radius-rounded-sm) px-2 py-0.5 font-mono text-caption-mono-c-rg",
                       TAG_TONE[toVerdict(finding.action)]
                     )}
                   >
                     {labelOf(finding)}
+                    {subtype && <span className="opacity-70">{subtype}</span>}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-body-text-b2-md text-grayscale-white">
                     {finding.matchedText}
@@ -109,7 +103,8 @@ export function DetectorResults({
                   )}
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </section>
