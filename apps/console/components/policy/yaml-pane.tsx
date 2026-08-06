@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Check, Copy } from "lucide-react";
-import type { DryRunStat, PolicyRow } from "@/lib/api/types";
+import type { PolicyRow, PolicyStats } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
 /** How long the copy button stays acknowledged before returning to its idle icon. */
@@ -55,7 +55,8 @@ export interface YamlPaneProps {
   policy: PolicyRow | null;
   yaml: string | undefined;
   loading: boolean;
-  stats: DryRunStat[];
+  /** Only the policies measuring rather than acting; each carries a `dryRun` reading. */
+  stats: PolicyStats[];
 }
 
 export function YamlPane({ policy, yaml, loading, stats }: YamlPaneProps) {
@@ -147,7 +148,7 @@ export function YamlPane({ policy, yaml, loading, stats }: YamlPaneProps) {
           <h2 id="dry-run-title" className="text-body-text-b3-md text-grayscale-white">
             {t("dryRun.title")}
           </h2>
-          <span className="text-caption-text-c-rg text-grayscale-300">{t("dryRun.window", { days: 30 })}</span>
+          <span className="text-caption-text-c-rg text-grayscale-300">{t("dryRun.window", { days: stats[0]?.dryRun?.windowDays ?? 30 })}</span>
         </div>
         {stats.length === 0 ? (
           <p className="text-body-text-b3-rg text-grayscale-400">{t("dryRun.none")}</p>
@@ -160,7 +161,8 @@ export function YamlPane({ policy, yaml, loading, stats }: YamlPaneProps) {
               >
                 <span className="text-body-mono-b3-rg min-w-0 break-all text-grayscale-200">{stat.policyId}</span>
                 <span className="text-caption-text-c-md flex-none text-grayscale-300">
-                  {t("dryRun.wouldFire")} <span className="text-body-text-b3-bd text-grayscale-white">{stat.wouldFire}</span>{" "}
+                  {t("dryRun.wouldFire")}{" "}
+                  <span className="text-body-text-b3-bd text-grayscale-white">{stat.dryRun?.wouldFire}</span>{" "}
                   {t("dryRun.unit")}
                 </span>
               </li>

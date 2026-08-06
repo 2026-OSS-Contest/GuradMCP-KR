@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import type { PolicyRow, Severity } from "@/lib/api/types";
+import type { PolicyRow, PolicyStats, Severity } from "@/lib/api/types";
 import { Tag } from "@/components/ui/tag";
 import { Switch } from "@/components/ui/switch";
 import { VerdictBadge } from "@/components/verdict-badge";
@@ -22,11 +22,13 @@ export interface PolicyTableProps {
   selected: string | null;
   onSelect: (id: string) => void;
   onToggle: (policy: PolicyRow, enabled: boolean) => void;
+  /** Fired counts, keyed by policy id — `GET /policies/{policyId}/stats`, not part of the row. */
+  stats: Record<string, PolicyStats>;
   /** Policy whose toggle is mid-flight. */
   busy?: string | null;
 }
 
-export function PolicyTable({ policies, selected, onSelect, onToggle, busy }: PolicyTableProps) {
+export function PolicyTable({ policies, selected, onSelect, onToggle, stats, busy }: PolicyTableProps) {
   const t = useTranslations("policies");
 
   return (
@@ -76,6 +78,7 @@ export function PolicyTable({ policies, selected, onSelect, onToggle, busy }: Po
           {policies.map((policy) => {
             // A dry-run policy is evaluated but acts on nothing, so the whole row reads muted —
             // the same treatment a disabled one gets.
+            const fired = stats[policy.id]?.firedLast30d ?? null;
             const enabled = policy.enabled ?? true;
             const muted = !enabled;
             return (
@@ -122,7 +125,7 @@ export function PolicyTable({ policies, selected, onSelect, onToggle, busy }: Po
                   </span>
                 </td>
                 <td className="text-body-text-b2-md py-4 tabular-nums">
-                  {policy.firedLast30d === null || policy.firedLast30d === undefined ? (
+                  {fired === null ? (
                     <span className="text-grayscale-300">–</span>
                   ) : (
                     // Straight to the sessions this policy decided. Replay does not read the
@@ -132,7 +135,7 @@ export function PolicyTable({ policies, selected, onSelect, onToggle, busy }: Po
                       onClick={(event) => event.stopPropagation()}
                       className="underline-offset-4 hover:underline"
                     >
-                      {policy.firedLast30d}
+                      {fired}
                     </Link>
                   )}
                 </td>

@@ -4,14 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Info } from "lucide-react";
 import {
-  getDryRunStats,
   getPolicies,
   getPolicy,
   getPolicyPacks,
+  getPolicyStats,
   setPackEnabled,
   setPolicyEnabled
 } from "@/lib/api/client";
-import type { PolicyPack, PolicyRow } from "@/lib/api/types";
+import type { PolicyPack, PolicyRow, PolicyStats } from "@/lib/api/types";
 import { useResource } from "@/lib/api/use-resource";
 import { createSseClient } from "@/lib/sse";
 import { MOCK_API } from "@/mocks/scenario";
@@ -49,7 +49,6 @@ export function PolicyBuilder() {
   // Packs and policies are two endpoints answering bare arrays, so the join happens here.
   const packsResource = useResource((signal) => getPolicyPacks(signal), { key: `policy-packs-${pulse}` });
   const policies = useResource((signal) => getPolicies(signal), { key: `policies-${pulse}` });
-  const stats = useResource((signal) => getDryRunStats(signal), { key: `dry-run-${pulse}` });
 
   const packs = useMemo(() => packsResource.data ?? [], [packsResource.data]);
   const rows = useMemo(() => policies.data ?? [], [policies.data]);
@@ -83,6 +82,25 @@ export function PolicyBuilder() {
   // and a reload can retire whatever was selected.
   const pack = selectedPack && packs.some((entry) => entry.id === selectedPack) ? selectedPack : packs[0]?.id ?? null;
   const visible = useMemo(() => rows.filter((row) => row.packId === pack), [rows, pack]);
+  /**
+   * Stats are per policy — GMCP-80 defines no list endpoint — so every policy is asked for, not
+   * just the selected pack's. The design's dry-run panel reports a policy from a pack other than
+   * the one being read, so scoping it to the selection would empty it on arrival. One request per
+   * policy is the cost; a list endpoint would remove it.
+   */
+  const stats = useResource(
+    async (signal) => Promise.all(rows.map((row) => getPolicyStats(row.id, signal))),
+    { key: `policy-stats-${rows.map((row) => row.id).join(",")}-${pulse}` }
+  );
+  const statsById = useMemo(() => {
+    const out: Record<string, PolicyStats> = {};
+    for (const entry of stats.data ?? []) out[entry.policyId] = entry;
+    return out;
+  }, [stats.data]);
+
+  /** The dry-run panel lists whichever of them are measuring rather than acting. */
+  const dryRun = useMemo(() => (stats.data ?? []).filter((entry) => entry.dryRun), [stats.data]);
+
   const policy = useMemo(
     () => visible.find((row) => row.id === selectedPolicy) ?? visible[0] ?? null,
     [visible, selectedPolicy]
@@ -193,12 +211,13 @@ export function PolicyBuilder() {
             selected={policy?.id ?? null}
             onSelect={setSelectedPolicy}
             onToggle={onPolicyToggle}
+            stats={statsById}
             busy={busy}
           />
         </div>
         {/* Out of flow below `xl`, where it floats over the table as the 1024 frame draws it. */}
         <div className="absolute inset-y-4 right-4 w-86.75 overflow-y-auto rounded-(--primitive-radius-rounded-2xl) bg-grayscale-950 px-6 py-6 ring-1 shadow-xl shadow-black/40 ring-grayscale-800 xl:static xl:w-auto xl:overflow-visible xl:rounded-none xl:shadow-none xl:ring-0">
-          <YamlPane policy={policy} yaml={yaml.data?.yaml} loading={yaml.loading} stats={stats.data?.stats ?? []} />
+          <YamlPane policy={policy} yaml={yaml.data?.yaml} loading={yaml.loading} stats={dryRun} />
         </div>
       </div>
 

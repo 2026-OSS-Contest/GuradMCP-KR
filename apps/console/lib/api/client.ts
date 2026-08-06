@@ -6,11 +6,11 @@ import type {
   AttackScenariosResponse,
   DetectDirection,
   DetectionPreview,
-  DryRunStatsResponse,
   Overview,
   PolicyDetail,
   PolicyPack,
   PolicyRow,
+  PolicyStats,
   PolicyUpdate,
   RecentEventsResponse,
   RevealContent,
@@ -134,6 +134,9 @@ export const updatePolicy = (id: string, update: PolicyUpdate, signal?: AbortSig
 export const setPolicyEnabled = (id: string, enabled: boolean, signal?: AbortSignal) =>
   putJson<PolicyRow>(`/policies/${encodeURIComponent(id)}`, { enabled }, signal);
 
-/** Dry-run counts for the panel under the YAML. Mock-only — GMCP-77 owns the real feature. */
-export const getDryRunStats = (signal?: AbortSignal) =>
-  get<DryRunStatsResponse>("/policies/dry-run-stats", signal);
+/**
+ * How often one policy fired, and what it would have decided in dry-run. GMCP-80 defines this
+ * path; nothing serves it yet, so today it only ever reaches the mock.
+ */
+export const getPolicyStats = (id: string, signal?: AbortSignal) =>
+  get<PolicyStats>(`/policies/${encodeURIComponent(id)}/stats`, signal);

@@ -395,8 +395,6 @@ export interface PolicyRow {
   enabled?: boolean;
   /** Evaluated but acting on nothing (GMCP-77). No DSL field and no endpoint reports it yet. */
   dryRun?: boolean;
-  /** Times it fired over the last 30 days; `null` when it never has — the table's "–". */
-  firedLast30d?: number | null;
   /** Repo-relative path of the file defining it, shown as the YAML pane's caption. */
   path?: string;
 }
@@ -410,17 +408,18 @@ export interface PolicyUpdate {
 }
 
 /**
- * Dry-run panel: what a policy *would* have decided over the window, having acted on nothing.
- * No endpoint serves this — GMCP-77 owns the feature — so it exists under the mock only.
+ * `GET /policies/{policyId}/stats` — how often a policy actually fired, and what it *would* have
+ * decided while in dry-run. GMCP-80 owns the endpoint and it is not built yet, so the mock is
+ * the only server; the path and shape are the ones that ticket names.
+ *
+ * Both of the table's counts come from here: the 30-day column and the dry-run panel beneath the
+ * YAML are two readings of the same record.
  */
-export interface DryRunStat {
+export interface PolicyStats {
   policyId: string;
-  /** 가상 판정 — the matches the policy would have produced. */
-  wouldFire: number;
-  /** Days the count covers; the design captions it 최근 30일. */
-  windowDays: number;
+  /** Times it fired over the window; `null` when it never has — the table's "–". */
+  firedLast30d: number | null;
+  /** Present only while the policy is in dry-run: the verdicts it would have produced. */
+  dryRun?: { wouldFire: number; windowDays: number };
 }
 
-export interface DryRunStatsResponse {
-  stats: DryRunStat[];
-}

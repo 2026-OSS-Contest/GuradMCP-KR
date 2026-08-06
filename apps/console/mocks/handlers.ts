@@ -16,10 +16,10 @@ import { EMPTY_OVERVIEW, SERVERS, liveEvent, overviewOf, recentEvents } from "./
 import { ATTACK_SCENARIOS, attackRun } from "./attack-lab";
 import { previewOf } from "./detect";
 import {
-  DRY_RUN_STATS,
   POLICY_YAML,
   currentPacks,
   currentPolicies,
+  policyStats,
   policyYaml,
   seedPolicies,
   togglePack,
@@ -126,12 +126,12 @@ export const handlers = [
   // GETs answer with a bare array, and both writes are PUT — the mock matches that rather than
   // the envelope the screen would have preferred.
   //
-  // Dry-run is the exception: no endpoint serves it (GMCP-77), so this path exists here only.
-  // It is registered ahead of `/policies/:id` below, or that parameter swallows it.
-  http.get("*/api/v1/policies/dry-run-stats", async () => {
+  // Per-policy stats are GMCP-80's `GET /policies/{policyId}/stats`, not built yet — the mock is
+  // the only server. Registered ahead of `/policies/:id`, whose parameter would otherwise take it.
+  http.get("*/api/v1/policies/:id/stats", async ({ params }) => {
     await delay(LATENCY_MS);
     if (readScenario() === "offline") return HttpResponse.error();
-    return HttpResponse.json({ stats: readScenario() === "empty" ? [] : DRY_RUN_STATS });
+    return HttpResponse.json(policyStats(String(params.id)));
   }),
 
   // An empty console has no packs loaded at all, which is the screen's empty state.

@@ -11,7 +11,7 @@
 // `warn_external_url_fetch` and `developer-relaxed` have no counterpart anywhere; they exist
 // because the design needs a dry-run row and a disabled, empty pack to draw.
 
-import type { DryRunStat, PolicyPack, PolicyRow } from "@/lib/api/types";
+import type { PolicyPack, PolicyRow, PolicyStats } from "@/lib/api/types";
 
 /** What `DemoSeed.SEEDED_AT` stands in for — a fixed instant, so renders stay deterministic. */
 const SEEDED_AT = "2026-07-01T00:00:00Z";
@@ -52,7 +52,6 @@ const POLICY_SEED: PolicyRow[] = [
     severity: "critical",
     description: "Block reads of credential files",
     enabled: true,
-    firedLast30d: 14,
     path: "policy-packs/default/policies/block-env-file-read.yaml"
   },
   {
@@ -63,7 +62,6 @@ const POLICY_SEED: PolicyRow[] = [
     severity: "high",
     description: "Mask Korean mobile phone numbers",
     enabled: true,
-    firedLast30d: 212,
     path: "policy-packs/korean-pii/policies/mask-korean-pii-response.yaml"
   },
   {
@@ -74,7 +72,6 @@ const POLICY_SEED: PolicyRow[] = [
     severity: "high",
     description: "Require approval for external email",
     enabled: true,
-    firedLast30d: 5,
     path: "policy-packs/default/policies/require-approval-external-secret-email.yaml"
   },
   {
@@ -87,7 +84,6 @@ const POLICY_SEED: PolicyRow[] = [
     description: "Dry-run — measure how often external fetches would be flagged",
     enabled: false,
     dryRun: true,
-    firedLast30d: null,
     path: "policy-packs/korean-pii/policies/warn-external-url-fetch.yaml"
   }
 ];
@@ -150,10 +146,25 @@ severity: medium
 enabled: false`
 };
 
-/** Dry-run counts: verdicts these policies would have produced without acting on anything. */
-export const DRY_RUN_STATS: DryRunStat[] = [
-  { policyId: "warn_external_url_fetch", wouldFire: 62, windowDays: 30 }
-];
+/**
+ * What `GET /policies/{policyId}/stats` answers. The fired counts the table shows and the dry-run
+ * panel's 가상 판정 are the same record read twice, which is how GMCP-80 describes the endpoint.
+ */
+const STATS: Record<string, PolicyStats> = {
+  block_env_file_read: { policyId: "block_env_file_read", firedLast30d: 14 },
+  mask_korean_phone: { policyId: "mask_korean_phone", firedLast30d: 212 },
+  approve_external_email: { policyId: "approve_external_email", firedLast30d: 5 },
+  // In dry-run, so it has decided nothing and only reports what it would have.
+  warn_external_url_fetch: {
+    policyId: "warn_external_url_fetch",
+    firedLast30d: null,
+    dryRun: { wouldFire: 62, windowDays: 30 }
+  }
+};
+
+export function policyStats(id: string): PolicyStats {
+  return STATS[id] ?? { policyId: id, firedLast30d: null };
+}
 
 export function policyYaml(id: string): string {
   return POLICY_YAML[id] ?? `id: ${id}\n# 이 정책의 정의를 찾지 못했습니다.`;
