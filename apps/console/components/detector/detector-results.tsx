@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Copy, Search } from "lucide-react";
+import { CopyIcon, DetectorEmptyIcon } from "@/components/icons";
 import type { DetectionFinding, DetectionPreview, Verdict } from "@/lib/api/types";
 import { toVerdict } from "@/lib/verdict";
 import { cn } from "@/lib/utils";
@@ -76,9 +76,7 @@ export function DetectorResults({
 
         {!preview ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-            <span className="flex size-10 items-center justify-center rounded-full bg-(--primitive-opacity-white-alpha-10)">
-              <Search className="size-5 text-grayscale-300" aria-hidden />
-            </span>
+            <DetectorEmptyIcon aria-hidden className="size-10" />
             <p className="text-body-text-b1-md text-grayscale-white">{t("emptyTitle")}</p>
             <p className="text-body-text-b3-md text-grayscale-400">{t("emptyBody")}</p>
           </div>
@@ -125,11 +123,11 @@ export function DetectorResults({
             disabled={!preview}
             aria-label={t("copy")}
             className={cn(
-              "flex size-8 flex-none items-center justify-center rounded-lg bg-(--primitive-opacity-white-alpha-10) text-grayscale-300 transition-colors hover:text-grayscale-white",
+              "flex size-8 flex-none items-center justify-center rounded-(--primitive-radius-rounded-lg) bg-(--primitive-opacity-white-alpha-25) text-grayscale-300 transition-colors hover:text-grayscale-white",
               !preview && "cursor-not-allowed opacity-40"
             )}
           >
-            <Copy className="size-4" aria-hidden />
+            <CopyIcon className="size-5" aria-hidden />
           </button>
         </div>
         {copied && (

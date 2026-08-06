@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Info } from "lucide-react";
+import { FieldInfoIcon } from "@/components/icons";
 import type { DetectDirection, DetectionFinding } from "@/lib/api/types";
 import { toVerdict } from "@/lib/verdict";
 import { cn } from "@/lib/utils";
@@ -101,7 +101,7 @@ export function DetectorInput({
           aria-label={t("directionHint")}
           className="flex size-4 flex-none items-center justify-center rounded-full text-grayscale-400 transition-colors hover:text-grayscale-200"
         >
-          <Info className="size-4" aria-hidden />
+          <FieldInfoIcon className="size-4" aria-hidden />
         </button>
         {hint && (
           /*
