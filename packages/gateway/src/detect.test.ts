@@ -173,6 +173,57 @@ describe("Secret detection rule set v1 (GMCP-29)", () => {
   });
 });
 
+describe("Korean service credentials (FR-SEC-02, GMCP-71)", () => {
+  // Every value below is synthetic and authenticates nowhere; the shapes exist
+  // so the detector has something of the right form to recognize.
+  it.each([
+    ["TOSS_SECRET_KEY", "결제 서버에 live_sk_D5GePWvyJnrK0W0k6q8gLzN97Eoq 를 넣었습니다"],
+    ["TOSS_CLIENT_KEY", "결제창 초기화 키는 test_ck_ZORzdMaqN3wQd5k6ygr5AkYXQGwy 입니다"],
+    ["KAKAO_ADMIN_HEADER", "Authorization: KakaoAK 0f1e2d3c4b5a69788796a5b4c3d2e1f0"],
+    ["KAKAO_APP_KEY", "kakao_rest_api_key = 9a8b7c6d5e4f30211f2e3d4c5b6a7980"],
+    ["NCP_ACCESS_KEY", "서브 계정 키 ncp_iam_BPAMKR12345678abcdefgh 로 접근"],
+    ["NAVER_CLIENT_SECRET", "X-Naver-Client-Secret: aB3dE5gH7j"],
+    ["BROKERAGE_APP_SECRET", "appsecret=Qk9HVVNTRUNSRVRWQUxVRUZPUlRFU1RJTkdPTkxZMTIzNA=="]
+  ])("detects a %s and masks it as [KR_SERVICE_TOKEN]", (subtype, text) => {
+    const detections = detect(text).filter((detection) => detection.subtype === subtype);
+    expect(detections).toHaveLength(1);
+    expect(detections[0]?.type).toBe("SECRET");
+    expect(detections[0]?.maskedAs).toBe("[KR_SERVICE_TOKEN]");
+    // NFR-04: the credential must not survive anywhere in the detection output.
+    expect(JSON.stringify(detections)).not.toContain(text);
+    expect(mask(text, detect(text))).not.toContain(text.slice(-12));
+  });
+
+  it("reads the field name through a JSON body, where these credentials actually travel", () => {
+    const body = '{"appkey":"PSxxxxxxxxxxxxxxxxxxxx","appsecret":"U1lOVEhFVElDQlJPS0VSQVBQU0VDUkVURk9SVEVTVFNPTkxZQUJDRA"}';
+    expect(detect(body).map(({ subtype }) => subtype)).toContain("BROKERAGE_APP_SECRET");
+  });
+
+  it("needs the keyword for a value that has no shape of its own", () => {
+    // A Kakao app key is 32 lowercase hex — identical to an MD5 digest. Matching
+    // the bare value would flag every checksum in every log.
+    const digest = "설정 파일 체크섬은 9a8b7c6d5e4f30211f2e3d4c5b6a7980 입니다";
+    expect(detect(digest).filter(({ type }) => type === "SECRET")).toEqual([]);
+  });
+
+  it("does not fire on identifiers that merely start like a Toss key", () => {
+    const benign = "기능 플래그 test_skip_migration_when_empty 와 live_check_deploy_readiness 를 켜세요";
+    expect(detect(benign).filter(({ type }) => type === "SECRET")).toEqual([]);
+  });
+
+  it("keeps every catalogued credential on the shared tag", () => {
+    // The tag is declared once in the table; a per-entry override would let one
+    // service drift out of the [KR_SERVICE_TOKEN] vocabulary unnoticed.
+    const text = [
+      "live_sk_D5GePWvyJnrK0W0k6q8gLzN97Eoq",
+      "ncp_iam_BPAMKR12345678abcdefgh",
+      "KakaoAK 0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+    ].join(" / ");
+    const tags = new Set(detect(text).map(({ maskedAs }) => maskedAs));
+    expect([...tags]).toEqual(["[KR_SERVICE_TOKEN]"]);
+  });
+});
+
 describe("Sensitive file path signal (FR-SEC-04, GMCP-29)", () => {
   it("flags .env, id_rsa, and credentials.json paths as SENSITIVE_FILE_PATH, not SECRET", () => {
     for (const payload of [

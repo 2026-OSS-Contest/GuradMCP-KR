@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "maskedAs": "[KR_SERVICE_TOKEN]",
+  "note": "Domestic service credentials (FR-SEC-02). Foreign scanners key on GitHub, AWS, and Slack shapes and miss these entirely, which is the point of the file. Add a service by appending one entry here; no TypeScript change is needed. 'signature' entries match the credential's own distinctive shape, 'context' entries need a nearby keyword because the raw value is indistinguishable from an ordinary identifier. Every sample in attack-lab/datasets/korean-service-tokens.json is synthetic.",
+  "credentials": [
+    {
+      "id": "TOSS_SECRET_KEY",
+      "service": "토스페이먼츠 / Toss Payments",
+      "credential": "시크릿 키 / secret key",
+      "match": "signature",
+      "pattern": "\\b(?:test|live)_sk_[A-Za-z0-9]{20,}\\b",
+      "flags": "g",
+      "confidence": 0.95,
+      "basis": "Toss Payments issues server-side keys with a fixed test_sk_ or live_sk_ prefix, so the prefix alone identifies the credential without any surrounding keyword."
+    },
+    {
+      "id": "TOSS_CLIENT_KEY",
+      "service": "토스페이먼츠 / Toss Payments",
+      "credential": "클라이언트 키 / client key",
+      "match": "signature",
+      "pattern": "\\b(?:test|live)_ck_[A-Za-z0-9]{20,}\\b",
+      "flags": "g",
+      "confidence": 0.85,
+      "basis": "Same prefix scheme as the secret key. A client key is meant to reach the browser, so it is scored lower than a secret key — but it still identifies a merchant and should not travel through an Agent transcript unmasked."
+    },
+    {
+      "id": "KAKAO_ADMIN_HEADER",
+      "service": "카카오 / Kakao Developers",
+      "credential": "REST API 키 (Authorization 헤더)",
+      "match": "signature",
+      "pattern": "\\bKakaoAK\\s+[0-9a-f]{32}\\b",
+      "flags": "g",
+      "confidence": 0.95,
+      "basis": "Kakao's REST APIs authenticate with an 'Authorization: KakaoAK <key>' header. The KakaoAK scheme name is unique to Kakao, so the header form is unambiguous."
+    },
+    {
+      "id": "KAKAO_APP_KEY",
+      "service": "카카오 / Kakao Developers",
+      "credential": "앱 키 / app key (REST·JavaScript·Admin)",
+      "match": "context",
+      "pattern": "kakao[_-]?(?:rest[_-]?api|javascript|native|admin)?[_-]?key['\"]?\\s*[=:]\\s*['\"]?[0-9a-f]{32}\\b",
+      "flags": "gi",
+      "confidence": 0.85,
+      "basis": "A Kakao app key is 32 lowercase hex characters, which is also what an MD5 digest looks like. Matching the bare value would flag every checksum in a log, so this entry requires the assignment keyword and the signature entry above covers the header form. The field name may be quoted, as it is in a JSON body."
+    },
+    {
+      "id": "NCP_ACCESS_KEY",
+      "service": "네이버 클라우드 플랫폼 / NAVER Cloud Platform",
+      "credential": "서브 계정 액세스 키 / IAM access key",
+      "match": "signature",
+      "pattern": "\\bncp_iam_[A-Za-z0-9]{20,}\\b",
+      "flags": "g",
+      "confidence": 0.9,
+      "basis": "NAVER Cloud Platform sub-account keys carry an ncp_iam_ prefix that no other vendor uses."
+    },
+    {
+      "id": "NAVER_CLIENT_SECRET",
+      "service": "네이버 개발자센터 / NAVER Developers",
+      "credential": "클라이언트 시크릿 / client secret",
+      "match": "context",
+      "pattern": "X-Naver-Client-Secret['\"]?\\s*[=:]\\s*['\"]?[A-Za-z0-9]{8,}\\b",
+      "flags": "gi",
+      "confidence": 0.9,
+      "basis": "NAVER Open API client secrets are short alphanumeric strings with no distinguishing shape, but they travel in a header whose name is unique to NAVER."
+    },
+    {
+      "id": "BROKERAGE_APP_SECRET",
+      "service": "국내 증권사 Open API / Korean brokerage Open API",
+      "credential": "앱 시크릿 / app secret",
+      "match": "context",
+      "pattern": "\\bappsecret['\"]?\\s*[=:]\\s*['\"]?[A-Za-z0-9+/]{40,}={0,2}",
+      "flags": "gi",
+      "confidence": 0.8,
+      "basis": "Korean brokerage Open APIs (한국투자증권 등) authenticate with an appkey/appsecret pair whose values carry no vendor prefix. Only the long secret is matched, and only next to its field name: 'appkey' alone is too common a field name to key on safely. This is the weakest entry in the file and the most likely to need a contributor's correction."
+    }
+  ]
+}
