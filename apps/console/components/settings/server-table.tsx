@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { AlertTriangle, Check, Circle } from "lucide-react";
+import { TagOfflineIcon, TagOkIcon, TagWarningIcon } from "@/components/icons";
 import type { McpServer, TrustLevel } from "@/lib/api/types";
 import { Select } from "@/components/ui/select";
 import { Tag } from "@/components/ui/tag";
@@ -89,17 +89,17 @@ export function ServerTable({ servers, onTrustChange, busy }: ServerTableProps) 
                         rather than clean — the design greys it out instead of showing 정상. */}
                     {!server.connected ? (
                       <Tag className="text-caption-text-c-md text-(--primitive-opacity-white-alpha-50)">
-                        <Circle aria-hidden className="size-3" />
+                        <TagOfflineIcon aria-hidden className="size-4" />
                         {t("servers.disconnected")}
                       </Tag>
                     ) : changed > 0 ? (
                       <Tag tone="limited" className="text-caption-text-c-md">
-                        <AlertTriangle aria-hidden className="size-3" />
+                        <TagWarningIcon aria-hidden className="size-4" />
                         {t("servers.snapshotChanged", { count: changed })}
                       </Tag>
                     ) : (
                       <Tag tone="trusted" className="text-caption-text-c-md">
-                        <Check aria-hidden className="size-3" />
+                        <TagOkIcon aria-hidden className="size-4" />
                         {t("servers.snapshotClean")}
                       </Tag>
                     )}

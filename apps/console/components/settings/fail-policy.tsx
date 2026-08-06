@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import type { FailMode } from "@/lib/api/types";
+import { RadioSelectedIcon, RadioUnselectedIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 /**
@@ -49,15 +50,11 @@ export function FailPolicy({ value, onChange, disabled }: FailPolicyProps) {
               )}
             >
               <span className="flex items-center gap-3">
-                <span
-                  aria-hidden
-                  className={cn(
-                    "flex size-5 flex-none items-center justify-center rounded-full",
-                    selected ? "bg-blue-600" : "shadow-[inset_0_0_0_2px_var(--primitive-color-grayscale-600)]"
-                  )}
-                >
-                  {selected && <span className="size-2 rounded-full bg-grayscale-white" />}
-                </span>
+                {selected ? (
+                  <RadioSelectedIcon aria-hidden className="size-6 flex-none" />
+                ) : (
+                  <RadioUnselectedIcon aria-hidden className="size-6 flex-none" />
+                )}
                 <span className="text-body-text-b2-md text-grayscale-white">{t(`failPolicy.${mode}.label`)}</span>
                 {mode === "fail_closed" && (
                   <span className="text-caption-text-c-md rounded-full bg-blue-800 px-2 py-0.5 text-grayscale-white">
