@@ -38,7 +38,10 @@ export function PolicyBuilder() {
   const [selectedPolicy, setSelectedPolicy] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   /** The policy a confirmation is currently holding, if any. */
-  const [confirming, setConfirming] = useState<PolicyRow | null>(null);
+  /** What a confirmation is holding: one policy, or a whole pack. */
+  const [confirming, setConfirming] = useState<
+    { kind: "policy"; policy: PolicyRow } | { kind: "pack"; pack: PolicyPack } | null
+  >(null);
   /** Raised by `policy.reloaded`; cleared when the operator takes the refetch. */
   const [reloaded, setReloaded] = useState(false);
   /** What the last toggle has to say for itself, if anything. */
@@ -111,6 +114,13 @@ export function PolicyBuilder() {
     { key: `policy-yaml-${policy?.id ?? "none"}` }
   );
 
+  /**
+   * `useResource` keeps the last payload through a failure, which is right for a list that should
+   * not blank out — but here it would leave one policy's source sitting under another's name. The
+   * response is only usable when it is the selected policy's.
+   */
+  const fresh = yaml.data?.id === policy?.id ? yaml.data : undefined;
+
   const applyPolicy = useCallback(
     async (row: PolicyRow, enabled: boolean) => {
       setBusy(row.id);
@@ -134,7 +144,7 @@ export function PolicyBuilder() {
     (row: PolicyRow, enabled: boolean) => {
       // Turning protection *off* is what gets questioned; turning it back on never does.
       if (!enabled && needsConfirm(row)) {
-        setConfirming(row);
+        setConfirming({ kind: "policy", policy: row });
         return;
       }
       void applyPolicy(row, enabled);
@@ -142,7 +152,7 @@ export function PolicyBuilder() {
     [applyPolicy]
   );
 
-  const onPackToggle = useCallback(async (entry: PolicyPack, enabled: boolean) => {
+  const applyPack = useCallback(async (entry: PolicyPack, enabled: boolean) => {
     setBusy(entry.id);
     setNotice(null);
     try {
@@ -154,6 +164,17 @@ export function PolicyBuilder() {
       setPulse((previous) => previous + 1);
     }
   }, []);
+
+  /**
+   * Switching a pack off drops every protection it carries, so the same question the row asks
+   * applies here — FR-POL-04 is about losing a block or a critical rule, not about which control
+   * did it. Turning one back on is never questioned.
+   */
+  const onPackToggle = (entry: PolicyPack, enabled: boolean) => {
+    const grave = rows.some((row) => row.packId === entry.id && needsConfirm(row));
+    if (!enabled && grave) return setConfirming({ kind: "pack", pack: entry });
+    void applyPack(entry, enabled);
+  };
 
   if ((policies.loading || packsResource.loading) && !(policies.data && packsResource.data)) {
     return <p className="text-body-text-b3-md p-8 text-grayscale-400">{t("loading")}</p>;
@@ -217,16 +238,32 @@ export function PolicyBuilder() {
         </div>
         {/* Out of flow below `xl`, where it floats over the table as the 1024 frame draws it. */}
         <div className="absolute inset-y-4 right-4 w-86.75 overflow-y-auto rounded-(--primitive-radius-rounded-2xl) bg-grayscale-950 px-6 py-6 ring-1 shadow-xl shadow-black/40 ring-grayscale-800 xl:static xl:w-auto xl:overflow-visible xl:rounded-none xl:shadow-none xl:ring-0">
-          <YamlPane policy={policy} yaml={yaml.data?.yaml} loading={yaml.loading} stats={dryRun} />
+          <YamlPane
+            policy={policy}
+            yaml={fresh?.yaml}
+            loading={yaml.loading}
+            unavailable={!yaml.loading && !fresh}
+            stats={dryRun}
+            demo={MOCK_API}
+          />
         </div>
       </div>
 
-      {confirming && (
+      {confirming?.kind === "policy" && (
         <DisableConfirm
-          policy={confirming}
-          pending={busy === confirming.id}
+          body={t("confirmDisable.body", { id: confirming.policy.id })}
+          pending={busy === confirming.policy.id}
           onCancel={() => setConfirming(null)}
-          onConfirm={() => void applyPolicy(confirming, false)}
+          onConfirm={() => void applyPolicy(confirming.policy, false)}
+        />
+      )}
+
+      {confirming?.kind === "pack" && (
+        <DisableConfirm
+          body={t("confirmDisable.packBody", { name: confirming.pack.id })}
+          pending={busy === confirming.pack.id}
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => void applyPack(confirming.pack, false)}
         />
       )}
     </div>

@@ -56,11 +56,15 @@ export interface YamlPaneProps {
   policy: PolicyRow | null;
   yaml: string | undefined;
   loading: boolean;
+  /** The fetch failed — `GET /policies/{id}` is not part of the control plane's API. */
+  unavailable?: boolean;
   /** Only the policies measuring rather than acting; each carries a `dryRun` reading. */
   stats: PolicyStats[];
+  /** No gateway serves these counts yet (GMCP-80), so under the mock they are demo figures. */
+  demo?: boolean;
 }
 
-export function YamlPane({ policy, yaml, loading, stats }: YamlPaneProps) {
+export function YamlPane({ policy, yaml, loading, unavailable, stats, demo }: YamlPaneProps) {
   const t = useTranslations("policies");
   const [copied, setCopied] = useState(false);
 
@@ -110,6 +114,12 @@ export function YamlPane({ policy, yaml, loading, stats }: YamlPaneProps) {
         <div className="rounded-(--primitive-radius-rounded-lg) bg-grayscale-900 p-4">
           {!policy ? (
             <p className="text-body-text-b3-rg text-grayscale-400">{t("yaml.none")}</p>
+          ) : unavailable ? (
+            // Saying nothing here reads as "this policy has no definition", which is not what
+            // happened: the gateway serves no endpoint that returns one.
+            <p role="status" className="text-body-text-b3-rg text-grayscale-400">
+              {t("yaml.unavailable")}
+            </p>
           ) : loading && !yaml ? (
             <p className="text-body-text-b3-rg text-grayscale-400">{t("yaml.loading")}</p>
           ) : (
@@ -149,7 +159,9 @@ export function YamlPane({ policy, yaml, loading, stats }: YamlPaneProps) {
           <h2 id="dry-run-title" className="text-body-text-b3-md text-grayscale-white">
             {t("dryRun.title")}
           </h2>
-          <span className="text-caption-text-c-rg text-grayscale-300">{t("dryRun.window", { days: stats[0]?.dryRun?.windowDays ?? 30 })}</span>
+          <span className="text-caption-text-c-rg text-grayscale-300">
+            {demo ? t("dryRun.demo") : t("dryRun.window", { days: stats[0]?.dryRun?.windowDays ?? 30 })}
+          </span>
         </div>
         {stats.length === 0 ? (
           <p className="text-body-text-b3-rg text-grayscale-400">{t("dryRun.none")}</p>

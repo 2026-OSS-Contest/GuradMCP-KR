@@ -240,20 +240,23 @@
       "enabled": "Enabled",
       "fired": "Fired (30d)",
       "dryRun": "dry-run",
-      "toggle": "Enable policy {id}"
+      "toggle": "Enable policy {id}",
+      "toggleUnsupported": "This gateway does not support enabling policies individually."
     },
     "yaml": {
       "title": "YAML",
       "copy": "Copy YAML",
       "none": "Select a policy to see its definition.",
-      "loading": "Loading the definition…"
+      "loading": "Loading the definition…",
+      "unavailable": "This gateway does not serve policy sources."
     },
     "dryRun": {
       "title": "Dry-run stats",
       "window": "Last {days} days",
       "none": "No policies are in dry-run.",
       "wouldFire": "Would have fired",
-      "unit": "times"
+      "unit": "times",
+      "demo": "Last 30 days · demo data"
     },
     "reload": {
       "message": "The policies were reloaded.",
@@ -262,6 +265,7 @@
     "confirmDisable": {
       "title": "Disable this policy?",
       "body": "{id} blocks calls or is rated critical. Disabling it drops that protection immediately.",
+      "packBody": "The {name} pack carries policies that block calls or are rated critical. Disabling it drops all of those protections at once.",
       "cancel": "Cancel",
       "confirm": "Disable"
     },

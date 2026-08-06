@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import type { PolicyRow } from "@/lib/api/types";
 
@@ -15,29 +15,58 @@ import type { PolicyRow } from "@/lib/api/types";
  * the console's established pattern for a destructive-ish confirm.
  */
 export interface DisableConfirmProps {
-  policy: PolicyRow;
+  /** Why it is being questioned, naming what is being switched off. The two cases differ. */
+  body: string;
   pending: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }
 
-/** Which policies are grave enough to confirm before disabling. */
+/** Which policies are grave enough to confirm before disabling — a pack inherits it. */
 export function needsConfirm(policy: PolicyRow): boolean {
   return policy.action === "block" || policy.severity === "critical";
 }
 
-export function DisableConfirm({ policy, pending, onCancel, onConfirm }: DisableConfirmProps) {
+export function DisableConfirm({ body, pending, onCancel, onConfirm }: DisableConfirmProps) {
   const t = useTranslations("policies.confirmDisable");
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onCancel();
+    // Focus has to move in and come back, and Tab must not wander behind the overlay — a dialog
+    // that asks before dropping a protection is no use to someone who cannot reach its buttons.
+    const opener = document.activeElement as HTMLElement | null;
+    const focusables = () =>
+      Array.from(dialogRef.current?.querySelectorAll<HTMLElement>("button:not([disabled])") ?? []);
+    focusables()[0]?.focus();
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") return onCancel();
+      if (event.key !== "Tab") return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      opener?.focus();
+    };
   }, [onCancel]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={onCancel}>
       <div
+        ref={dialogRef}
         role="alertdialog"
         aria-labelledby="confirm-disable-title"
         aria-describedby="confirm-disable-body"
@@ -48,7 +77,7 @@ export function DisableConfirm({ policy, pending, onCancel, onConfirm }: Disable
           {t("title")}
         </h2>
         <p id="confirm-disable-body" className="text-body-text-b3-md mt-2 text-grayscale-300">
-          {t("body", { id: policy.id })}
+          {body}
         </p>
         <div className="mt-6 flex justify-end gap-2">
           <button

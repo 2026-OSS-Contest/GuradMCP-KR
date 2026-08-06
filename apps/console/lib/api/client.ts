@@ -11,7 +11,6 @@ import type {
   PolicyPack,
   PolicyRow,
   PolicyStats,
-  PolicyUpdate,
   RecentEventsResponse,
   RevealContent,
   ServersResponse,
@@ -119,9 +118,6 @@ export const getPolicies = (signal?: AbortSignal) => get<PolicyRow[]>("/policies
 export const setPackEnabled = (id: string, enabled: boolean, signal?: AbortSignal) =>
   putJson<PolicyPack>(`/policy-packs/${encodeURIComponent(id)}`, { enabled }, signal);
 
-/** Retune a policy. `priority` must be positive or the endpoint answers 400. */
-export const updatePolicy = (id: string, update: PolicyUpdate, signal?: AbortSignal) =>
-  putJson<PolicyRow>(`/policies/${encodeURIComponent(id)}`, update, signal);
 
 /**
  * Flip one policy on or off.

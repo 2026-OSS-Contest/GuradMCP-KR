@@ -240,20 +240,23 @@
       "enabled": "Enabled",
       "fired": "30일 발동 수",
       "dryRun": "dry-run",
-      "toggle": "{id} 정책 사용"
+      "toggle": "{id} 정책 사용",
+      "toggleUnsupported": "이 게이트웨이는 정책 단위 사용 설정을 지원하지 않습니다."
     },
     "yaml": {
       "title": "YAML",
       "copy": "YAML 복사",
       "none": "정책을 선택하면 정의가 표시됩니다.",
-      "loading": "정의를 불러오는 중입니다."
+      "loading": "정의를 불러오는 중입니다.",
+      "unavailable": "이 게이트웨이는 정책 원문을 제공하지 않습니다."
     },
     "dryRun": {
       "title": "Dry-Run 통계",
       "window": "최근 {days}일",
       "none": "dry-run 중인 정책이 없습니다.",
       "wouldFire": "가상 판정",
-      "unit": "건"
+      "unit": "건",
+      "demo": "최근 30일 · 데모 데이터"
     },
     "reload": {
       "message": "정책이 갱신되었습니다.",
@@ -262,6 +265,7 @@
     "confirmDisable": {
       "title": "정책을 비활성화할까요?",
       "body": "{id}는 차단 또는 critical 등급 정책입니다. 비활성화하면 해당 보호가 즉시 사라집니다.",
+      "packBody": "{name} 정책팩에는 차단 또는 critical 등급 정책이 포함되어 있습니다. 비활성화하면 해당 보호가 모두 즉시 사라집니다.",
       "cancel": "취소",
       "confirm": "비활성화"
     },

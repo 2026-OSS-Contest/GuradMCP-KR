@@ -399,13 +399,6 @@ export interface PolicyRow {
   path?: string;
 }
 
-/** The body `PUT /policies/{policyId}` accepts. Every field is optional and independently applied. */
-export interface PolicyUpdate {
-  action?: GuardAction;
-  severity?: Severity;
-  /** Must be positive; the control plane answers 400 `invalid_policy_priority` otherwise. */
-  priority?: number;
-}
 
 /**
  * `GET /policies/{policyId}/stats` — how often a policy actually fired, and what it *would* have

@@ -100,15 +100,15 @@ test("SCR-302 a policy that neither blocks nor is critical toggles without a pro
   await expect(toggle).toHaveAttribute("aria-checked", "false");
 });
 
-test("SCR-302 a pack switches off without a prompt", async ({ page }) => {
+test("SCR-302 a pack carrying nothing grave switches off without a prompt", async ({ page }) => {
   await page.goto("/policies");
-  const toggle = page.getByRole("switch", { name: "korean-pii 정책팩 사용" });
+  // `developer-relaxed` ships empty, so switching it off loses no protection to ask about.
+  const toggle = page.getByRole("switch", { name: "developer-relaxed 정책팩 사용" });
 
   await toggle.click();
 
-  // Only policies are questioned; a pack is one deliberate act the operator already understands.
   await expect(page.getByRole("alertdialog")).toBeHidden();
-  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
 });
 
 test("SCR-302 the fired count leads to the sessions that policy decided", async ({ page }) => {
@@ -127,6 +127,43 @@ test("SCR-302 counts what a dry-run policy would have decided", async ({ page })
   const panel = page.getByRole("region", { name: "Dry-Run 통계" });
   await expect(panel.getByText("warn_external_url_fetch")).toBeVisible();
   await expect(panel.getByText("62")).toBeVisible();
+});
+
+test("SCR-302 refuses to offer a switch the gateway cannot honour", async ({ page }) => {
+  await page.goto("/policies");
+  await page.getByRole("button", { name: "korean-pii", exact: true }).click();
+
+  // `enabled` is the console's own field — `PolicyUpdateRequest` has no such property. A policy
+  // reported without it cannot be switched, so the control says so instead of taking a click,
+  // answering 200 and changing nothing.
+  const inert = page.getByRole("switch", { name: "block_untrusted_injection_response 정책 사용" });
+  await expect(inert).toBeDisabled();
+  await expect(inert).toHaveAttribute("title", /지원하지 않습니다/);
+
+  // A policy the gateway does report as switchable keeps a live control.
+  await expect(page.getByRole("switch", { name: "mask_korean_phone 정책 사용" })).toBeEnabled();
+});
+
+test("SCR-302 says when the gateway serves no source for a policy", async ({ page }) => {
+  await page.goto("/policies");
+  await page.getByRole("button", { name: "korean-pii", exact: true }).click();
+  await page.getByRole("row").filter({ hasText: "block_untrusted_injection_response" }).click();
+
+  // An empty pane would read as "this policy has no definition"; what happened is that the
+  // gateway serves no endpoint returning one.
+  await expect(page.getByRole("region", { name: "YAML" }).getByText(/원문을 제공하지 않습니다/)).toBeVisible();
+});
+
+test("SCR-302 questions switching off a pack that carries a blocking policy", async ({ page }) => {
+  await page.goto("/policies");
+
+  await page.getByRole("switch", { name: "default 정책팩 사용" }).click();
+
+  // FR-POL-04 is about losing a block or a critical rule, not about which control did it.
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog.getByText(/default 정책팩에는 차단 또는 critical/)).toBeVisible();
+  await dialog.getByRole("button", { name: "취소" }).click();
+  await expect(page.getByRole("switch", { name: "default 정책팩 사용" })).toHaveAttribute("aria-checked", "true");
 });
 
 test("SCR-302 points at the authoring guide when no packs are loaded", async ({ page }) => {

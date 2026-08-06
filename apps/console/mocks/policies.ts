@@ -75,6 +75,16 @@ const POLICY_SEED: PolicyRow[] = [
     path: "policy-packs/default/policies/require-approval-external-secret-email.yaml"
   },
   {
+    // What a real control plane returns: the six fields `Policy` declares and nothing else. No
+    // `enabled`, so the console cannot switch it; no source, so the YAML pane has none to show.
+    id: "block_untrusted_injection_response",
+    packId: "korean-pii",
+    priority: 340,
+    action: "block",
+    severity: "critical",
+    description: "Block high-risk prompt injection returned by an untrusted MCP server"
+  },
+  {
     // The design's dimmed last row: evaluating, acting on nothing, so it has no fired count.
     id: "warn_external_url_fetch",
     packId: "korean-pii",

@@ -174,7 +174,11 @@ export const handlers = [
   http.get("*/api/v1/policies/:id", async ({ params }) => {
     const id = String(params.id);
     await delay(LATENCY_MS);
-    return HttpResponse.json(id in POLICY_YAML ? { id, yaml: policyYaml(id) } : policyDetail(id));
+    if (id in POLICY_YAML) return HttpResponse.json({ id, yaml: policyYaml(id) });
+    // The replay fixtures still reference older synthetic ids and their chips must resolve.
+    if (id.startsWith("mask_kr") || id.startsWith("deny_")) return HttpResponse.json(policyDetail(id));
+    // Anything else has no source to serve — which is every policy against a real gateway.
+    return new HttpResponse(null, { status: 404 });
   }),
 
   // Reveal-original (spec §5.3 no.5). POST — the real endpoint writes an audit record.

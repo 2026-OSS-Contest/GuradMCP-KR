@@ -79,12 +79,23 @@ export function PolicyTable({ policies, selected, onSelect, onToggle, stats, bus
             // A dry-run policy is evaluated but acts on nothing, so the whole row reads muted —
             // the same treatment a disabled one gets.
             const fired = stats[policy.id]?.firedLast30d ?? null;
+            // `enabled` is the console's own field: `PolicyUpdateRequest` has no such property,
+            // so a control plane that omits it from the list cannot be told to change it either.
+            // Showing a live switch there would take a click, answer 200 and change nothing.
+            const controllable = policy.enabled !== undefined;
             const enabled = policy.enabled ?? true;
             const muted = !enabled;
             return (
               <tr
                 key={policy.id}
                 onClick={() => onSelect(policy.id)}
+                // A row is a select target, so it has to be one for the keyboard too.
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  onSelect(policy.id);
+                }}
                 aria-selected={selected === policy.id}
                 className={cn(
                   "cursor-pointer border-b border-grayscale-800 align-middle",
@@ -118,7 +129,8 @@ export function PolicyTable({ policies, selected, onSelect, onToggle, stats, bus
                   <span onClick={(event) => event.stopPropagation()}>
                     <Switch
                       checked={enabled}
-                      disabled={busy === policy.id}
+                      disabled={!controllable || busy === policy.id}
+                      title={controllable ? undefined : t("table.toggleUnsupported")}
                       onChange={(next) => onToggle(policy, next)}
                       label={t("table.toggle", { id: policy.id })}
                     />

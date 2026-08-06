@@ -15,16 +15,19 @@ export interface SwitchProps {
   disabled?: boolean;
   /** Required: the toggle carries no visible label of its own in any of its uses. */
   label: string;
+  /** Hover text — used to say why a disabled toggle cannot be operated. */
+  title?: string;
   className?: string;
 }
 
-export function Switch({ checked, onChange, disabled, label, className }: SwitchProps) {
+export function Switch({ checked, onChange, disabled, label, title, className }: SwitchProps) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      title={title}
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
