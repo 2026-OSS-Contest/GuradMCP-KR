@@ -50,7 +50,7 @@ export function RiskDialog({
         role="alertdialog"
         aria-labelledby="risk-dialog-title"
         aria-describedby="risk-dialog-body"
-        className="w-[30rem] max-w-full rounded-lg bg-grayscale-900 p-6 shadow-xl shadow-black/50"
+        className="w-100 max-w-full rounded-(--primitive-radius-rounded-xl) bg-grayscale-900 p-6 shadow-xl shadow-black/50"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <h2 id="risk-dialog-title" className="text-body-text-b1-bd text-grayscale-white">
@@ -61,7 +61,7 @@ export function RiskDialog({
         </p>
 
         {acknowledgement && (
-          <label className="text-body-text-b3-md mt-6 flex cursor-pointer items-center gap-3 text-grayscale-white">
+          <label className="text-body-text-b2-md mt-6 flex cursor-pointer items-center gap-3 text-grayscale-white">
             <input
               type="checkbox"
               checked={acknowledged}
@@ -76,7 +76,7 @@ export function RiskDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="text-body-text-b3-md flex h-10 cursor-pointer items-center rounded-lg bg-(--primitive-opacity-white-alpha-6) px-4 transition-colors hover:bg-white/10"
+            className="text-body-text-b2-md flex h-10 cursor-pointer items-center rounded-(--primitive-radius-rounded-lg) bg-(--primitive-opacity-white-alpha-6) px-4 transition-colors hover:bg-white/10"
           >
             {t("cancel")}
           </button>
@@ -84,7 +84,7 @@ export function RiskDialog({
             type="button"
             onClick={onConfirm}
             disabled={blocked || pending}
-            className="text-body-text-b3-md flex h-10 cursor-pointer items-center rounded-lg bg-blue-800 px-4 text-grayscale-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="text-body-text-b2-md flex h-10 cursor-pointer items-center rounded-(--primitive-radius-rounded-lg) bg-blue-800 px-4 text-grayscale-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {confirmLabel}
           </button>

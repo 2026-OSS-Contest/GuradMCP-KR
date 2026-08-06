@@ -30,7 +30,7 @@ export function FailPolicy({ value, onChange, disabled }: FailPolicyProps) {
       <div
         role="radiogroup"
         aria-labelledby="fail-policy-title"
-        className="flex flex-1 flex-col gap-3 rounded-xl bg-grayscale-900 p-3"
+        className="flex flex-1 flex-col gap-3 rounded-(--primitive-radius-rounded-xl) bg-grayscale-900 p-3"
       >
         {MODES.map((mode) => {
           const selected = value === mode;
@@ -43,7 +43,7 @@ export function FailPolicy({ value, onChange, disabled }: FailPolicyProps) {
               disabled={disabled}
               onClick={() => onChange(mode)}
               className={cn(
-                "flex cursor-pointer flex-col gap-1 rounded-lg p-4 text-left transition-colors",
+                "flex cursor-pointer flex-col gap-1 rounded-(--primitive-radius-rounded-xl) p-4 text-left transition-colors",
                 selected ? "bg-(--primitive-opacity-white-alpha-6)" : "hover:bg-(--primitive-opacity-white-alpha-6)",
                 disabled && "cursor-not-allowed opacity-50"
               )}

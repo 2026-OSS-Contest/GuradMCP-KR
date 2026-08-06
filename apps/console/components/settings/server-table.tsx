@@ -41,10 +41,10 @@ export function ServerTable({ servers, onTrustChange, busy }: ServerTableProps) 
       <h2 id="servers-title" className="text-body-text-b3-md text-grayscale-300">
         {t("servers.title")}
       </h2>
-      <div className="rounded-xl bg-grayscale-900 p-3">
+      <div className="rounded-(--primitive-radius-rounded-xl) bg-grayscale-900 p-3">
         <table className="w-full table-fixed border-collapse">
           <thead>
-            <tr className="text-body-text-b3-md bg-(--primitive-opacity-white-alpha-6) text-left text-grayscale-300">
+            <tr className="text-body-text-b2-md bg-(--primitive-opacity-white-alpha-6) text-left text-grayscale-300">
               <th scope="col" className="w-[26%] rounded-l-lg px-4 py-3 font-normal">
                 {t("servers.name")}
               </th>
@@ -65,7 +65,7 @@ export function ServerTable({ servers, onTrustChange, busy }: ServerTableProps) 
               return (
                 <tr key={server.id} className="border-b border-grayscale-800 last:border-0">
                   <td className="text-body-mono-b2-rg px-4 py-4 break-all text-grayscale-white">{server.name}</td>
-                  <td className="text-body-mono-b3-rg px-4 py-4 break-all text-grayscale-300">
+                  <td className="text-body-mono-b2-rg px-4 py-4 break-all text-grayscale-300">
                     {server.endpoint ?? "–"}
                   </td>
                   <td className="px-4 py-4">
@@ -75,7 +75,7 @@ export function ServerTable({ servers, onTrustChange, busy }: ServerTableProps) 
                       aria-label={t("servers.trustOf", { name: server.name })}
                       onChange={(event) => onTrustChange(server, event.target.value as TrustLevel)}
                       className={cn(
-                        "text-body-text-b3-md w-full cursor-pointer rounded-lg bg-grayscale-800 px-3 py-2",
+                        "text-body-text-b3-md w-full cursor-pointer rounded-(--primitive-radius-rounded-lg) bg-grayscale-800 px-3 py-2",
                         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600",
                         TRUST_INK[server.trust],
                         busy === server.id && "cursor-not-allowed opacity-50"

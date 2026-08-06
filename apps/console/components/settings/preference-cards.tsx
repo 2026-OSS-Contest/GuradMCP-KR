@@ -40,7 +40,7 @@ export function PreferenceCards({
         <h2 id="log-title" className="text-body-text-b3-md text-grayscale-300">
           {t("log.title")}
         </h2>
-        <div className="flex items-center gap-4 rounded-xl bg-grayscale-900 p-3 px-4 py-5">
+        <div className="flex items-center gap-4 rounded-(--primitive-radius-rounded-xl) bg-grayscale-900 p-3 px-4 py-5">
           <span className="text-body-text-b2-md flex-1 text-grayscale-white">{t("log.storeRaw")}</span>
           <Switch
             checked={settings.storeRawOptIn}
@@ -55,14 +55,14 @@ export function PreferenceCards({
         <h2 id="general-title" className="text-body-text-b3-md text-grayscale-300">
           {t("general.title")}
         </h2>
-        <div className="flex flex-col gap-4 rounded-xl bg-grayscale-900 px-4 py-5">
+        <div className="flex flex-col gap-4 rounded-(--primitive-radius-rounded-xl) bg-grayscale-900 px-4 py-5">
           <label className="flex items-center gap-4">
             <span className="text-body-text-b2-md flex-1 text-grayscale-white">{t("general.locale")}</span>
             <select
               value={settings.locale}
               disabled={disabled}
               onChange={(event) => onLocaleChange(event.target.value as GatewaySettings["locale"])}
-              className="text-body-text-b3-md w-32 cursor-pointer rounded-lg bg-grayscale-800 px-3 py-2 text-grayscale-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+              className="text-body-text-b3-md w-32 cursor-pointer rounded-(--primitive-radius-rounded-lg) bg-grayscale-800 px-3 py-2 text-grayscale-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {LOCALES.map((locale) => (
                 <option key={locale} value={locale} className="bg-grayscale-800">
@@ -78,7 +78,7 @@ export function PreferenceCards({
               value={settings.approvalTimeoutSeconds}
               disabled={disabled}
               onChange={(event) => onTimeoutChange(Number(event.target.value))}
-              className="text-body-text-b3-md w-32 cursor-pointer rounded-lg bg-grayscale-800 px-3 py-2 text-grayscale-white tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+              className="text-body-text-b3-md w-32 cursor-pointer rounded-(--primitive-radius-rounded-lg) bg-grayscale-800 px-3 py-2 text-grayscale-white tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {TIMEOUTS.map((seconds) => (
                 <option key={seconds} value={seconds} className="bg-grayscale-800">
