@@ -236,8 +236,12 @@ export function PolicyBuilder() {
             busy={busy}
           />
         </div>
-        {/* Out of flow below `xl`, where it floats over the table as the 1024 frame draws it. */}
-        <div className="absolute inset-y-4 right-4 w-86.75 overflow-y-auto rounded-(--primitive-radius-rounded-2xl) bg-grayscale-950 px-6 py-6 ring-1 shadow-xl shadow-black/40 ring-grayscale-800 xl:static xl:w-auto xl:overflow-visible xl:rounded-none xl:shadow-none xl:ring-0">
+        {/*
+          Out of flow between `lg` and `xl`, where it floats over the table as the 1024 frame
+          draws it. Narrower than that the overlay would cover the table it is describing, and no
+          frame asks for that — so it drops back into the column flow and the three panes stack.
+        */}
+        <div className="overflow-y-auto bg-grayscale-950 px-6 py-6 lg:absolute lg:inset-y-4 lg:right-4 lg:w-86.75 lg:rounded-(--primitive-radius-rounded-2xl) lg:ring-1 lg:shadow-xl lg:shadow-black/40 lg:ring-grayscale-800 xl:static xl:inset-auto xl:w-auto xl:overflow-visible xl:rounded-none xl:shadow-none xl:ring-0">
           <YamlPane
             policy={policy}
             yaml={fresh?.yaml}

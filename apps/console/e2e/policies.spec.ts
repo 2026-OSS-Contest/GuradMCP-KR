@@ -217,3 +217,19 @@ test("SCR-302 floats the YAML pane over the table at 1024", async ({ page }) => 
   const paneWide = await page.getByRole("region", { name: "YAML" }).boundingBox();
   expect(paneWide!.x).toBeGreaterThanOrEqual(wide!.x + wide!.width - 1);
 });
+
+test("SCR-302 stacks rather than covering the table when narrower than the frames", async ({ page }) => {
+  // The frames stop at 1024. Narrower than that the floating pane would sit on top of the table
+  // it is describing, so the three panes stack instead.
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.goto("/policies");
+
+  const table = await page.getByRole("table").boundingBox();
+  const pane = await page.getByRole("region", { name: "YAML" }).boundingBox();
+  expect(pane!.y).toBeGreaterThan(table!.y + table!.height - 1);
+
+  // Every column the table carries is still on screen.
+  for (const header of ["ID", "PRI", "Action", "Severity", "Enabled"]) {
+    await expect(page.getByRole("columnheader", { name: header })).toBeVisible();
+  }
+});
