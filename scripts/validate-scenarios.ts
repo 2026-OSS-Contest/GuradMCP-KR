@@ -193,6 +193,8 @@ function checkProbeCorrespondence(scenarios: Record<string, unknown>[]): void {
     const automation = scenario.automation;
     if (!isRecord(automation) || automation.mode !== "probe" || !Array.isArray(automation.probes)) continue;
     const scope = `${catalogPath}: ${String(scenario.id)}`;
+    /** Union of what the detector reports across this scenario's probes. */
+    const reachable = new Set<string>();
     for (const reference of automation.probes) {
       const probeId = String(reference);
       const probe = byId.get(probeId);
@@ -206,8 +208,9 @@ function checkProbeCorrespondence(scenarios: Record<string, unknown>[]): void {
       if (probe.expectBlocked !== (scenario.kind === "attack")) {
         failures.push(`${scope}: probe ${probeId} expectBlocked=${probe.expectBlocked} disagrees with kind ${String(scenario.kind)}`);
       }
-      checkProbeDetections(scope, probe, scenario);
+      for (const tag of checkProbeDetections(scope, probe, scenario)) reachable.add(tag);
     }
+    checkDeclaredTagsAreReachable(scope, scenario, reachable);
   }
   for (const probe of probes) {
     if (!claimedBy.has(probe.id)) failures.push(`${probePath}: probe ${probe.id} is not claimed by any scenario in ${catalogPath}`);
@@ -215,21 +218,37 @@ function checkProbeCorrespondence(scenarios: Record<string, unknown>[]): void {
 }
 
 /**
- * Keeps `expectedControl.detections` honest against the shipped detector: every
- * declared tag must be reachable from some probe, and every probe must produce
- * at least one declared tag, so neither side can rot unnoticed.
+ * Half of the detection check: every probe must produce at least one declared
+ * tag, so a probe cannot drift away from the scenario that claims it. Returns
+ * what the detector actually reported, which the caller accumulates for the
+ * other half in [checkDeclaredTagsAreReachable].
  */
-function checkProbeDetections(scope: string, probe: Probe, scenario: Record<string, unknown>): void {
-  const control = scenario.expectedControl;
-  if (!isRecord(control) || !Array.isArray(control.detections)) return;
-  const declared = control.detections.map((tag) => String(tag));
+function checkProbeDetections(scope: string, probe: Probe, scenario: Record<string, unknown>): Set<string> {
   const actual = new Set(detect(probe.text).map(({ type, subtype }) => `${type}.${subtype}`));
+  const control = scenario.expectedControl;
+  if (!isRecord(control) || !Array.isArray(control.detections)) return actual;
+  const declared = control.detections.map((tag) => String(tag));
   if (declared.length === 0) {
     if (actual.size > 0) failures.push(`${scope}: probe ${probe.id} declares no detections but the detector reports ${[...actual].sort().join(", ")}`);
-    return;
+    return actual;
   }
   if (!declared.some((tag) => actual.has(tag))) {
     failures.push(`${scope}: probe ${probe.id} produces ${[...actual].sort().join(", ") || "no detections"}, none of which is declared`);
+  }
+  return actual;
+}
+
+/**
+ * The other half: a declared tag no claimed probe can produce is dead weight
+ * that outlives the rule it named. Checking only the per-probe direction lets a
+ * renamed or deleted detector subtype sit in the catalog forever, described as
+ * the expected control point for something that can no longer happen.
+ */
+function checkDeclaredTagsAreReachable(scope: string, scenario: Record<string, unknown>, reachable: Set<string>): void {
+  const control = scenario.expectedControl;
+  if (!isRecord(control) || !Array.isArray(control.detections)) return;
+  for (const tag of control.detections.map((value) => String(value))) {
+    if (!reachable.has(tag)) failures.push(`${scope}: declares ${tag}, which no claimed probe produces`);
   }
 }
 
@@ -237,7 +256,13 @@ function checkDocumentCorrespondence(scenarios: Record<string, unknown>[]): void
   for (const { path, text } of documents) {
     if (text === undefined) continue;
     for (const scenario of scenarios) {
-      if (!text.includes(String(scenario.id))) failures.push(`${path}: scenario ${String(scenario.id)} is not documented`);
+      const id = String(scenario.id);
+      // Whole-token, not substring: a document that only mentions A-011 must not
+      // count as documenting A-01. Ids are validated against /^[AN]-\d{2}$/ above,
+      // so they carry nothing that needs escaping here.
+      if (!new RegExp(`(^|[^A-Za-z0-9-])${id}([^0-9]|$)`).test(text)) {
+        failures.push(`${path}: scenario ${id} is not documented`);
+      }
     }
   }
 }
