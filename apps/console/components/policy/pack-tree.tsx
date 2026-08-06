@@ -73,7 +73,7 @@ export function PackTree({ packs, counts, selected, onSelect, onToggle, busy }: 
           <li key={pack.id}>
             <div
               className={cn(
-                "flex items-center gap-3 rounded-lg py-2 pr-3",
+                "flex items-center gap-3 rounded-(--primitive-radius-rounded-xl) py-2 pr-3",
                 selected === pack.id && "bg-grayscale-800"
               )}
               // The tree's nesting is the only thing depth changes, so it stays inline rather

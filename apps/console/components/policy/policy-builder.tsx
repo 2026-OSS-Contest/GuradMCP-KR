@@ -197,7 +197,7 @@ export function PolicyBuilder() {
           />
         </div>
         {/* Out of flow below `xl`, where it floats over the table as the 1024 frame draws it. */}
-        <div className="absolute inset-y-4 right-4 w-86.75 overflow-y-auto rounded-xl bg-grayscale-950 px-6 py-6 ring-1 shadow-xl shadow-black/40 ring-grayscale-800 xl:static xl:w-auto xl:overflow-visible xl:rounded-none xl:shadow-none xl:ring-0">
+        <div className="absolute inset-y-4 right-4 w-86.75 overflow-y-auto rounded-(--primitive-radius-rounded-2xl) bg-grayscale-950 px-6 py-6 ring-1 shadow-xl shadow-black/40 ring-grayscale-800 xl:static xl:w-auto xl:overflow-visible xl:rounded-none xl:shadow-none xl:ring-0">
           <YamlPane policy={policy} yaml={yaml.data?.yaml} loading={yaml.loading} stats={stats.data?.stats ?? []} />
         </div>
       </div>

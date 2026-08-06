@@ -96,7 +96,7 @@ export function YamlPane({ policy, yaml, loading, stats }: YamlPaneProps) {
             disabled={!yaml}
             aria-label={t("yaml.copy")}
             className={cn(
-              "flex-none rounded-lg bg-grayscale-800 p-2 text-grayscale-200",
+              "flex-none rounded-(--primitive-radius-rounded-lg) bg-grayscale-800 p-2 text-grayscale-200",
               "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600",
               yaml ? "cursor-pointer hover:text-grayscale-white" : "cursor-not-allowed opacity-40"
             )}
@@ -105,7 +105,7 @@ export function YamlPane({ policy, yaml, loading, stats }: YamlPaneProps) {
           </button>
         </div>
 
-        <div className="rounded-xl bg-grayscale-900 p-4">
+        <div className="rounded-(--primitive-radius-rounded-lg) bg-grayscale-900 p-4">
           {!policy ? (
             <p className="text-body-text-b3-rg text-grayscale-400">{t("yaml.none")}</p>
           ) : loading && !yaml ? (

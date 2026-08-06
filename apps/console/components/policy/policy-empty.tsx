@@ -31,7 +31,7 @@ export function PolicyEmpty() {
           target="_blank"
           rel="noreferrer"
           aria-label={t("primaryAria")}
-          className="text-body-text-b3-bd flex h-10 items-center rounded-lg bg-blue-800 px-5 text-grayscale-white transition-colors hover:bg-blue-700"
+          className="text-body-text-b3-bd flex h-10 items-center rounded-(--primitive-radius-rounded-lg) bg-blue-800 px-5 text-grayscale-white transition-colors hover:bg-blue-700"
         >
           {t("primary")}
         </a>
@@ -40,7 +40,7 @@ export function PolicyEmpty() {
           target="_blank"
           rel="noreferrer"
           aria-label={t("secondaryAria")}
-          className="text-body-text-b3-md flex h-10 items-center rounded-lg bg-(--primitive-opacity-white-alpha-6) px-5 text-grayscale-200 transition-colors hover:bg-white/10"
+          className="text-body-text-b3-md flex h-10 items-center rounded-(--primitive-radius-rounded-lg) bg-(--primitive-opacity-white-alpha-6) px-5 text-grayscale-200 transition-colors hover:bg-white/10"
         >
           {t("secondary")}
         </a>

@@ -91,7 +91,7 @@ export function PolicyTable({ policies, selected, onSelect, onToggle, busy }: Po
               >
                 {/* 78px cannot hold a policy id, and the design clamps rather than reflowing
                     the row: two lines, then an ellipsis. The full id stays in the title. */}
-                <td className="text-body-mono-b3-rg py-4 pr-2">
+                <td className="text-body-mono-b2-rg py-4 pr-2">
                   <span className="line-clamp-2 break-all" title={policy.id}>
                     {policy.id}
                   </span>
