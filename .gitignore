@@ -2,6 +2,9 @@ node_modules/
 .next/
 dist/
 build/
+# Eclipse/VS Code Java output. Gradle builds into build/ above; bin/ appears only
+# because an IDE opened the project, and its contents duplicate src/.
+bin/
 .gradle/
 coverage/
 playwright-report/
