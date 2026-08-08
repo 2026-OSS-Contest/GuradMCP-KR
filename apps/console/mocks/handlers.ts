@@ -72,18 +72,6 @@ export const handlers = [
     respond(timelineOf(String(params.id))),
   ),
 
-  // Deep-link support (spec §3.3): a single node lookup by eventId.
-  http.get("*/api/v1/events/:id", async ({ params }) => {
-    await delay(LATENCY_MS);
-    const event = eventLookup(String(params.id));
-    return event
-      ? HttpResponse.json(event)
-      : HttpResponse.json(
-          { code: "event_not_found", message: "unknown eventId" },
-          { status: 404 },
-        );
-  }),
-
   // SCR-201 Attack Lab (spec §5.2). The catalogue is static; unavailable scenarios still list so
   // the picker can show them as 준비 중.
   http.get("*/api/v1/attacklab/scenarios", async () =>
