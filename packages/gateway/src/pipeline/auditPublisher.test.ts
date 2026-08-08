@@ -22,6 +22,11 @@ function makeEvent(overrides: Partial<GuardEvent> = {}): GuardEvent {
     riskScore: 90,
     matchedPolicyIds: ["block_env_file_read"],
     detections: [],
+    explanation: {
+      reasonCode: "BLOCK_ENV_FILE_READ",
+      ko: "차단했습니다 — 정책 block_env_file_read (심각도 critical)",
+      en: "Blocked — policy block_env_file_read (severity critical)"
+    },
     ...overrides
   };
 }
@@ -162,6 +167,7 @@ describe("auditPublisher", () => {
       const decision: PolicyDecision = {
         verdict: "block",
         matchedPolicyIds: ["block_env_file_read"],
+        decidingPolicyId: "block_env_file_read",
         riskScore: 96,
         severity: "critical",
         reasonCode: "BLOCK_ENV_FILE_READ",
@@ -202,6 +208,7 @@ describe("auditPublisher", () => {
       const decision: PolicyDecision = {
         verdict: "require_approval",
         matchedPolicyIds: ["approve_external_email"],
+        decidingPolicyId: "approve_external_email",
         riskScore: 88,
         severity: "high",
         reasonCode: "APPROVE_EXTERNAL_EMAIL",

@@ -29,14 +29,6 @@ export interface RouterDeps {
   approvalBackend: ApprovalBackend;
 }
 
-<<<<<<< HEAD
-const defaultApprovalConfig = {
-  timeoutSeconds: 120,
-  onTimeout: "block" as const,
-  allowMaskedApproval: false,
-};
-
-=======
 // NFR-04: off by default. See GuardEvent.rawPayload (types.ts) for who's allowed to read this.
 const storeRawPayload = process.env.AUDIT_STORE_RAW_PAYLOAD === "true";
 
@@ -46,7 +38,6 @@ const defaultApprovalConfig = {
   allowMaskedApproval: false,
 };
 
->>>>>>> f3e9628 (feat(gateway): publish GuardEvents to the Control Plane audit ingest API)
 export async function routeByVerdict(
   ctx: ToolCallContext,
   decision: PolicyDecision,
@@ -313,13 +304,10 @@ function buildGuardEvent(
     // is what makes "100% of block events carry a reason" true rather than best-effort.
     explanation: explainDecision(decision, verdict, resolution),
     ...rest,
-<<<<<<< HEAD
     ...(decision.normalizedPath !== undefined
       ? { normalizedPath: decision.normalizedPath }
       : {}),
-=======
     ...(storeRawPayload ? { rawPayload: ctx.payload } : {}),
->>>>>>> f3e9628 (feat(gateway): publish GuardEvents to the Control Plane audit ingest API)
     ...extras,
   };
 }
