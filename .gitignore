@@ -15,7 +15,7 @@ reports/*.html
 .env
 *.log
 .DS_Store
-
+.idea/
 *.tsbuildinfo
 
 .omc
