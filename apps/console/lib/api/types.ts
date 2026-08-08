@@ -168,7 +168,9 @@ export interface EventDetail {
    * gateway's normalization pipeline (URL-decode, NFKC, null-byte truncation,
    * `~`/`$HOME` expansion, `.`/`..` resolution, lowercase). Lets the operator
    * see the raw → normalized → matched-policy trail across the tool-call node's
-   * args and its `direction.policy`.
+   * args and its `direction.policy`. GuardEvent carries this on the live SSE
+   * stream, but the GMCP-28 Replay wire contract's TimelineNode does not (see
+   * below), so it stays undefined for Replay until that contract adds it.
    */
   normalizedPath?: string;
   // Tool-call / tool-result node: the direction verdict.
@@ -202,10 +204,11 @@ export interface SessionsResponse {
 // node still carries an explicit `detail: null` otherwise (never omitted).
 //
 // Fields the existing UI types ask for that this API does not provide — raw/masked body text,
-// real tool-call arguments (only a `sha256:` digest is ever returned, by design), and a verdict
-// attached to a TOOL_CALL/RESULT node specifically (only VERDICT nodes carry one) — have no
-// source here. The adapter leaves EventDetail's `body`/`call`/`direction` undefined for now; the
-// corresponding panel sections simply do not render until those are backed by real endpoints.
+// real tool-call arguments (only a `sha256:` digest is ever returned, by design), the FR-SEC-04
+// normalized path (GMCP-73), and a verdict attached to a TOOL_CALL/RESULT node specifically (only
+// VERDICT nodes carry one) — have no source here. The adapter leaves EventDetail's
+// `body`/`call`/`normalizedPath`/`direction` undefined for now; the corresponding panel sections
+// simply do not render until those are backed by real endpoints.
 
 export type ApiTimelineNodeType = "USER_INPUT" | "AGENT_STEP" | "TOOL_CALL" | "VERDICT" | "RESULT";
 export type ApiToolCallDirection = "req" | "res";

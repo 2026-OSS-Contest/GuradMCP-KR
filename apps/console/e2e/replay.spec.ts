@@ -77,16 +77,6 @@ test("clicking a timeline node swaps in that node's own detail", async ({ page }
   await expect(detail.getByText("위협 점수")).toBeHidden();
 });
 
-test("FR-SEC-04 (GMCP-73): the tool_call node shows the normalized path next to its raw args", async ({ page }) => {
-  await page.goto("/replay");
-  const detail = page.getByTestId("event-detail");
-  await page.getByRole("log").getByRole("button", { name: /read_file\(".env"\)/ }).click();
-  await expect(detail.getByText("인자")).toBeVisible();
-  const normalizedSection = detail.locator("section", { hasText: "정규화 경로" });
-  await expect(normalizedSection).toBeVisible();
-  await expect(normalizedSection.getByText(".env", { exact: true })).toBeVisible();
-});
-
 test("next-verdict jump selects the verdict node", async ({ page }) => {
   await page.goto("/replay");
   const log = page.getByRole("log");
