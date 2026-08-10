@@ -106,6 +106,22 @@ test("SCR-401 inspects the first 64KB of a longer text and says the rest went un
   await expect(findings.getByText("010-9999-8888")).toBeHidden();
 });
 
+test("SCR-401 stays usable when one run replaces another mid-flight", async ({ page }) => {
+  await page.goto("/detector");
+  const input = page.getByRole("textbox", { name: "검사할 텍스트" });
+
+  // Type, wait past the debounce so the request is actually out, then type again — which aborts
+  // it. The replaced run must not leave the spinner on, or the button never comes back.
+  await input.fill("010-1234-5678");
+  await page.waitForTimeout(600);
+  await input.fill("010-1234-5678 그리고 900101-1234567");
+
+  await expect(page.getByRole("button", { name: "검사 실행" })).toBeEnabled();
+  // …and it is the newer run's answer that lands, not the one it replaced.
+  const findings = page.getByRole("region", { name: "탐지 결과" });
+  await expect(findings.getByText("RRN")).toBeVisible();
+});
+
 test("SCR-401 names the secret's issuer and the file a blocked path leads to", async ({ page }) => {
   await page.goto("/detector");
 

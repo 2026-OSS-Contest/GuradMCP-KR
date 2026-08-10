@@ -35,22 +35,33 @@ export function Detector() {
     setFailed(false);
   };
 
+  /**
+   * Which run is current. The button and the debounce both call `run`, so two can be in flight
+   * at once and the slower one must not win — nor may it clear the spinner the faster one still
+   * needs. Every run stamps itself and then only touches state while it is still the newest,
+   * which is also what keeps `running` from sticking: whichever run is last to be stamped is
+   * always the one that clears it, aborted or not.
+   */
+  const latest = useRef(0);
+
   const run = useCallback(
     async (value: string, side: DetectDirection, signal?: AbortSignal) => {
       if (!value.trim()) return;
+      const id = ++latest.current;
       setRunning(true);
       setFailed(false);
       try {
         const result = await previewDetection(value, side, signal);
-        if (signal?.aborted) return;
+        if (id !== latest.current) return;
         setPreview(result);
       } catch (error) {
+        if (id !== latest.current) return;
         // An abort is this component replacing its own request, not a failure to report.
         if ((error as Error)?.name === "AbortError") return;
         setPreview(undefined);
         setFailed(true);
       } finally {
-        if (!signal?.aborted) setRunning(false);
+        if (id === latest.current) setRunning(false);
       }
     },
     []
