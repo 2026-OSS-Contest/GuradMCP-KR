@@ -1,0 +1,16 @@
+id: require_approval_untrusted_high_risk_tool_positive
+description: A high-risk send_email call to an untrusted server requires approval even with nothing detected in the payload.
+coverage:
+  policy_id: require_approval_untrusted_high_risk_tool
+  expectation: match
+event:
+  direction: request
+  tool: send_email
+  server_trust: untrusted
+  args:
+    to: partner@company.co.kr
+  detections: []
+  risk_score: 10
+expected:
+  action: require_approval
+  matched_policy_ids: [require_approval_untrusted_high_risk_tool]

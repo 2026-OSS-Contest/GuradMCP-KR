@@ -88,6 +88,8 @@ The glob matches the complete tool name; regular expressions are not accepted. A
 
 An unknown server or missing trust configuration normalizes to `untrusted` as a fail-safe. `any` matches regardless of classification.
 
+A list is also accepted (`server_trust: [limited, untrusted]`). Values inside the list are OR-combined, so a policy can target "every grade except trusted" without one rule per grade. `any` cannot be mixed into a list.
+
 ### 3.4 `args`
 
 A condition map over the request's JSON argument object. Join a top-level argument name and its operator with `_`.

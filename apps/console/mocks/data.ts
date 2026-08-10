@@ -14,10 +14,29 @@ export const SERVERS: McpServer[] = [
     connected: true,
     trust: "limited",
     tools: [
-      { name: "read_file", risk: "high", policies: ["block_env_file_read", "mask_secret_in_file", "audit_file_read"], snapshotChanged: false },
-      { name: "write_file", risk: "medium", policies: ["deny_system_path_write"], snapshotChanged: true },
-      { name: "list_directory", risk: "low", policies: ["audit_directory_list"], snapshotChanged: false }
-    ]
+      {
+        name: "read_file",
+        risk: "high",
+        policies: [
+          "block_env_file_read",
+          "mask_secret_in_file",
+          "audit_file_read",
+        ],
+        snapshotChanged: false,
+      },
+      {
+        name: "write_file",
+        risk: "medium",
+        policies: ["deny_system_path_write"],
+        snapshotChanged: true,
+      },
+      {
+        name: "list_directory",
+        risk: "low",
+        policies: ["audit_directory_list"],
+        snapshotChanged: false,
+      },
+    ],
   },
   {
     id: "mail-server",
@@ -25,11 +44,31 @@ export const SERVERS: McpServer[] = [
     connected: true,
     trust: "trusted",
     tools: [
-      { name: "send_email", risk: "high", policies: ["approve_external_email_with_secret", "mask_kr_pii"], snapshotChanged: false },
-      { name: "list_messages", risk: "low", policies: ["mask_kr_pii"], snapshotChanged: false },
-      { name: "read_message", risk: "medium", policies: ["mask_kr_pii"], snapshotChanged: false },
-      { name: "delete_message", risk: "medium", policies: [], snapshotChanged: false }
-    ]
+      {
+        name: "send_email",
+        risk: "high",
+        policies: ["approve_external_email_with_secret", "mask_kr_pii"],
+        snapshotChanged: false,
+      },
+      {
+        name: "list_messages",
+        risk: "low",
+        policies: ["mask_kr_pii"],
+        snapshotChanged: false,
+      },
+      {
+        name: "read_message",
+        risk: "medium",
+        policies: ["mask_kr_pii"],
+        snapshotChanged: false,
+      },
+      {
+        name: "delete_message",
+        risk: "medium",
+        policies: [],
+        snapshotChanged: false,
+      },
+    ],
   },
   {
     id: "db-server",
@@ -37,13 +76,42 @@ export const SERVERS: McpServer[] = [
     connected: false,
     trust: "untrusted",
     tools: [
-      { name: "db_query", risk: "high", policies: ["mask_kr_pii", "block_bulk_export"], snapshotChanged: false },
-      { name: "db_execute", risk: "high", policies: ["block_bulk_export"], snapshotChanged: false },
-      { name: "list_tables", risk: "low", policies: [], snapshotChanged: false },
-      { name: "describe_table", risk: "low", policies: [], snapshotChanged: false }
-    ]
-  }
+      {
+        name: "db_query",
+        risk: "high",
+        policies: ["mask_kr_pii", "block_bulk_export"],
+        snapshotChanged: false,
+      },
+      {
+        name: "db_execute",
+        risk: "high",
+        policies: ["block_bulk_export"],
+        snapshotChanged: false,
+      },
+      {
+        name: "list_tables",
+        risk: "low",
+        policies: [],
+        snapshotChanged: false,
+      },
+      {
+        name: "describe_table",
+        risk: "low",
+        policies: [],
+        snapshotChanged: false,
+      },
+    ],
+  },
 ];
+
+/** Mock stand-in for the control plane's upgrade-impact estimate (FR-GW-02 §5.1) — the count of
+ * policies currently applied to this server's tools, shown in the upgrade confirmation modal. */
+export function affectedPolicyCount(serverId: string): number {
+  const server = SERVERS.find((candidate) => candidate.id === serverId);
+  if (!server) return 0;
+  return new Set(server.tools.flatMap((tool) => tool.policies)).size;
+}
+
 
 export function overviewOf(servers: McpServer[]): Overview {
   const disconnected = servers.filter((server) => !server.connected).length;
@@ -57,7 +125,7 @@ export function overviewOf(servers: McpServer[]): Overview {
     protectedTools: 17,
     policies: { active: 24, packs: POLICY_PACKS },
     blocked24h: 6,
-    pendingApprovals: pendingCount()
+    pendingApprovals: pendingCount(),
   };
 }
 
@@ -67,31 +135,90 @@ export const EMPTY_OVERVIEW: Overview = {
   protectedTools: 0,
   policies: { active: 24, packs: POLICY_PACKS },
   blocked24h: 0,
-  pendingApprovals: 0
+  pendingApprovals: 0,
 };
 
 /** Ages are relative to request time so "방금 전" stays true however long the tab is open. */
-const AGES_MS = [20_000, 60_000, 4 * 60_000, 6 * 60_000, 32 * 60_000, 60 * 60_000];
+const AGES_MS = [
+  20_000,
+  60_000,
+  4 * 60_000,
+  6 * 60_000,
+  32 * 60_000,
+  60 * 60_000,
+];
 
 export function recentEvents(): SecurityEvent[] {
   const now = Date.now();
   const seed: Omit<SecurityEvent, "at">[] = [
-    { id: "evt-6012", sessionId: "s-0712", verdict: "block", tool: "read_file", target: ".env" },
-    { id: "evt-6011", sessionId: "s-0712", verdict: "require_approval", tool: "send_email", target: "external@example.com" },
-    { id: "evt-6010", sessionId: "s-0712", verdict: "warn", tool: "fetch_url", target: "외부 URL" },
-    { id: "evt-6009", sessionId: "s-0711", verdict: "allow", tool: "list_directory" },
-    { id: "evt-6008", sessionId: "s-0711", verdict: "block", tool: "read_file", target: "id_rsa" },
-    { id: "evt-6007", sessionId: "s-0710", verdict: "allow", tool: "db_query" }
+    {
+      id: "evt-6012",
+      sessionId: "s-0712",
+      verdict: "block",
+      tool: "read_file",
+      target: ".env",
+    },
+    {
+      id: "evt-6011",
+      sessionId: "s-0712",
+      verdict: "require_approval",
+      tool: "send_email",
+      target: "external@example.com",
+    },
+    {
+      id: "evt-6010",
+      sessionId: "s-0712",
+      verdict: "warn",
+      tool: "fetch_url",
+      target: "외부 URL",
+    },
+    {
+      id: "evt-6009",
+      sessionId: "s-0711",
+      verdict: "allow",
+      tool: "list_directory",
+    },
+    {
+      id: "evt-6008",
+      sessionId: "s-0711",
+      verdict: "block",
+      tool: "read_file",
+      target: "id_rsa",
+    },
+    { id: "evt-6007", sessionId: "s-0710", verdict: "allow", tool: "db_query" },
   ];
-  return seed.map((event, index) => ({ ...event, at: new Date(now - AGES_MS[index]).toISOString() }));
+  return seed.map((event, index) => ({
+    ...event,
+    at: new Date(now - AGES_MS[index]).toISOString(),
+  }));
 }
 
 // Rotated through by the SSE stream so each pushed event is a distinct, fresh-looking row.
 const LIVE_SEED: Omit<SecurityEvent, "at" | "id">[] = [
-  { sessionId: "s-0712", verdict: "block", tool: "read_file", target: "credentials.json" },
-  { sessionId: "s-0712", verdict: "warn", tool: "fetch_url", target: "pastebin.com" },
-  { sessionId: "s-0713", verdict: "require_approval", tool: "send_email", target: "ceo@partner.example" },
-  { sessionId: "s-0713", verdict: "allow", tool: "list_directory", target: "/etc" }
+  {
+    sessionId: "s-0712",
+    verdict: "block",
+    tool: "read_file",
+    target: "credentials.json",
+  },
+  {
+    sessionId: "s-0712",
+    verdict: "warn",
+    tool: "fetch_url",
+    target: "pastebin.com",
+  },
+  {
+    sessionId: "s-0713",
+    verdict: "require_approval",
+    tool: "send_email",
+    target: "ceo@partner.example",
+  },
+  {
+    sessionId: "s-0713",
+    verdict: "allow",
+    tool: "list_directory",
+    target: "/etc",
+  },
 ];
 
 /** A new event for the live stream (spec §5.1 no.5), stamped now so it sorts to the top. */

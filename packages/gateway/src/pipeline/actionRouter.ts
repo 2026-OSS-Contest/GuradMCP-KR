@@ -303,6 +303,8 @@ function buildGuardEvent(
     // Every event funnels through here, so generating the explanation at this one point
     // is what makes "100% of block events carry a reason" true rather than best-effort.
     explanation: explainDecision(decision, verdict, resolution),
+    targetServerId: ctx.serverId,
+    targetServerTrust: ctx.serverTrust,
     ...rest,
     ...(decision.normalizedPath !== undefined
       ? { normalizedPath: decision.normalizedPath }

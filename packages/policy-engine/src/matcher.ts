@@ -52,9 +52,14 @@ export function matchTool(cond: MatchDefinition["tool"], ctx: PolicyContext): bo
   return matchesGlob(cond, ctx.tool);
 }
 
-/** Trust-grade compare; absent or `any` always matches. */
+/**
+ * Trust-grade compare; absent or `any` always matches. A list is an OR of
+ * grades (spec §4.4), letting a policy target e.g. `[limited, untrusted]`
+ * ("every grade except trusted") without one rule per grade.
+ */
 export function matchServerTrust(cond: MatchDefinition["server_trust"], ctx: PolicyContext): boolean {
   if (cond === undefined || cond === "any") return true;
+  if (Array.isArray(cond)) return cond.includes(ctx.serverTrust);
   return cond === ctx.serverTrust;
 }
 

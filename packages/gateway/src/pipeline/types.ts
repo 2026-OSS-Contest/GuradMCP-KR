@@ -32,6 +32,8 @@ export interface ToolCallContext {
   /** The exact serialized text that was inspected; `decision.detections[].start/end` are offsets into this string. */
   payload: string;
   sessionId: string;
+  /** Upstream MCP server this call targeted (FR-GW-02 §3.3). */
+  serverId: string;
   serverTrust: ServerTrust;
 }
 
@@ -107,6 +109,10 @@ export interface GuardEvent {
    * every event so an explanation never has to be reconstructed by a reader.
    */
   explanation: Explanation;
+  /** FR-GW-02 §3.3: the upstream server the Tool Call targeted, and its trust grade *at
+   * decision time* — a snapshot, so a later grade change never rewrites past events' basis. */
+  targetServerId: string;
+  targetServerTrust: ServerTrust;
   /** FR-SEC-04 §3.3: normalized form of a path-like Tool Call arg, when one was present. */
   normalizedPath?: string;
   maskDiffRef?: string;

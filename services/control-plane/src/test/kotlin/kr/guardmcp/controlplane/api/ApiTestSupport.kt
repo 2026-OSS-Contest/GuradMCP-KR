@@ -7,10 +7,14 @@ import org.springframework.core.env.Environment
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.testcontainers.postgresql.PostgreSQLContainer
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.charset.StandardCharsets
 
 /**
  * Shared HTTP scaffolding for the RANDOM_PORT API tests. Spring Boot 4 exposes neither
@@ -43,6 +47,35 @@ abstract class ApiTestSupport {
             .method(method, publisher)
             .build()
         return client.send(request, HttpResponse.BodyHandlers.ofString())
+    }
+
+    /** A line reader plus the connection it came from, so [close] can disconnect. */
+    protected class SseStream(val reader: BufferedReader, private val connection: HttpURLConnection) : AutoCloseable {
+        override fun close() {
+            reader.close()
+            connection.disconnect()
+        }
+    }
+
+    /**
+     * Opens an SSE connection. Disconnecting the connection (not just closing the input stream)
+     * matters here: otherwise the JDK client keeps the socket in its keep-alive pool and the
+     * server's graceful shutdown waits out its full timeout for the "still open" request when
+     * the test JVM exits.
+     */
+    protected fun openStream(path: String): SseStream {
+        val connection = uri(path).toURL().openConnection() as HttpURLConnection
+        connection.setRequestProperty("Accept", "text/event-stream")
+        connection.connectTimeout = 5_000
+        connection.readTimeout = 5_000
+        return SseStream(BufferedReader(InputStreamReader(connection.inputStream, StandardCharsets.UTF_8)), connection)
+    }
+
+    /** Reads one SSE frame's `data:` payload, skipping blank lines and the `event:` line. */
+    protected fun nextEventData(reader: BufferedReader): String {
+        var line = reader.readLine()
+        while (line != null && !line.startsWith("data:")) line = reader.readLine()
+        return line?.removePrefix("data:")?.trim() ?: error("stream closed before a data frame arrived")
     }
 
     protected fun parseMap(body: String): Map<String, Any?> =

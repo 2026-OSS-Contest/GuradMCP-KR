@@ -1,4 +1,5 @@
 import toolRiskCatalog from "./rules/tool-risk.json" with { type: "json" };
+import riskWeightsConfig from "./rules/risk-weights.json" with { type: "json" };
 import type { Detection, DetectionKind } from "./detect.js";
 
 export type ToolRisk = "high" | "medium" | "low";
@@ -10,19 +11,25 @@ export type ServerTrust = "trusted" | "limited" | "untrusted";
  */
 export const riskThresholds = { warn: 40, approval: 70, block: 90 } as const;
 
-/** Why a score landed where it did; surfaced so a verdict can explain itself. */
+/**
+ * Why a score landed where it did; surfaced so a verdict can explain itself.
+ * These factors combine into the pre-trust `baseScore`; server trust is then
+ * applied as a multiplier (FR-GW-02 §4.3), not folded in as another addend.
+ */
 export interface RiskFactors {
   base: number;
   confidence: number;
   variety: number;
   tool: number;
-  trust: number;
   volume: number;
 }
 
 export interface RiskAssessment {
   score: number;
+  /** Detection/tool score before the trust multiplier and untrusted floor are applied. */
+  baseScore: number;
   toolRisk: ToolRisk;
+  trustMultiplier: number;
   factors: RiskFactors;
 }
 
@@ -41,23 +48,25 @@ const toolRisks: readonly ToolRisk[] = ["high", "medium", "low"];
  */
 const detectionBase: Record<DetectionKind, number> = { INJECTION: 70, SECRET: 60, PII: 40, SENSITIVE_FILE_PATH: 20 };
 const toolWeight: Record<ToolRisk, number> = { high: 15, medium: 8, low: 0 };
-const trustWeight: Record<ServerTrust, number> = { untrusted: 18, limited: 9, trusted: 0 };
 const varietyStep = 6;
 const varietyCap = 12;
 /** FR-PII-05: many personal-data spans in one payload read as bulk disclosure. */
 const bulkVolume = { many: { count: 10, bonus: 15 }, some: { count: 5, bonus: 8 } };
 
 const { rules: toolRiskRules, defaultRisk } = parseToolRiskCatalog(toolRiskCatalog);
+const { trustMultiplier, untrustedHighRiskFloor } = parseRiskWeights(riskWeightsConfig);
 
 /**
- * Pipeline step 5: fold detections, tool capability, and server trust into one
- * 0-100 score that policies compare against. An empty detection set scores 0 —
- * a call nothing was found in must not inherit risk from its tool or its server.
+ * Pipeline step 5: fold detections and tool capability into a 0-100 base
+ * score, then scale it by the target server's trust (FR-GW-02 §4.3). An empty
+ * detection set scores 0 regardless of trust or tool — a call nothing was
+ * found in must not inherit risk from its tool or its server.
  */
 export function scoreRisk(detections: Detection[], tool: string, serverTrust: ServerTrust): RiskAssessment {
   const toolRisk = classifyTool(tool);
-  const empty: RiskFactors = { base: 0, confidence: 0, variety: 0, tool: 0, trust: 0, volume: 0 };
-  if (detections.length === 0) return { score: 0, toolRisk, factors: empty };
+  const multiplier = trustMultiplier[serverTrust];
+  const empty: RiskFactors = { base: 0, confidence: 0, variety: 0, tool: 0, volume: 0 };
+  if (detections.length === 0) return { score: 0, baseScore: 0, toolRisk, trustMultiplier: multiplier, factors: empty };
 
   const dominant = detections.reduce((strongest, detection) =>
     detectionBase[detection.type] > detectionBase[strongest.type] ? detection : strongest);
@@ -75,13 +84,18 @@ export function scoreRisk(detections: Detection[], tool: string, serverTrust: Se
     confidence: Math.round((peakConfidence - 0.8) * 20),
     variety: Math.min(varietyCap, (distinctSubtypes - 1) * varietyStep),
     tool: toolWeight[toolRisk],
-    trust: trustWeight[serverTrust],
     volume: piiSpans >= bulkVolume.many.count
       ? bulkVolume.many.bonus
       : piiSpans >= bulkVolume.some.count ? bulkVolume.some.bonus : 0
   };
-  const total = Object.values(factors).reduce((sum, value) => sum + value, 0);
-  return { score: Math.max(0, Math.min(100, total)), toolRisk, factors };
+  const baseScore = Math.max(0, Math.min(100, Object.values(factors).reduce((sum, value) => sum + value, 0)));
+  let score = Math.max(0, Math.min(100, Math.round(baseScore * multiplier)));
+  // Fail-safe: an untrusted server invoking a high-risk tool category (write,
+  // send, delete, exec — reusing the tool-risk catalog's "high" band) never
+  // scores below the floor once something was actually detected, even if the
+  // detection itself was weak.
+  if (serverTrust === "untrusted" && toolRisk === "high") score = Math.max(score, untrustedHighRiskFloor);
+  return { score, baseScore, toolRisk, trustMultiplier: multiplier, factors };
 }
 
 /** First matching catalog entry wins, so list the most dangerous shapes first. */
@@ -110,6 +124,32 @@ function parseToolRiskCatalog(source: unknown): { rules: ToolRiskRule[]; default
     return { match: compileGlob(match), risk };
   });
   return { rules, defaultRisk: source.defaultRisk };
+}
+
+/**
+ * Parses the shipped risk-weights config. Failures throw at module load, same
+ * as the tool-risk catalog, so a malformed weight cannot silently under- or
+ * over-score every call.
+ */
+function parseRiskWeights(source: unknown): { trustMultiplier: Record<ServerTrust, number>; untrustedHighRiskFloor: number } {
+  if (!isRecord(source)) throw new Error("Risk-weights config must be an object.");
+  if (source.version !== 1) throw new Error("Risk-weights config must declare version 1.");
+  const grades: readonly ServerTrust[] = ["trusted", "limited", "untrusted"];
+  const rawMultiplier = source.trustMultiplier;
+  if (!isRecord(rawMultiplier)) throw new Error("Risk-weights config must declare trustMultiplier.");
+  const trustMultiplier = {} as Record<ServerTrust, number>;
+  for (const grade of grades) {
+    const value = rawMultiplier[grade];
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      throw new Error(`Risk-weights config must declare a non-negative trustMultiplier.${grade}.`);
+    }
+    trustMultiplier[grade] = value;
+  }
+  const floor = source.untrustedHighRiskFloor;
+  if (typeof floor !== "number" || !Number.isFinite(floor) || floor < 0 || floor > 100) {
+    throw new Error("Risk-weights config must declare untrustedHighRiskFloor between 0 and 100.");
+  }
+  return { trustMultiplier, untrustedHighRiskFloor: floor };
 }
 
 function compileGlob(pattern: string): RegExp {

@@ -7,10 +7,10 @@ function detection(type: DetectionKind, subtype: string, confidence = 0.9): Dete
 }
 
 describe("risk scoring", () => {
-  it("scores a payload with no detections as zero risk", () => {
+  it("scores a payload with no detections as zero risk regardless of trust or tool", () => {
     const assessment = scoreRisk([], "send_email", "untrusted");
     expect(assessment.score).toBe(0);
-    expect(assessment.factors.trust).toBe(0);
+    expect(assessment.baseScore).toBe(0);
   });
 
   it("puts a confident injection from an untrusted server in the block band", () => {
@@ -18,10 +18,19 @@ describe("risk scoring", () => {
     expect(score).toBeGreaterThanOrEqual(riskThresholds.block);
   });
 
-  it("puts personal data leaving through email in the approval band", () => {
-    const { score } = scoreRisk([detection("PII", "PHONE")], "send_email", "untrusted");
+  it("puts personal data leaving through email from a limited server in the approval band", () => {
+    const { score } = scoreRisk([detection("PII", "PHONE")], "send_email", "limited");
     expect(score).toBeGreaterThanOrEqual(riskThresholds.approval);
     expect(score).toBeLessThan(riskThresholds.block);
+  });
+
+  // FR-GW-02 §4.3: the same finding from an untrusted server is scaled harder
+  // (×1.6 vs ×1.3) and, since send_email is a high-risk tool, floored — so the
+  // identical detection that only reaches "approval" on a limited server lands
+  // in "block" once the source server is untrusted.
+  it("pushes the same email exfiltration into the block band when the server is untrusted", () => {
+    const { score } = scoreRisk([detection("PII", "PHONE")], "send_email", "untrusted");
+    expect(score).toBeGreaterThanOrEqual(riskThresholds.block);
   });
 
   it("scores an external secret transfer into the approval band (Appendix A.2)", () => {

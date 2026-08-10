@@ -309,6 +309,28 @@
       "desc": "Upstream servers, failure policy and logging"
     }
   },
+  "settings": {
+    "servers": {
+      "title": "Server trust",
+      "desc": "Manage the trust grade for each registered upstream MCP server.",
+      "columnName": "Server",
+      "columnConnection": "Connection",
+      "columnTrust": "Trust",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "updated": "{name}'s trust grade changed to {trust}.",
+      "updateFailed": "Could not change the trust grade.",
+      "loadError": "Could not load the server list.",
+      "confirmUpgrade": {
+        "title": "Confirm trust upgrade",
+        "impactLoading": "Checking what this affects…",
+        "impact": "{count} policies currently applied to this server may no longer apply after the upgrade.",
+        "note": "Upgrading lowers the risk-score weight applied to Tool Calls from this server.",
+        "cancel": "Cancel",
+        "confirm": "I understand — upgrade the trust grade"
+      }
+    }
+  },
   "common": {
     "comingSoon": "Coming soon",
     "scaffold": "This screen is a scaffold. The detailed UI ships in a follow-up issue."

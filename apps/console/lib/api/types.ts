@@ -1,8 +1,10 @@
 // Console API contracts (UI specification §6.1–6.2).
 //
-// `/servers` and `/events/recent` do not exist on the control plane yet, and `/overview`
-// currently returns a different shape. These types describe what the screens need; the MSW
-// handlers in `mocks/` serve exactly this, so wiring the real backend needs no UI change.
+// `/events/recent` does not exist on the control plane yet, and `/overview` currently returns a
+// different shape. These types describe what the screens need; the MSW handlers in `mocks/`
+// serve exactly this, so wiring the real backend needs no UI change. `/servers` (GET and PUT
+// .../trust) was implemented in GMCP-64 (FR-GW-02) to match this file's `McpServer` shape
+// exactly — `tools` is always `[]` from the real backend today (FR-GW-03 is a separate gap).
 
 export type Verdict = "allow" | "warn" | "require_approval" | "block";
 export type TrustLevel = "trusted" | "limited" | "untrusted";
@@ -53,6 +55,35 @@ export interface ServersResponse {
   servers: McpServer[];
 }
 
+/** Trust-grade order (FR-GW-02 §5.1): `untrusted < limited < trusted`. */
+export const TRUST_RANK: Record<TrustLevel, number> = {
+  untrusted: 0,
+  limited: 1,
+  trusted: 2,
+};
+
+export interface ServerTrustChangeRequest {
+  trustLevel: TrustLevel;
+  confirmed?: boolean;
+}
+
+/** `PUT /servers/{id}/trust` 200 response — the same lean shape `GET /servers` lists. */
+export type ServerTrustChangeResult = Omit<McpServer, "tools">;
+
+/** Standard control-plane error body (`services/control-plane/.../api/ApiError.kt`). */
+export interface ApiErrorBody {
+  code: string;
+  message: string;
+  details?: Record<string, string>;
+}
+
+/** `details` on the 409 `upgrade_requires_confirmation` response (FR-GW-02 §5.1). */
+export interface TrustUpgradeConflictDetails {
+  fromTrust: TrustLevel;
+  toTrust: TrustLevel;
+  affectedPolicyCount: string;
+}
+
 export interface RecentEventsResponse {
   events: SecurityEvent[];
 }
@@ -73,7 +104,12 @@ export interface SessionSummary {
 }
 
 /** Timeline node kinds and their markers (spec §5.3 no.3). */
-export type TimelineNodeType = "user" | "agent" | "tool_call" | "verdict" | "result";
+export type TimelineNodeType =
+  | "user"
+  | "agent"
+  | "tool_call"
+  | "verdict"
+  | "result";
 
 /** One node on the Timeline Rail. `detailId` links to its right-panel detail. */
 export interface TimelineEvent {

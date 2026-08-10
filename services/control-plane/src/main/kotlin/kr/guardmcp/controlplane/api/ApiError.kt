@@ -2,6 +2,8 @@ package kr.guardmcp.controlplane.api
 
 import kr.guardmcp.controlplane.domain.ApprovalAlreadyDecidedException
 import kr.guardmcp.controlplane.domain.ApprovalNotFoundException
+import kr.guardmcp.controlplane.domain.ServerNotFoundException
+import kr.guardmcp.controlplane.domain.TrustUpgradeRequiresConfirmationException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
@@ -47,4 +49,24 @@ class ApiExceptionHandler {
     fun handleUnreadable(exception: HttpMessageNotReadableException): ResponseEntity<ApiError> =
         ResponseEntity.status(HttpStatus.BAD_REQUEST)
             .body(ApiError("invalid_request_body", "Request body is missing or malformed"))
+
+    @ExceptionHandler(ServerNotFoundException::class)
+    fun handleServerNotFound(exception: ServerNotFoundException): ResponseEntity<ApiError> =
+        ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(ApiError("server_not_found", exception.message ?: "server not found"))
+
+    // FR-GW-02 §5.1: an upgrade without `confirmed: true` reports its impact instead of applying.
+    @ExceptionHandler(TrustUpgradeRequiresConfirmationException::class)
+    fun handleTrustUpgradeRequiresConfirmation(exception: TrustUpgradeRequiresConfirmationException): ResponseEntity<ApiError> =
+        ResponseEntity.status(HttpStatus.CONFLICT).body(
+            ApiError(
+                code = "upgrade_requires_confirmation",
+                message = exception.message ?: "trust upgrade requires confirmation",
+                details = mapOf(
+                    "fromTrust" to exception.server.trustLevel.wire,
+                    "toTrust" to exception.toTrust.wire,
+                    "affectedPolicyCount" to exception.affectedPolicyCount.toString(),
+                ),
+            ),
+        )
 }
