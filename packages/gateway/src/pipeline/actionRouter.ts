@@ -29,6 +29,9 @@ export interface RouterDeps {
   approvalBackend: ApprovalBackend;
 }
 
+// NFR-04: off by default. See GuardEvent.rawPayload (types.ts) for who's allowed to read this.
+const storeRawPayload = process.env.AUDIT_STORE_RAW_PAYLOAD === "true";
+
 const defaultApprovalConfig = {
   timeoutSeconds: 120,
   onTimeout: "block" as const,
@@ -304,6 +307,7 @@ function buildGuardEvent(
     ...(decision.normalizedPath !== undefined
       ? { normalizedPath: decision.normalizedPath }
       : {}),
+    ...(storeRawPayload ? { rawPayload: ctx.payload } : {}),
     ...extras,
   };
 }

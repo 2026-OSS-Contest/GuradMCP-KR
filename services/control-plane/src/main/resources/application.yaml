@@ -4,6 +4,18 @@ spring:
   threads:
     virtual:
       enabled: true
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/guardmcp}
+    username: ${SPRING_DATASOURCE_USERNAME:guardmcp}
+    password: ${SPRING_DATASOURCE_PASSWORD:guardmcp-local-only}
+  flyway:
+    enabled: true
+    # infra/postgres/001-demo-seed.sql (docker-compose) creates demo tables in the public
+    # schema before Flyway ever runs, so a fresh compose stack always looks like a
+    # populated-but-untracked schema to Flyway. Baseline it at version 0 so V1__create_guard_event
+    # applies on top instead of aborting with "found non-empty schema, no history table".
+    baseline-on-migrate: true
+    baseline-version: 0
 server:
   port: ${PORT:8080}
 management:
@@ -15,3 +27,8 @@ management:
     health:
       probes:
         enabled: true
+
+# NFR-04: raw (unmasked) payload text is never persisted unless explicitly opted in.
+# Default false — the audit event store only ever holds argsDigest/maskDiffRef.
+audit:
+  store-raw-payload: ${AUDIT_STORE_RAW_PAYLOAD:false}

@@ -1,4 +1,7 @@
 import type {
+  ApiEventLookupResponse,
+  ApiSessionsResponse,
+  ApiSessionTimelineResponse,
   Approval,
   ApprovalDecision,
   AttackRun,
@@ -6,6 +9,7 @@ import type {
   AttackScenariosResponse,
   DetectDirection,
   DetectionPreview,
+  EventDetail,
   GatewaySettings,
   McpServer,
   Overview,
@@ -16,37 +20,41 @@ import type {
   SessionsResponse,
   SettingsUpdate,
   TimelineResponse,
-  TrustLevel
+  TrustLevel,
 } from "./types";
+import {
+  toEventDetailFromLookup,
+  toSessionsResponse,
+  toTimelineResponse,
+} from "./replay-adapter";
 
 /** Empty in development, where MSW answers these same-origin requests. */
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 export class ApiError extends Error {
-  constructor(readonly status: number, statusText: string) {
+  constructor(
+    readonly status: number,
+    statusText: string,
+  ) {
     super(`${status} ${statusText}`);
     this.name = "ApiError";
   }
 }
 
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(`${BASE}/api/v1${path}`, { signal, headers: { Accept: "application/json" } });
+  const response = await fetch(`${BASE}/api/v1${path}`, {
+    signal,
+    headers: { Accept: "application/json" },
+  });
   if (!response.ok) throw new ApiError(response.status, response.statusText);
   return (await response.json()) as T;
 }
 
 async function post<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(`${BASE}/api/v1${path}`, { method: "POST", signal, headers: { Accept: "application/json" } });
-  if (!response.ok) throw new ApiError(response.status, response.statusText);
-  return (await response.json()) as T;
-}
-
-async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`${BASE}/api/v1${path}`, {
     method: "POST",
     signal,
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify(body)
+    headers: { Accept: "application/json" },
   });
   if (!response.ok) throw new ApiError(response.status, response.statusText);
   return (await response.json()) as T;
@@ -57,18 +65,51 @@ async function putJson<T>(path: string, body: unknown, signal?: AbortSignal): Pr
     method: "PUT",
     signal,
     headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
   if (!response.ok) throw new ApiError(response.status, response.statusText);
   return (await response.json()) as T;
 }
 
-export const getOverview = (signal?: AbortSignal) => get<Overview>("/overview", signal);
-export const getServers = (signal?: AbortSignal) => get<ServersResponse>("/servers", signal);
-export const getRecentEvents = (signal?: AbortSignal) => get<RecentEventsResponse>("/events/recent", signal);
-export const getSessions = (signal?: AbortSignal) => get<SessionsResponse>("/sessions", signal);
-export const getSessionTimeline = (id: string, signal?: AbortSignal) =>
-  get<TimelineResponse>(`/sessions/${encodeURIComponent(id)}/timeline`, signal);
+async function postJson<T>(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  const response = await fetch(`${BASE}/api/v1${path}`, {
+    method: "POST",
+    signal,
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new ApiError(response.status, response.statusText);
+  return (await response.json()) as T;
+}
+
+export const getOverview = (signal?: AbortSignal) =>
+  get<Overview>("/overview", signal);
+export const getServers = (signal?: AbortSignal) =>
+  get<ServersResponse>("/servers", signal);
+export const getRecentEvents = (signal?: AbortSignal) =>
+  get<RecentEventsResponse>("/events/recent", signal);
+export const getSessions = (signal?: AbortSignal): Promise<SessionsResponse> =>
+  get<ApiSessionsResponse>("/sessions", signal).then(toSessionsResponse);
+export const getSessionTimeline = (
+  id: string,
+  signal?: AbortSignal,
+): Promise<TimelineResponse> =>
+  get<ApiSessionTimelineResponse>(
+    `/sessions/${encodeURIComponent(id)}/timeline`,
+    signal,
+  ).then(toTimelineResponse);
+/** Deep-link support (spec §3.3): paints the detail panel without loading the full timeline first. */
+export const getEvent = (
+  id: string,
+  signal?: AbortSignal,
+): Promise<EventDetail> =>
+  get<ApiEventLookupResponse>(`/events/${encodeURIComponent(id)}`, signal).then(
+    toEventDetailFromLookup,
+  );
 export const getPolicy = (id: string, signal?: AbortSignal) =>
   get<PolicyDetail>(`/policies/${encodeURIComponent(id)}`, signal);
 /** Reveal-original (spec §5.3 no.5): records the access in the audit log. */
@@ -79,8 +120,15 @@ export const revealEvent = (id: string, signal?: AbortSignal) =>
 export const getAttackScenarios = (signal?: AbortSignal) =>
   get<AttackScenariosResponse>("/attacklab/scenarios", signal);
 /** Runs one scenario with the guard off or on; resolves once the run has finished. */
-export const runAttackScenario = (id: string, mode: AttackRunMode, signal?: AbortSignal) =>
-  post<AttackRun>(`/attacklab/run/${encodeURIComponent(id)}?mode=${mode}`, signal);
+export const runAttackScenario = (
+  id: string,
+  mode: AttackRunMode,
+  signal?: AbortSignal,
+) =>
+  post<AttackRun>(
+    `/attacklab/run/${encodeURIComponent(id)}?mode=${mode}`,
+    signal,
+  );
 
 /**
  * SCR-401 Detector (spec §5.4). The control plane serves this one for real. `direction` rides

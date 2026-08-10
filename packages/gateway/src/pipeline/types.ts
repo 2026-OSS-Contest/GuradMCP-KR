@@ -112,4 +112,11 @@ export interface GuardEvent {
   maskDiffRef?: string;
   decidedBy?: string;
   decidedAt?: string;
+  /**
+   * NFR-04 opt-in only: populated by `buildGuardEvent` (actionRouter.ts) solely when
+   * `AUDIT_STORE_RAW_PAYLOAD=true`. `./auditPublisher.ts` must be the only reader — it strips
+   * this from the shared bus object synchronously before any other `guardEventBus` subscriber
+   * (e.g. a future SSE writer) can observe it. Every other consumer must treat it as absent.
+   */
+  rawPayload?: string;
 }

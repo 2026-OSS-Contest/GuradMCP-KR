@@ -4,8 +4,11 @@ info:
   version: 1.0.0
   description: >-
     Public API v1 served by services/control-plane for the GuardMCP console.
-    All identifiers and demo data mirror the deterministic seeds in
-    infra/postgres/001-demo-seed.sql and infra/redis/001-demo-seed.sh.
+    Most identifiers and demo data mirror the deterministic seeds in
+    infra/postgres/001-demo-seed.sql and infra/redis/001-demo-seed.sh; the
+    Replay-only fixtures used to exercise hash-chain and pagination behavior
+    (see DemoSeed.SESSION_BROKEN_CHAIN_ID / SESSION_LARGE_ID) are in-memory
+    only and intentionally absent from those seed files.
 servers:
   - url: http://localhost:8080
     description: Local development (docker compose exposes the same port)
@@ -29,10 +32,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Overview"
+  /api/v1/sessions:
+    get:
+      tags: [sessions]
+      summary: List sessions for the Replay left panel
+      operationId: listSessions
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Session id or toolName substring match (case-insensitive)
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [live, closed]
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        "200":
+          description: Sessions ordered by startedAt descending
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionsResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /api/v1/sessions/{sessionId}/timeline:
     get:
       tags: [sessions]
-      summary: Guard event timeline for one session
+      summary: Replay timeline for one session
+      description: >-
+        Returns the session's timeline nodes (USER_INPUT, AGENT_STEP, TOOL_CALL,
+        VERDICT, RESULT) in ts-ascending order, eventId as the tie-break. Only
+        VERDICT nodes carry `detail` (matched policies, detections, mask diff
+        reference, hash chain). See docs/task-docs/GMCP-28/replay-api-spec.md.
       operationId: getSessionTimeline
       parameters:
         - name: sessionId
@@ -41,13 +88,70 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: event
+          in: query
+          required: false
+          description: Anchors the response on this eventId (deep-link support)
+          schema:
+            type: string
+            format: uuid
+        - name: since
+          in: query
+          required: false
+          description: ISO-8601 instant; only nodes strictly after this are returned
+          schema:
+            type: string
+            format: date-time
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 200
+            maximum: 1000
       responses:
         "200":
-          description: Ordered guard events for the session
+          description: Ordered timeline nodes for the session
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SessionTimeline"
+                $ref: "#/components/schemas/SessionTimelineResponse"
+        "400":
+          description: The `event` query param does not name an eventId in this session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/events/{eventId}:
+    get:
+      tags: [sessions]
+      summary: Single timeline node lookup (deep-link support)
+      description: >-
+        Same node schema as a timeline entry, with `sessionId` added, so a
+        deep link (`/replay/{sessionId}?event={eventId}`) can paint the detail
+        panel without loading the full timeline first.
+      operationId: getEvent
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The timeline node, with its owning sessionId
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventLookupResponse"
         "404":
           $ref: "#/components/responses/NotFound"
   /api/v1/policy-packs:
@@ -353,49 +457,172 @@ components:
         generatedAt:
           type: string
           format: date-time
-    GuardEvent:
+    Verdict:
+      type: string
+      description: >-
+        Replay/console display vocabulary (PROJECT.md 5.3, SCREEN-SPACE.md 4.3).
+        Distinct from GuardAction: mask_then_allow there corresponds to warn
+        here, so this API never emits "mask" despite an editorial slip in the
+        original replay-api-spec.md task doc.
+      enum: [allow, warn, require_approval, block]
+    TimelineNodeType:
+      type: string
+      enum: [USER_INPUT, AGENT_STEP, TOOL_CALL, VERDICT, RESULT]
+    ToolCallDirection:
+      type: string
+      enum: [req, res]
+    ChainStatus:
+      type: string
+      enum: [valid, broken]
+    Span:
       type: object
-      required: [id, sessionId, sequenceNo, verdict, toolName, riskScore, occurredAt]
+      required: [start, end]
       properties:
-        id:
-          type: string
-          format: uuid
-        sessionId:
-          type: string
-          format: uuid
-        sequenceNo:
+        start:
           type: integer
-        verdict:
-          $ref: "#/components/schemas/GuardAction"
+        end:
+          type: integer
+    Detection:
+      type: object
+      required: [type, subtype, span, confidence, maskedAs]
+      properties:
+        type:
+          type: string
+          description: PII | SECRET | INJ
+        subtype:
+          type: string
+        span:
+          $ref: "#/components/schemas/Span"
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        maskedAs:
+          type: string
+          description: Always the masked form; the raw match is never returned by this API.
+    VerdictDetail:
+      type: object
+      required: [matchedPolicyIds, detections, maskDiffRef, hash, prevHash]
+      properties:
+        matchedPolicyIds:
+          type: array
+          items:
+            type: string
+        detections:
+          type: array
+          items:
+            $ref: "#/components/schemas/Detection"
+        maskDiffRef:
+          type: string
+          description: URL the Mask Diff View fetches separately (GET /events/{id}/mask-diff, out of scope)
+        hash:
+          type: string
+        prevHash:
+          type: string
+          description: Empty string for the first VERDICT node in a session (chain genesis)
+    TimelineNode:
+      type: object
+      required: [eventId, type, ts, summary, detail]
+      description: >-
+        `detail` is populated only for type=VERDICT; every other node type
+        returns it as an explicit null. toolName/direction/argsDigest are only
+        present on TOOL_CALL nodes; verdict/riskScore only on VERDICT nodes.
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        type:
+          $ref: "#/components/schemas/TimelineNodeType"
+        ts:
+          type: string
+          format: date-time
+        summary:
+          type: string
         toolName:
           type: string
-        policyId:
-          type: [string, "null"]
+        direction:
+          $ref: "#/components/schemas/ToolCallDirection"
+        argsDigest:
+          type: string
+        verdict:
+          $ref: "#/components/schemas/Verdict"
         riskScore:
           type: integer
           minimum: 0
           maximum: 100
-        occurredAt:
-          type: string
-          format: date-time
-    SessionTimeline:
+        detail:
+          oneOf:
+            - $ref: "#/components/schemas/VerdictDetail"
+            - type: "null"
+    SessionSummary:
       type: object
-      required: [sessionId, scenarioId, title, createdAt, events]
+      required: [sessionId, agentLabel, startedAt, endedAt, isLive, eventCount, verdictSummary]
       properties:
         sessionId:
           type: string
           format: uuid
-        scenarioId:
+        agentLabel:
           type: string
-        title:
-          type: string
-        createdAt:
+        startedAt:
           type: string
           format: date-time
-        events:
+        endedAt:
+          type: [string, "null"]
+          format: date-time
+        isLive:
+          type: boolean
+        eventCount:
+          type: integer
+        verdictSummary:
+          type: object
+          description: Fixed keys allow/warn/require_approval/block, always all four.
+          additionalProperties:
+            type: integer
+    SessionsResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
           type: array
           items:
-            $ref: "#/components/schemas/GuardEvent"
+            $ref: "#/components/schemas/SessionSummary"
+        nextCursor:
+          type: [string, "null"]
+    SessionTimelineResponse:
+      type: object
+      required: [sessionId, agentLabel, startedAt, isLive, chainStatus, nodes, nextCursor]
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        agentLabel:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        isLive:
+          type: boolean
+        chainStatus:
+          $ref: "#/components/schemas/ChainStatus"
+        brokenAt:
+          type: string
+          format: uuid
+          description: First eventId whose hash chain check failed; present only when chainStatus=broken
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimelineNode"
+        nextCursor:
+          type: [string, "null"]
+    EventLookupResponse:
+      allOf:
+        - type: object
+          required: [sessionId]
+          properties:
+            sessionId:
+              type: string
+              format: uuid
+        - $ref: "#/components/schemas/TimelineNode"
     PolicyPack:
       type: object
       required: [id, version, enabled, description, updatedAt]

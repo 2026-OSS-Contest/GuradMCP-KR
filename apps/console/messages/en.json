@@ -99,7 +99,6 @@
       "pause": "Pause",
       "toStart": "To start",
       "nextVerdict": "Next verdict",
-      "blocked": "Block",
       "empty": "This session has no recorded events.",
       "node": {
         "user": "User",

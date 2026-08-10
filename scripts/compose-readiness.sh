@@ -53,7 +53,9 @@ write_report() {
   local status="$1" elapsed="$2" failed_service="${3:-}"
   local completed_at started_at
   completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  started_at="$(date -u -d "@${start_epoch}" +%Y-%m-%dT%H:%M:%SZ)"
+  # `date -d @epoch` is GNU-only (BSD/macOS date has no equivalent flag); node is
+  # already a hard dependency of this script (see the demo-scenario check below).
+  started_at="$(node -e "console.log(new Date(${start_epoch} * 1000).toISOString().replace(/\.\d+Z$/, 'Z'))")"
   cat >"$REPORT_PATH" <<JSON
 {
   "requirement": "GMCP-30",

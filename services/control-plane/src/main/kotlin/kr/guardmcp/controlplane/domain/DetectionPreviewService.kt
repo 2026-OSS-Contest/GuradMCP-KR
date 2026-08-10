@@ -28,9 +28,14 @@ class DetectionPreviewService(private val policyStore: PolicyStore) {
     private val koreanPhoneRegex = Regex("""01[016789]-?\d{3,4}-?\d{4}""")
     private val emailRegex = Regex("""[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}""")
 
+    // Descending severity, mirroring the ACTION_RANK/actionWeight tables that the real decision
+    // engine and gateway use to pick the strongest matching action (packages/policy-engine/src/decide.ts,
+    // packages/policy-engine/src/index.ts, packages/gateway/src/server.ts): block=4 > require_approval=3
+    // > warn=2 > mask_then_allow=1 > allow=0.
     private val failClosedOrder = listOf(
         GuardAction.BLOCK,
         GuardAction.REQUIRE_APPROVAL,
+        GuardAction.WARN,
         GuardAction.MASK_THEN_ALLOW,
         GuardAction.ALLOW,
     )
