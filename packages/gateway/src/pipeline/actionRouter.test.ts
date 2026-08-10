@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { InMemoryApprovalBackend, type ApprovalBackend, type ApprovalDecision, type ApprovalRequestId } from "../approval/backend.js";
+import { InMemoryApprovalBackend, type ApprovalBackend, type ApprovalOutcome, type ApprovalRequestId } from "../approval/backend.js";
 import type { Detection } from "../detect.js";
 import { routeByVerdict, type RouterDeps } from "./actionRouter.js";
 import { onGuardBusMessage } from "./events.js";
@@ -17,7 +17,7 @@ const baseCtx: ToolCallContext = {
 function stubBackend(overrides: Partial<ApprovalBackend> = {}): ApprovalBackend {
   return {
     async submit(): Promise<ApprovalRequestId> { return "req-stub"; },
-    async awaitDecision(): Promise<ApprovalDecision> { return "expired"; },
+    async awaitDecision(): Promise<ApprovalOutcome> { return { decision: "expired" }; },
     ...overrides
   };
 }
@@ -169,7 +169,7 @@ describe("awaitApproval (§4.5, FR-APR-03)", () => {
       ...decision,
       detections: [{ type: "PII", subtype: "PHONE", maskedAs: "[PHONE]", start, end: start + "010-1234-5678".length, confidence: 0.9 }]
     };
-    const routed = await routeByVerdict({ ...baseCtx, payload }, withDetections, deps({ awaitDecision: async () => "approve_masked" }));
+    const routed = await routeByVerdict({ ...baseCtx, payload }, withDetections, deps({ awaitDecision: async () => ({ decision: "approve_masked" }) }));
     expect(routed.verdict).toBe("mask_then_allow");
     if (routed.verdict !== "mask_then_allow") throw new Error("expected mask_then_allow");
     expect(routed.payload).toContain("[PHONE]");
@@ -177,7 +177,7 @@ describe("awaitApproval (§4.5, FR-APR-03)", () => {
   });
 
   it("reuses the passthrough path on approve", async () => {
-    const routed = await routeByVerdict(baseCtx, decision, deps({ awaitDecision: async () => "approve" }));
+    const routed = await routeByVerdict(baseCtx, decision, deps({ awaitDecision: async () => ({ decision: "approve" }) }));
     expect(routed.verdict).toBe("allow");
     if (routed.verdict !== "allow") throw new Error("expected allow");
     expect(routed.payload).toBe(baseCtx.payload);
@@ -185,7 +185,7 @@ describe("awaitApproval (§4.5, FR-APR-03)", () => {
 
   it("fails closed when approve_masked is returned but the policy disallows masked approval", async () => {
     const noMasking: PolicyDecision = { ...decision, approval: { ...decision.approval!, allowMaskedApproval: false } };
-    const routed = await routeByVerdict(baseCtx, noMasking, deps({ awaitDecision: async () => "approve_masked" }));
+    const routed = await routeByVerdict(baseCtx, noMasking, deps({ awaitDecision: async () => ({ decision: "approve_masked" }) }));
     expect(routed.verdict).toBe("block");
   });
 });
@@ -238,7 +238,7 @@ describe("GuardEvent emission (§4.1, §8.4 contract)", () => {
         detections: [],
         approval: { timeoutSeconds: 5, onTimeout: "block", allowMaskedApproval: false }
       };
-      await routeByVerdict(baseCtx, decision, deps({ awaitDecision: async () => "block" }));
+      await routeByVerdict(baseCtx, decision, deps({ awaitDecision: async () => ({ decision: "block" }) }));
     } finally {
       unsubscribe();
     }

@@ -14,6 +14,7 @@ import {
   type PolicyContext,
 } from "@guardmcp/policy-engine";
 import { createAutoExpireApprovalBackend } from "./approval/backend.js";
+import { createControlPlaneApprovalBackend } from "./controlPlane/approvalBackend.js";
 import { detect, mask, type Detection } from "./detect.js";
 import {
   digest,
@@ -48,9 +49,13 @@ const maxBodyBytes = 1024 * 1024;
 const gatewayServerId = process.env.GATEWAY_SERVER_ID ?? "demo-mcp-tools";
 startServerRegistrySync(process.env.CONTROL_PLANE_URL);
 
-// No approval console is wired up yet (GMCP-82); see ./approval/backend.ts.
+// With CONTROL_PLANE_URL set, a real Approval Console can resolve `require_approval` calls
+// (§5.1, GMCP-26); otherwise there is nothing to answer them, so fail-closed immediately
+// (see ./approval/backend.ts) rather than holding every such call open for its full timeout.
 const routerDeps: RouterDeps = {
-  approvalBackend: createAutoExpireApprovalBackend(),
+  approvalBackend: process.env.CONTROL_PLANE_URL
+    ? createControlPlaneApprovalBackend(process.env.CONTROL_PLANE_URL)
+    : createAutoExpireApprovalBackend(),
 };
 
 class PayloadTooLargeError extends Error {}
@@ -229,7 +234,28 @@ async function handleMcp(
       return;
     }
     const argumentsValue = params.arguments ?? {};
-    const requestPayload = JSON.stringify(argumentsValue);
+    // `to` is itself detected as PII.EMAIL (§5.1 GMCP-26): inspecting/masking the whole args
+    // JSON would corrupt the recipient address on a masked approval, so send_email's body is
+    // the only text under inspection here — `to`/`subject` pass through untouched either way.
+    const emailBody =
+      tool === "send_email" &&
+      isRecord(argumentsValue) &&
+      typeof argumentsValue.body === "string"
+        ? argumentsValue.body
+        : undefined;
+    const requestPayload = emailBody ?? JSON.stringify(argumentsValue);
+    // The Approval Card's `arguments` (NFR-04) is deliberately narrower than the inspected
+    // payload: `body` is exactly the text `maskPreview` already carries and whose raw form is
+    // cleared once the approval resolves (Control Plane's `decide()`/`sweepExpired()`) — sending
+    // it a second time as a plain arg would leave a copy that nothing ever clears. `to`/`subject`
+    // are the non-sensitive summary the card actually needs to show. Every other tool gets no
+    // `arguments` at all, since there is no such split to fall back on for an arbitrary payload.
+    const cardArguments =
+      emailBody !== undefined && isRecord(argumentsValue)
+        ? Object.fromEntries(
+            Object.entries(argumentsValue).filter(([key]) => key !== "body"),
+          )
+        : undefined;
     const requestDecision = evaluatePayload(requestPayload, {
       direction: "request",
       tool,
@@ -241,6 +267,7 @@ async function handleMcp(
         direction: "request",
         toolName: tool,
         payload: requestPayload,
+        arguments: cardArguments,
         sessionId,
         serverId: gatewayServerId,
         serverTrust,
@@ -255,12 +282,18 @@ async function handleMcp(
       send(response, 200, rpcBlockError(id, requestRouted.error));
       return;
     }
+    // Splice the (possibly masked) body back into the untouched `to`/`subject` rather than
+    // sending `requestRouted.payload` verbatim, which for send_email is body-only text.
+    const upstreamRequestBody =
+      emailBody !== undefined
+        ? JSON.stringify({ ...argumentsValue, body: requestRouted.payload })
+        : requestRouted.payload;
     const upstream = await upstreamJson(
       `/tools/call/${encodeURIComponent(tool)}`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: requestRouted.payload,
+        body: upstreamRequestBody,
       },
     );
     const responsePayload = JSON.stringify(upstream);

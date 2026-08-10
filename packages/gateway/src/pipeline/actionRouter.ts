@@ -14,6 +14,7 @@ import {
   emitApprovalResolved,
   emitGuardEvent,
 } from "./events.js";
+import { buildMaskPreview, buildRiskTags } from "./approvalPreview.js";
 import { explainDecision, type ApprovalResolution } from "./explanation.js";
 import { recordMaskDiff } from "./maskDiff.js";
 import type {
@@ -115,12 +116,24 @@ async function awaitApproval(
   const pendingEvent = buildGuardEvent(ctx, decision, "require_approval");
   emitGuardEvent(pendingEvent);
 
+  const policyId =
+    decision.decidingPolicyId ?? decision.matchedPolicyIds[0] ?? "unknown_policy";
   const requestId = await backend.submit({
     eventRef: pendingEvent.eventId,
+    sessionId: ctx.sessionId,
     direction: ctx.direction,
     toolName: ctx.toolName,
     riskScore: decision.riskScore,
     matchedPolicyIds: decision.matchedPolicyIds,
+    policyId,
+    message: decision.message,
+    arguments: ctx.arguments,
+    riskTags: buildRiskTags(decision.detections),
+    // NFR-04: only hand over a raw preview when the deciding policy actually allows a masked
+    // resolution — otherwise there is no legitimate reason for it to leave the request path.
+    ...(approval.allowMaskedApproval
+      ? { maskPreview: buildMaskPreview(ctx.payload, decision.detections) }
+      : {}),
   });
   emitApprovalCreated({
     requestId,
@@ -128,7 +141,7 @@ async function awaitApproval(
     timeoutSeconds: approval.timeoutSeconds,
   });
 
-  const rawDecision = await backend.awaitDecision(
+  const { decision: rawDecision, decidedBy: remoteDecidedBy } = await backend.awaitDecision(
     requestId,
     approval.timeoutSeconds * 1_000,
   );
@@ -157,7 +170,10 @@ async function awaitApproval(
       {
         eventId: resolvedEventId,
         ts: resolvedTs,
-        decidedBy: "approval-backend",
+        // A real reviewer's id wins; a backend that settled this without one falls back to
+        // a system timeout label for an expired wait, or a generic backend label otherwise
+        // (e.g. the in-memory reference backend's own `resolve()`, which carries no identity).
+        decidedBy: remoteDecidedBy ?? (rawDecision === "expired" ? "system:timeout" : "approval-backend"),
         decidedAt: new Date().toISOString(),
         ...(outcome.maskDiffRef ? { maskDiffRef: outcome.maskDiffRef } : {}),
       },
