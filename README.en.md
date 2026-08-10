@@ -81,6 +81,7 @@ Do not disclose vulnerabilities in public issues. [SECURITY.md](SECURITY.md#engl
 | Risk score formula | [Open](docs/risk-scoring.en.md) | [열기](docs/risk-scoring.md) |
 | Verdict explanations | [Open](docs/explanation.en.md) | [열기](docs/explanation.md) |
 | Korean service credentials | [Open](docs/korean-service-tokens.en.md) | [열기](docs/korean-service-tokens.md) |
+| High-entropy credential net | [Open](docs/high-entropy-secrets.en.md) | [열기](docs/high-entropy-secrets.md) |
 | Korean PII masking demo | [Open](docs/korean-pii-demo.en.md) | [열기](docs/korean-pii-demo.md) |
 | Benchmark gate | [Open](docs/benchmark-gate.en.md) | [열기](docs/benchmark-gate.md) |
 | Attack scenario catalog | [Open](docs/attack-scenarios.en.md) | [열기](docs/attack-scenarios.md) |
