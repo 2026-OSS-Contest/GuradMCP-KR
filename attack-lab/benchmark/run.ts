@@ -8,6 +8,8 @@ import { scoreRisk } from "../../packages/gateway/src/risk.js";
 import { evaluate, type Action, type Detection, type Direction, type EvaluationStrategy, type Policy, type ServerTrust } from "../../packages/policy-engine/src/index.js";
 
 interface Sample { id: string; label: boolean; text: string; type?: string }
+/** FR-SEC-02: a domestic-credential sample names the entry it must trip, not just "some secret". */
+interface KoreanServiceTokenSample { id: string; label: boolean; text: string; credential?: string }
 interface Scenario { id: string; text: string; expectBlocked: boolean }
 interface AuthorFixture {
   id: string;
@@ -41,6 +43,7 @@ const outputPath = resolve(
 
 const samples = JSON.parse(await readFile(new URL("../datasets/pii-benchmark.json", import.meta.url), "utf8")) as Sample[];
 const scenarios = JSON.parse(await readFile(new URL("../scenarios/threats.json", import.meta.url), "utf8")) as Scenario[];
+const koreanServiceTokenSamples = JSON.parse(await readFile(new URL("../datasets/korean-service-tokens.json", import.meta.url), "utf8")) as KoreanServiceTokenSample[];
 const policyRoot = fileURLToPath(new URL("../../policy-packs", import.meta.url));
 const fixtureRoot = fileURLToPath(new URL("../policy-fixtures", import.meta.url));
 const policyPacks = await loadPolicyPacks(policyRoot);
@@ -136,7 +139,37 @@ const recall = truePositive / (truePositive + falseNegative);
 const fpr = falsePositive / negatives;
 const precision = truePositive / (truePositive + falsePositive);
 const p95Ms = timings[Math.ceil(timings.length * 0.95) - 1] ?? Number.POSITIVE_INFINITY;
-const thresholds = { recall: 0.90, fpr: 0.05, p95Ms: 50, blockRate: 0.80, scenarioPassRate: 1, fixturePassRate: 1, fixtureCoverageRate: 1 };
+/**
+ * FR-SEC-02 (GMCP-71). Measured separately from the PII recall above rather than
+ * folded into it: mixing the two would let a strong PII score hide a domestic
+ * credential the detector stopped recognizing, and the whole claim of this file
+ * is the one thing foreign scanners do not cover.
+ *
+ * A positive sample must trip the exact entry it names, so renaming an entry
+ * without updating the dataset fails here instead of passing on a lucky match
+ * from a different rule.
+ */
+const koreanServiceTokenResults = koreanServiceTokenSamples.map((sample) => {
+  const subtypes = new Set(detect(sample.text).map(({ subtype }) => subtype));
+  const detected = sample.credential ? subtypes.has(sample.credential) : subtypes.size > 0;
+  return { id: sample.id, label: sample.label, credential: sample.credential ?? null, detected, passed: detected === sample.label };
+});
+const koreanServiceTokenPositives = koreanServiceTokenResults.filter(({ label }) => label);
+const koreanServiceTokenNegatives = koreanServiceTokenResults.filter(({ label }) => !label);
+const koreanServiceTokens = {
+  samples: koreanServiceTokenResults.length,
+  positives: koreanServiceTokenPositives.length,
+  negatives: koreanServiceTokenNegatives.length,
+  recall: koreanServiceTokenPositives.length === 0
+    ? 0
+    : koreanServiceTokenPositives.filter(({ detected }) => detected).length / koreanServiceTokenPositives.length,
+  fpr: koreanServiceTokenNegatives.length === 0
+    ? 0
+    : koreanServiceTokenNegatives.filter(({ detected }) => detected).length / koreanServiceTokenNegatives.length,
+  misses: koreanServiceTokenResults.filter(({ passed }) => !passed).map(({ id, credential, detected }) => ({ id, credential, detected }))
+};
+
+const thresholds = { recall: 0.90, fpr: 0.05, p95Ms: 50, blockRate: 0.80, scenarioPassRate: 1, fixturePassRate: 1, fixtureCoverageRate: 1, koreanServiceTokenRecall: 0.90, koreanServiceTokenFpr: 0.05 };
 const metrics = {
   recall,
   fpr,
@@ -154,7 +187,10 @@ const metrics = {
   labeledTypeCount,
   threats: scenarios.length,
   authorFixtures: fixtureResults.length,
-  policyCount: policies.length
+  policyCount: policies.length,
+  koreanServiceTokenSamples: koreanServiceTokens.samples,
+  koreanServiceTokenRecall: koreanServiceTokens.recall,
+  koreanServiceTokenFpr: koreanServiceTokens.fpr
 };
 const passed = metrics.recall >= thresholds.recall
   && metrics.fpr <= thresholds.fpr
@@ -162,7 +198,9 @@ const passed = metrics.recall >= thresholds.recall
   && metrics.blockRate >= thresholds.blockRate
   && metrics.scenarioPassRate >= thresholds.scenarioPassRate
   && metrics.fixturePassRate >= thresholds.fixturePassRate
-  && metrics.fixtureCoverageRate >= thresholds.fixtureCoverageRate;
+  && metrics.fixtureCoverageRate >= thresholds.fixtureCoverageRate
+  && metrics.koreanServiceTokenRecall >= thresholds.koreanServiceTokenRecall
+  && metrics.koreanServiceTokenFpr <= thresholds.koreanServiceTokenFpr;
 const fprWithoutValidation = negatives === 0 ? 0 : falsePositiveWithoutValidation / negatives;
 const validationImpact = {
   fprWithoutValidation,
@@ -170,7 +208,7 @@ const validationImpact = {
   falsePositivesPrevented: falsePositiveWithoutValidation - falsePositive,
   fprReduction: fprWithoutValidation - fpr
 };
-const report = { generatedAt: new Date().toISOString(), metrics, thresholds, perTypeRecall, validationImpact, scenarios: scenarioResults, fixtures: fixtureResults, fixtureCoverage, passed };
+const report = { generatedAt: new Date().toISOString(), metrics, thresholds, perTypeRecall, koreanServiceTokens, validationImpact, scenarios: scenarioResults, fixtures: fixtureResults, fixtureCoverage, passed };
 
 await mkdir(dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`);
