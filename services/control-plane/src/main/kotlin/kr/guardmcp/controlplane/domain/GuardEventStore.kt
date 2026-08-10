@@ -57,10 +57,6 @@ class GuardEventStore {
 
     fun session(id: UUID): DemoSession? = synchronized(lock) { sessions[id] }
 
-    fun timeline(sessionId: UUID): List<GuardEvent> = synchronized(lock) {
-        events.filter { it.sessionId == sessionId }.sortedBy(GuardEvent::sequenceNo)
-    }
-
     fun countByVerdictSince(verdict: GuardAction, since: Instant): Int = synchronized(lock) {
         events.count { it.verdict == verdict && !it.occurredAt.isBefore(since) }
     }

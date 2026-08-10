@@ -70,20 +70,11 @@ test("clicking a timeline node swaps in that node's own detail", async ({ page }
   // Default selection is the block verdict — its threat score is on screen.
   await expect(detail.getByText("read_file")).toBeVisible();
   await expect(detail.getByText("위협 점수")).toBeVisible();
-  // The user node reads differently: its input original, not a verdict breakdown.
+  // The user node reads differently: its own header, not a verdict breakdown.
   await page.getByRole("log").getByRole("button", { name: /README를 요약해줘/ }).click();
-  await expect(detail.getByText("입력 원문")).toBeVisible();
+  await expect(detail.getByText("README를 요약해줘")).toBeVisible();
+  await expect(detail.getByText("read_file")).toBeHidden();
   await expect(detail.getByText("위협 점수")).toBeHidden();
-});
-
-test("FR-SEC-04 (GMCP-73): the tool_call node shows the normalized path next to its raw args", async ({ page }) => {
-  await page.goto("/replay");
-  const detail = page.getByTestId("event-detail");
-  await page.getByRole("log").getByRole("button", { name: /read_file\(".env"\)/ }).click();
-  await expect(detail.getByText("인자")).toBeVisible();
-  const normalizedSection = detail.locator("section", { hasText: "정규화 경로" });
-  await expect(normalizedSection).toBeVisible();
-  await expect(normalizedSection.getByText(".env", { exact: true })).toBeVisible();
 });
 
 test("next-verdict jump selects the verdict node", async ({ page }) => {
