@@ -11,3 +11,4 @@ policies:
   - policies/block-injection-response.yaml
   - policies/warn-injection-request.yaml
   - policies/require-approval-external-secret-email.yaml
+  - policies/mask-secret-response.yaml

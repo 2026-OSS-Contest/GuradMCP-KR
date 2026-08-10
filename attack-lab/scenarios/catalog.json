@@ -122,7 +122,7 @@
         "stage": "secret-detector",
         "context": { "direction": "response", "tool": "read_file", "serverTrust": "untrusted" },
         "detections": ["SECRET.LLM_API_KEY"],
-        "policy": null,
+        "policy": "mask_secret_response",
         "verdict": "mask_then_allow"
       },
       "pass": "키 형식이 탐지되어 `[SECRET]`으로 마스킹된 뒤에만 전달된다.",
@@ -140,7 +140,7 @@
         "stage": "secret-detector",
         "context": { "direction": "response", "tool": "read_file", "serverTrust": "untrusted" },
         "detections": ["SECRET.GITHUB_TOKEN"],
-        "policy": null,
+        "policy": "mask_secret_response",
         "verdict": "mask_then_allow"
       },
       "pass": "토큰 접두사 규칙으로 탐지되어 마스킹된다.",
@@ -350,7 +350,7 @@
         "stage": "secret-detector",
         "context": { "direction": "response", "tool": "read_file", "serverTrust": "untrusted" },
         "detections": ["SECRET.AWS_KEY"],
-        "policy": null,
+        "policy": "mask_secret_response",
         "verdict": "mask_then_allow"
       },
       "pass": "키 접두사 형식이 탐지되어 마스킹된 뒤에만 전달된다.",
@@ -368,7 +368,7 @@
         "stage": "secret-detector",
         "context": { "direction": "response", "tool": "read_file", "serverTrust": "untrusted" },
         "detections": ["SECRET.WEBHOOK_SLACK", "SECRET.WEBHOOK_DISCORD"],
-        "policy": null,
+        "policy": "mask_secret_response",
         "verdict": "mask_then_allow"
       },
       "pass": "웹훅 URL은 그 자체가 인증 수단이므로 자격증명으로 탐지되어 마스킹된다.",
@@ -386,7 +386,7 @@
         "stage": "secret-detector",
         "context": { "direction": "response", "tool": "read_file", "serverTrust": "untrusted" },
         "detections": ["SECRET.JWT"],
-        "policy": null,
+        "policy": "mask_secret_response",
         "verdict": "mask_then_allow"
       },
       "pass": "세 구간 구조가 탐지되어 마스킹된다.",
@@ -404,7 +404,7 @@
         "stage": "secret-detector",
         "context": { "direction": "response", "tool": "read_file", "serverTrust": "untrusted" },
         "detections": ["SECRET.PRIVATE_KEY", "SECRET.PRIVATE_KEY_HEADER"],
-        "policy": null,
+        "policy": "mask_secret_response",
         "verdict": "mask_then_allow"
       },
       "pass": "완결된 키 블록뿐 아니라 끝이 잘려 헤더만 남은 조각도 탐지된다.",

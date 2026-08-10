@@ -177,6 +177,26 @@ export const runtimePolicyPacks: Record<string, RuntimePolicyPack> = {
           "allow_masked_approval": true
         },
         "message": "External transmission is waiting for human approval."
+      },
+      {
+        "id": "mask_secret_response",
+        "pack": "default",
+        "version": 1,
+        "description": "Mask credentials detected in MCP tool responses",
+        "priority": 310,
+        "match": {
+          "direction": "response",
+          "tool": "*",
+          "server_trust": "any",
+          "detections": {
+            "any_of": [
+              "SECRET"
+            ]
+          }
+        },
+        "action": "mask_then_allow",
+        "severity": "high",
+        "message": "Credential spans were masked before the tool response was delivered."
       }
     ]
   },
