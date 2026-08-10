@@ -114,6 +114,8 @@ args:
   body_exists: true
 ```
 
+**`path_regex` is special (FR-SEC-04).** When `<name>` is exactly `path`, the matcher probes `path`, then `file_path`, then `filename` for the first string field, and normalizes it before matching — repeated percent-decoding (up to 3 rounds), NFKC, null-byte truncation and control-char stripping, `~`/`$HOME` expansion, `.`/`..` resolution, then lowercasing (`packages/policy-engine/src/pathNormalize.ts`). The regex is tested against both the normalized full path and its basename, so variants like `./config/../.env`, `%2e%65%6e%76`, `id_rsa%00.png`, and `~/credentials.json` all resolve to `.env`/`id_rsa`/`credentials.json` and match. Any other `<name>_regex` skips this normalization and matches the raw value as-is.
+
 ### 3.5 `detections`
 
 Matches normalized detector tags. Tags are hierarchical, for example `SECRET`, `INJECTION.INDIRECT`, `PII.PHONE`, and `PII.RRN_LIKE`; parent `PII` matches every `PII.*` tag.

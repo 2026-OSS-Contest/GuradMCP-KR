@@ -163,6 +163,16 @@ export interface EventDetail {
   body?: { heading: string; lines: ContentLine[] };
   // Tool-call node: the target and the JSON arguments.
   call?: { target: string; argsCount: number; argsJson: string };
+  /**
+   * FR-SEC-04 (GMCP-73): the path-like arg (path/file_path/filename), after the
+   * gateway's normalization pipeline (URL-decode, NFKC, null-byte truncation,
+   * `~`/`$HOME` expansion, `.`/`..` resolution, lowercase). Lets the operator
+   * see the raw → normalized → matched-policy trail across the tool-call node's
+   * args and its `direction.policy`. GuardEvent carries this on the live SSE
+   * stream, but the GMCP-28 Replay wire contract's TimelineNode does not (see
+   * below), so it stays undefined for Replay until that contract adds it.
+   */
+  normalizedPath?: string;
   // Tool-call / tool-result node: the direction verdict.
   direction?: DirectionVerdict;
 
@@ -180,6 +190,100 @@ export interface PolicyDetail {
 
 export interface SessionsResponse {
   sessions: SessionSummary[];
+}
+
+// ── GMCP-28 backend wire contract ───────────────────────────────────────────
+// The actual shape services/control-plane returns for GET /sessions, GET /sessions/{id}/timeline
+// and GET /events/{id} (docs/task-docs/GMCP-28/replay-api-spec.md). Distinct from the UI-facing
+// types above: those describe what the SCR-301 components render (SessionSummary, TimelineEvent,
+// EventDetail); these describe what the wire actually carries. `lib/api/replay-adapter.ts`
+// converts one into the other, so the components above never see this shape directly.
+//
+// The API's `detail` (matched policies, detections, mask-diff reference, hash chain) is only
+// ever populated on VERDICT nodes; toolName/direction/argsDigest only on TOOL_CALL nodes; every
+// node still carries an explicit `detail: null` otherwise (never omitted).
+//
+// Fields the existing UI types ask for that this API does not provide — raw/masked body text,
+// real tool-call arguments (only a `sha256:` digest is ever returned, by design), the FR-SEC-04
+// normalized path (GMCP-73), and a verdict attached to a TOOL_CALL/RESULT node specifically (only
+// VERDICT nodes carry one) — have no source here. The adapter leaves EventDetail's
+// `body`/`call`/`normalizedPath`/`direction` undefined for now; the corresponding panel sections
+// simply do not render until those are backed by real endpoints.
+
+export type ApiTimelineNodeType = "USER_INPUT" | "AGENT_STEP" | "TOOL_CALL" | "VERDICT" | "RESULT";
+export type ApiToolCallDirection = "req" | "res";
+export type ApiChainStatus = "valid" | "broken";
+
+export interface ApiSpan {
+  start: number;
+  end: number;
+}
+
+export interface ApiDetection {
+  /** PII | SECRET | INJ. */
+  type: string;
+  subtype: string;
+  span: ApiSpan;
+  /** 0–1 (note: the UI-facing `Detection.confidence` above is 0–100). */
+  confidence: number;
+  /** Always the masked form; the raw match is never returned by this API. */
+  maskedAs: string;
+}
+
+export interface ApiVerdictDetail {
+  matchedPolicyIds: string[];
+  detections: ApiDetection[];
+  /** URL the Mask Diff View fetches separately (out of scope: GET /events/{id}/mask-diff). */
+  maskDiffRef: string;
+  hash: string;
+  /** Empty string for the first VERDICT node in a session (chain genesis). */
+  prevHash: string;
+}
+
+export interface ApiTimelineNode {
+  eventId: string;
+  type: ApiTimelineNodeType;
+  ts: string;
+  summary: string;
+  toolName?: string;
+  direction?: ApiToolCallDirection;
+  argsDigest?: string;
+  verdict?: Verdict;
+  riskScore?: number;
+  detail: ApiVerdictDetail | null;
+}
+
+export interface ApiSessionSummary {
+  sessionId: string;
+  agentLabel: string;
+  startedAt: string;
+  endedAt: string | null;
+  isLive: boolean;
+  eventCount: number;
+  /** Fixed keys allow/warn/require_approval/block, always all four. */
+  verdictSummary: Record<Verdict, number>;
+}
+
+export interface ApiSessionsResponse {
+  items: ApiSessionSummary[];
+  nextCursor: string | null;
+}
+
+export interface ApiSessionTimelineResponse {
+  sessionId: string;
+  agentLabel: string;
+  startedAt: string;
+  isLive: boolean;
+  chainStatus: ApiChainStatus;
+  /** First eventId whose hash chain check failed; present only when chainStatus is "broken". */
+  brokenAt?: string;
+  nodes: ApiTimelineNode[];
+  nextCursor: string | null;
+}
+
+/** GET /events/{id}: the same node schema as a timeline entry, with `sessionId` added. */
+export interface ApiEventLookupResponse extends ApiTimelineNode {
+  sessionId: string;
 }
 
 // ── SCR-201 Attack Lab (spec §5.2) ──────────────────────────────────────────

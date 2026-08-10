@@ -1,0 +1,16 @@
+id: block_env_file_read_bypass_double_encoded
+description: FR-SEC-04 §4 case #3 — double percent-encoding (%252e%2565%256e%2576) decodes to .env within the 3-iteration budget and is blocked.
+coverage:
+  policy_id: block_env_file_read
+  expectation: match
+event:
+  direction: request
+  tool: read_file
+  server_trust: trusted
+  args:
+    path: "%252e%2565%256e%2576"
+  detections: []
+  risk_score: 10
+expected:
+  action: block
+  matched_policy_ids: [block_env_file_read]

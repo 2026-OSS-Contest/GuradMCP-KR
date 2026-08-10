@@ -99,7 +99,6 @@
       "pause": "정지",
       "toStart": "처음으로",
       "nextVerdict": "다음 판정",
-      "blocked": "차단",
       "empty": "이 세션에는 기록된 이벤트가 없습니다.",
       "node": {
         "user": "사용자",
@@ -123,6 +122,7 @@
       "target": "대상",
       "args": "인자",
       "argsCount": "{count}개",
+      "normalizedPath": "정규화 경로",
       "morePolicies": "외 {count}"
     },
     "policy": {

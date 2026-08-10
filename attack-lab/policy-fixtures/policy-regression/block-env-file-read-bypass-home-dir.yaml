@@ -1,0 +1,16 @@
+id: block_env_file_read_bypass_home_dir
+description: FR-SEC-04 §4 case #5 — home-directory shorthand (~/credentials.json) expands to root-relative and is blocked.
+coverage:
+  policy_id: block_env_file_read
+  expectation: match
+event:
+  direction: request
+  tool: read_file
+  server_trust: trusted
+  args:
+    path: "~/credentials.json"
+  detections: []
+  risk_score: 10
+expected:
+  action: block
+  matched_policy_ids: [block_env_file_read]

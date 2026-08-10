@@ -4,6 +4,9 @@ import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.core.env.Environment
+import org.springframework.test.context.DynamicPropertyRegistry
+import org.springframework.test.context.DynamicPropertySource
+import org.testcontainers.postgresql.PostgreSQLContainer
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -13,6 +16,11 @@ import java.net.http.HttpResponse
  * Shared HTTP scaffolding for the RANDOM_PORT API tests. Spring Boot 4 exposes neither
  * TestRestTemplate nor a com.fasterxml ObjectMapper bean, so the tests drive the server
  * with the JDK HTTP client and parse JSON with their own mapper.
+ *
+ * Every `@SpringBootTest` now needs a real datasource (GMCP-24 wires Flyway + JDBC), so this
+ * base class starts one Postgres container and shares it across all subclasses/test JVM
+ * forks (the "singleton container" pattern) instead of each test class paying its own
+ * startup cost.
  */
 abstract class ApiTestSupport {
     @Autowired
@@ -42,4 +50,16 @@ abstract class ApiTestSupport {
 
     protected fun parseList(body: String): List<Map<String, Any?>> =
         objectMapper.readValue(body, object : TypeReference<List<Map<String, Any?>>>() {})
+
+    companion object {
+        private val postgres = PostgreSQLContainer("postgres:16-alpine").apply { start() }
+
+        @JvmStatic
+        @DynamicPropertySource
+        fun registerDataSource(registry: DynamicPropertyRegistry) {
+            registry.add("spring.datasource.url", postgres::getJdbcUrl)
+            registry.add("spring.datasource.username", postgres::getUsername)
+            registry.add("spring.datasource.password", postgres::getPassword)
+        }
+    }
 }

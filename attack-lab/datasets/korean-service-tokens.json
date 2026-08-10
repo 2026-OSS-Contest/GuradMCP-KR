@@ -1,0 +1,27 @@
+[
+  {"id": "kst-01", "label": true, "credential": "TOSS_SECRET_KEY", "text": "결제 서버 환경변수에 live_sk_D5GePWvyJnrK0W0k6q8gLzN97Eoq 를 넣어두었습니다."},
+  {"id": "kst-02", "label": true, "credential": "TOSS_SECRET_KEY", "text": "TOSS_SECRET=test_sk_XZYkKL4Nnq2mB7wRp0vTdGjE6sHc 로 샌드박스 결제를 확인했어요."},
+  {"id": "kst-03", "label": true, "credential": "TOSS_CLIENT_KEY", "text": "프론트엔드 결제창 초기화에 test_ck_ZORzdMaqN3wQd5k6ygr5AkYXQGwy 를 사용합니다."},
+  {"id": "kst-04", "label": true, "credential": "TOSS_CLIENT_KEY", "text": "운영 클라이언트 키는 live_ck_P9mLtVbXs2QwEr5Yu8Io1AzN4Cdf 입니다."},
+  {"id": "kst-05", "label": true, "credential": "KAKAO_ADMIN_HEADER", "text": "curl -H 'Authorization: KakaoAK 0f1e2d3c4b5a69788796a5b4c3d2e1f0' https://kapi.kakao.com/v2/user/me"},
+  {"id": "kst-06", "label": true, "credential": "KAKAO_ADMIN_HEADER", "text": "메시지 발송이 401로 실패합니다. 헤더는 Authorization: KakaoAK a1b2c3d4e5f60718293a4b5c6d7e8f90 입니다."},
+  {"id": "kst-07", "label": true, "credential": "KAKAO_APP_KEY", "text": "kakao_rest_api_key = 9a8b7c6d5e4f30211f2e3d4c5b6a7980 으로 설정했습니다."},
+  {"id": "kst-08", "label": true, "credential": "KAKAO_APP_KEY", "text": "설정 파일에 KAKAO_JAVASCRIPT_KEY: \"112233445566778899aabbccddeeff00\" 이 남아 있습니다."},
+  {"id": "kst-09", "label": true, "credential": "NCP_ACCESS_KEY", "text": "네이버 클라우드 서브 계정 키 ncp_iam_BPAMKR12345678abcdefgh 로 접근했습니다."},
+  {"id": "kst-10", "label": true, "credential": "NCP_ACCESS_KEY", "text": "배포 스크립트에 ncp_iam_BPASKRzyxw9876543210QwErTy 가 하드코딩되어 있어요."},
+  {"id": "kst-11", "label": true, "credential": "NAVER_CLIENT_SECRET", "text": "검색 API 호출 헤더 X-Naver-Client-Secret: aB3dE5gH7j 를 확인해 주세요."},
+  {"id": "kst-12", "label": true, "credential": "NAVER_CLIENT_SECRET", "text": "요청 실패 로그: X-Naver-Client-Secret=Zq8Wm2Nx4P 로 전송됨."},
+  {"id": "kst-13", "label": true, "credential": "BROKERAGE_APP_SECRET", "text": "증권 Open API 설정에 appsecret=Qk9HVVNTRUNSRVRWQUxVRUZPUlRFU1RJTkdPTkxZMTIzNA== 가 들어 있습니다."},
+  {"id": "kst-14", "label": true, "credential": "BROKERAGE_APP_SECRET", "text": "토큰 발급 요청 본문: {\"appkey\":\"PSxxxxxxxxxxxxxxxxxxxx\",\"appsecret\":\"U1lOVEhFVElDQlJPS0VSQVBQU0VDUkVURk9SVEVTVFNPTkxZQUJDRA\"}"},
+
+  {"id": "kst-n01", "label": false, "text": "설정 파일 체크섬은 9a8b7c6d5e4f30211f2e3d4c5b6a7980 이고 배포 후에도 동일합니다."},
+  {"id": "kst-n02", "label": false, "text": "기능 플래그 test_skip_migration_when_empty 를 켜면 마이그레이션을 건너뜁니다."},
+  {"id": "kst-n03", "label": false, "text": "테스트 계정 test_ck 라는 이름으로 만들어 두었습니다."},
+  {"id": "kst-n04", "label": false, "text": "appkey=short123 만으로는 토큰을 발급받을 수 없습니다."},
+  {"id": "kst-n05", "label": false, "text": "카카오 로그인 연동 방법과 네이버 검색 API 사용법을 알려주세요."},
+  {"id": "kst-n06", "label": false, "text": "토스페이먼츠 결제창 문서에서 클라이언트 키와 시크릿 키의 차이를 확인했습니다."},
+  {"id": "kst-n07", "label": false, "text": "커밋 해시 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 를 참고하세요."},
+  {"id": "kst-n08", "label": false, "text": "네이버 클라우드 플랫폼 콘솔에서 서브 계정 권한을 확인해 주세요."},
+  {"id": "kst-n09", "label": false, "text": "라이브 배포 전에 live_check_deploy_readiness 스크립트를 실행합니다."},
+  {"id": "kst-n10", "label": false, "text": "증권사 Open API 신청은 앱 등록 후 승인까지 하루 정도 걸립니다."}
+]

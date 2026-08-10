@@ -1,62 +1,136 @@
-// SCR-301 Replay fixtures, reproducing the Figma frames: the session list, the #s-0712
-// timeline, and a distinct right-panel detail for each node kind — the user's input, the
-// agent's reasoning, the tool call, the block verdict, and the tool result.
+// SCR-301 Replay fixtures, reproducing the Figma frames: the session list and the #s-0712
+// timeline. These are shaped as the real GMCP-28 wire contract (`Api*` types) — the same JSON
+// services/control-plane returns — so `lib/api/replay-adapter.ts` runs identically against the
+// mock and a real backend, and dev mode never drifts from what prod actually serves.
 
 import type {
+  ApiEventLookupResponse,
+  ApiSessionSummary,
+  ApiSessionTimelineResponse,
+  ApiTimelineNode,
   ContentLine,
-  EventDetail,
-  RevealContent,
-  SessionSummary,
-  TimelineEvent,
-  TimelineResponse
+  RevealContent
 } from "@/lib/api/types";
 
 // A fixed clock keeps the timestamps matching the design ("14:02:41" etc.).
 const DAY = "2026-07-04T";
 
-export const SESSIONS: SessionSummary[] = [
+export const SESSIONS: ApiSessionSummary[] = [
   {
-    id: "s-0712",
+    sessionId: "s-0712",
+    agentLabel: "claude-code-cli",
     startedAt: `${DAY}14:02:00+09:00`,
-    live: true,
+    endedAt: null,
+    isLive: true,
     eventCount: 18,
-    verdicts: [
-      { verdict: "block", count: 4 },
-      { verdict: "warn", count: 4 }
-    ]
+    verdictSummary: { allow: 0, warn: 4, require_approval: 0, block: 4 }
   },
   {
-    id: "s-0711",
+    sessionId: "s-0711",
+    agentLabel: "claude-code-cli",
     startedAt: `${DAY}11:38:00+09:00`,
-    live: false,
+    endedAt: `${DAY}11:52:00+09:00`,
+    isLive: false,
     eventCount: 17,
-    verdicts: [
-      { verdict: "block", count: 2 },
-      { verdict: "require_approval", count: 4 }
-    ]
+    verdictSummary: { allow: 0, warn: 0, require_approval: 4, block: 2 }
   },
   {
-    id: "s-0710",
+    sessionId: "s-0710",
+    agentLabel: "claude-code-cli",
     startedAt: `${DAY}09:15:00+09:00`,
-    live: false,
+    endedAt: `${DAY}09:31:00+09:00`,
+    isLive: false,
     eventCount: 16,
-    verdicts: [
-      { verdict: "warn", count: 4 },
-      { verdict: "allow", count: 7 }
-    ]
+    verdictSummary: { allow: 7, warn: 4, require_approval: 0, block: 0 }
   }
 ];
 
-const TIMELINE_0712: TimelineEvent[] = [
-  { id: "e1", type: "user", at: `${DAY}14:02:12+09:00`, title: "README를 요약해줘" },
-  { id: "e2", type: "agent", at: `${DAY}14:02:28+09:00`, title: "README 내 지시문 발견", subtitle: ".env 읽기 설정" },
-  { id: "e3", type: "tool_call", at: `${DAY}14:02:30+09:00`, title: 'read_file(".env")' },
-  { id: "e4", type: "verdict", at: `${DAY}14:02:41+09:00`, title: "차단", verdict: "block", policy: "block_env_file_read" },
-  { id: "e5", type: "result", at: `${DAY}14:02:49+09:00`, title: "error반환 –", subtitle: "“GuardMCP 정책에 의해 차단되었습니다”" },
-  { id: "e6", type: "agent", at: `${DAY}14:02:28+09:00`, title: "차단 응답 수신", subtitle: "작업 중단, 사용자에게 보고" }
+const TIMELINE_0712_NODES: ApiTimelineNode[] = [
+  { eventId: "e1", type: "USER_INPUT", ts: `${DAY}14:02:12+09:00`, summary: "README를 요약해줘", detail: null },
+  {
+    eventId: "e2",
+    type: "AGENT_STEP",
+    ts: `${DAY}14:02:28+09:00`,
+    summary: "README 내 지시문 발견 · .env 읽기 설정",
+    detail: null
+  },
+  {
+    eventId: "e3",
+    type: "TOOL_CALL",
+    ts: `${DAY}14:02:30+09:00`,
+    summary: 'read_file(".env")',
+    toolName: "read_file",
+    direction: "req",
+    argsDigest: "sha256:9f2c1af9d3e7…",
+    detail: null
+  },
+  {
+    eventId: "e4",
+    type: "VERDICT",
+    ts: `${DAY}14:02:41+09:00`,
+    summary: "차단",
+    verdict: "block",
+    riskScore: 92,
+    detail: {
+      matchedPolicyIds: ["block_env_file_read", "deny_secret_exfil"],
+      detections: [
+        { type: "SECRET", subtype: "OPENAI_KEY", span: { start: 0, end: 20 }, confidence: 0.98, maskedAs: "SECRET_OPENAI" },
+        { type: "SECRET", subtype: "GENERIC_PASSWORD", span: { start: 25, end: 41 }, confidence: 0.92, maskedAs: "텍스트" }
+      ],
+      maskDiffRef: "/api/v1/events/e4/mask-diff",
+      hash: "a3f9c1",
+      prevHash: ""
+    }
+  },
+  {
+    eventId: "e5",
+    type: "RESULT",
+    ts: `${DAY}14:02:49+09:00`,
+    summary: '"GuardMCP 정책에 의해 차단되었습니다" 오류 반환',
+    detail: null
+  },
+  {
+    eventId: "e6",
+    type: "AGENT_STEP",
+    ts: `${DAY}14:02:28+09:00`,
+    summary: "차단 응답 수신 · 작업 중단, 사용자에게 보고",
+    detail: null
+  }
 ];
 
-// The consultation log the get_log tool read — the source of the masked PII on this screen.
+const TIMELINE_0712: ApiSessionTimelineResponse = {
+  sessionId: "s-0712",
+  agentLabel: "claude-code-cli",
+  startedAt: `${DAY}14:02:00+09:00`,
+  isLive: true,
+  chainStatus: "valid",
+  nodes: TIMELINE_0712_NODES,
+  nextCursor: null
+};
+
+const emptyTimeline = (sessionId: string): ApiSessionTimelineResponse => ({
+  sessionId,
+  agentLabel: "claude-code-cli",
+  startedAt: `${DAY}00:00:00+09:00`,
+  isLive: false,
+  chainStatus: "valid",
+  nodes: [],
+  nextCursor: null
+});
+
+export function timelineOf(sessionId: string): ApiSessionTimelineResponse {
+  return sessionId === "s-0712" ? TIMELINE_0712 : emptyTimeline(sessionId);
+}
+
+/** GET /events/{id}: only the #s-0712 fixture has scripted nodes to look up. */
+export function eventLookup(eventId: string): ApiEventLookupResponse | undefined {
+  const node = TIMELINE_0712_NODES.find((candidate) => candidate.eventId === eventId);
+  return node && { sessionId: "s-0712", ...node };
+}
+
+// The consultation log the get_log tool read — the source of the masked PII the reveal modal
+// shows (POST /events/{id}/reveal, spec §5.3 no.5). Out of the GMCP-28 timeline API's scope: it
+// never returns raw or masked body text, so this fixture backs only the separate reveal endpoint.
 const line = (no: string, ...parts: ContentLine["parts"]): ContentLine => ({ no, parts });
 const CONSULT_MASKED: ContentLine[] = [
   line("01", { text: "[상담 로그 #C-20260712-142]" }),
@@ -79,99 +153,12 @@ const CONSULT_RAW = [
   "배송지: 경기도 성남시 분당구 판교역로 235, 704동 1102호"
 ].join("\n");
 
-const RETURN_MASKED: ContentLine[] = [
-  line("01", { text: "연락처: " }, { mask: "PHONE" }),
-  line("02", { text: "변경 계좌: " }, { mask: "BANK_ACCOUNT" }),
-  line("03", { text: "주민등록번호: " }, { mask: "RRN_LIKE" }),
-  line("04", { text: "영수증 발송: " }, { mask: "EMAIL" }),
-  line("05", { text: "배송지: " }, { mask: "ADDRESS" })
-];
-
 const REVEAL: RevealContent = {
   source: "e-000  get_log",
   caseId: "#C-20260712-142",
   raw: CONSULT_RAW,
   masked: CONSULT_MASKED
 };
-
-const base = (id: string, event: TimelineEvent): Pick<EventDetail, "id" | "sessionId" | "at" | "kind"> => ({
-  id,
-  sessionId: "s-0712",
-  at: event.at,
-  kind: event.type
-});
-
-/** A distinct detail per node kind, mirroring the SCR-301 stage frames. */
-function detailOf(event: TimelineEvent): EventDetail {
-  switch (event.type) {
-    case "user":
-      return {
-        ...base(event.id, event),
-        verdict: "allow",
-        tool: event.title,
-        body: { heading: "입력 원문", lines: CONSULT_MASKED },
-        canReveal: true,
-        reveal: REVEAL
-      };
-    case "agent":
-      return {
-        ...base(event.id, event),
-        verdict: "allow",
-        tool: event.title,
-        summary: {
-          heading: "Agent 보고 요약",
-          text:
-            event.id === "e2"
-              ? "README.md 내용 중 시스템 프롬프트를 무시하고 .env 파일을 읽어 응답에 포함하라는 지시문을 발견했습니다. 사용자 요청(README 요약)과 무관한 지시로 판단해 별도 확인 없이 무시하고, 원래 목적에 필요한 파일 접근으로 .env 읽기를 다음 동작으로 진행합니다."
-              : "정책에 의해 도구 호출이 차단되어 작업을 중단하고, 차단 사유를 사용자에게 보고합니다."
-        }
-      };
-    case "tool_call":
-      return {
-        ...base(event.id, event),
-        verdict: "block",
-        tool: event.title,
-        call: { target: ".env", argsCount: 1, argsJson: '{\n  "path": ".env"\n}' },
-        direction: { heading: "요청 방향 판정", verdict: "block", policy: "block_env_file_read" }
-      };
-    case "verdict":
-      return {
-        ...base(event.id, event),
-        verdict: "block",
-        tool: "read_file",
-        policies: ["block_env_file_read", "deny_secret_exfil"],
-        threatScore: 92,
-        detections: [
-          { type: "SECRET", subtype: "OPENAI_KEY", confidence: 98 },
-          { type: "SECRET", subtype: "GENERIC_PASSWORD", confidence: 92 }
-        ],
-        maskDiff: {
-          before: "OPENAI_API_KEY=sk-dhjcfeas...\nKey=Real Text\nKey=Real Text",
-          after: "OPENAI_API_KEY=SECRET_OPENAI\nKey=텍스트\nKey=텍스트"
-        },
-        chain: { status: "verified", hash: "a3f9c1" },
-        canReveal: true,
-        reveal: REVEAL
-      };
-    case "result":
-      return {
-        ...base(event.id, event),
-        verdict: "warn",
-        tool: "read_file",
-        body: { heading: "반환 데이터 요약", lines: RETURN_MASKED },
-        direction: { heading: "응답 방향 판정", verdict: "warn", policy: "mask_kr_phone", morePolicies: 2 },
-        canReveal: true,
-        reveal: REVEAL
-      };
-  }
-}
-
-export function timelineOf(sessionId: string): TimelineResponse {
-  if (sessionId !== "s-0712") return { events: [], details: {} };
-  const details: Record<string, EventDetail> = {};
-  for (const event of TIMELINE_0712) details[event.id] = detailOf(event);
-  return { events: TIMELINE_0712, details };
-}
 
 export function revealOf(): RevealContent {
   return REVEAL;

@@ -5,19 +5,44 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mask, type Detection } from "../detect.js";
 import type { ApprovalBackend, ApprovalDecision } from "../approval/backend.js";
-import { buildGuardBlockError, summarizeDetections } from "../errors/guard-block-error.js";
-import { emitApprovalCreated, emitApprovalResolved, emitGuardEvent } from "./events.js";
+import {
+  buildGuardBlockError,
+  summarizeDetections,
+} from "../errors/guard-block-error.js";
+import {
+  emitApprovalCreated,
+  emitApprovalResolved,
+  emitGuardEvent,
+} from "./events.js";
 import { explainDecision, type ApprovalResolution } from "./explanation.js";
 import { recordMaskDiff } from "./maskDiff.js";
-import type { Action, GuardEvent, GuardEventDetection, PolicyDecision, RoutedResult, ToolCallContext } from "./types.js";
+import type {
+  Action,
+  GuardEvent,
+  GuardEventDetection,
+  PolicyDecision,
+  RoutedResult,
+  ToolCallContext,
+} from "./types.js";
 
 export interface RouterDeps {
   approvalBackend: ApprovalBackend;
 }
 
-const defaultApprovalConfig = { timeoutSeconds: 120, onTimeout: "block" as const, allowMaskedApproval: false };
+// NFR-04: off by default. See GuardEvent.rawPayload (types.ts) for who's allowed to read this.
+const storeRawPayload = process.env.AUDIT_STORE_RAW_PAYLOAD === "true";
 
-export async function routeByVerdict(ctx: ToolCallContext, decision: PolicyDecision, deps: RouterDeps): Promise<RoutedResult> {
+const defaultApprovalConfig = {
+  timeoutSeconds: 120,
+  onTimeout: "block" as const,
+  allowMaskedApproval: false,
+};
+
+export async function routeByVerdict(
+  ctx: ToolCallContext,
+  decision: PolicyDecision,
+  deps: RouterDeps,
+): Promise<RoutedResult> {
   switch (decision.verdict) {
     case "allow":
     case "warn":
@@ -31,7 +56,11 @@ export async function routeByVerdict(ctx: ToolCallContext, decision: PolicyDecis
   }
 }
 
-function passthrough(ctx: ToolCallContext, decision: PolicyDecision, verdict: "allow" | "warn"): RoutedResult {
+function passthrough(
+  ctx: ToolCallContext,
+  decision: PolicyDecision,
+  verdict: "allow" | "warn",
+): RoutedResult {
   try {
     return computePassthrough(ctx, verdict);
   } finally {
@@ -39,7 +68,10 @@ function passthrough(ctx: ToolCallContext, decision: PolicyDecision, verdict: "a
   }
 }
 
-function blockWithStandardError(ctx: ToolCallContext, decision: PolicyDecision): RoutedResult {
+function blockWithStandardError(
+  ctx: ToolCallContext,
+  decision: PolicyDecision,
+): RoutedResult {
   // Minted once so the error returned to the Agent and the GuardEvent emitted for Replay
   // share one eventId/timestamp (AC #5: `/replay/{sessionId}?event={eventId}` must resolve).
   const eventId = randomUUID();
@@ -51,19 +83,33 @@ function blockWithStandardError(ctx: ToolCallContext, decision: PolicyDecision):
   }
 }
 
-function maskThenAllow(ctx: ToolCallContext, decision: PolicyDecision): RoutedResult {
+function maskThenAllow(
+  ctx: ToolCallContext,
+  decision: PolicyDecision,
+): RoutedResult {
   let maskDiffRef: string | undefined;
   try {
     const computed = computeMask(ctx, decision);
     maskDiffRef = computed.maskDiffRef;
     return computed.result;
   } finally {
-    emitGuardEvent(buildGuardEvent(ctx, decision, "mask_then_allow", maskDiffRef ? { maskDiffRef } : {}));
+    emitGuardEvent(
+      buildGuardEvent(
+        ctx,
+        decision,
+        "mask_then_allow",
+        maskDiffRef ? { maskDiffRef } : {},
+      ),
+    );
   }
 }
 
 /** §4.5: submit → wait up to `approval.timeoutSeconds` (fail-closed on timeout) → replay 4.2/4.3/4.4 with the resolved outcome. */
-async function awaitApproval(ctx: ToolCallContext, decision: PolicyDecision, backend: ApprovalBackend): Promise<RoutedResult> {
+async function awaitApproval(
+  ctx: ToolCallContext,
+  decision: PolicyDecision,
+  backend: ApprovalBackend,
+): Promise<RoutedResult> {
   const approval = decision.approval ?? defaultApprovalConfig;
 
   const pendingEvent = buildGuardEvent(ctx, decision, "require_approval");
@@ -74,24 +120,50 @@ async function awaitApproval(ctx: ToolCallContext, decision: PolicyDecision, bac
     direction: ctx.direction,
     toolName: ctx.toolName,
     riskScore: decision.riskScore,
-    matchedPolicyIds: decision.matchedPolicyIds
+    matchedPolicyIds: decision.matchedPolicyIds,
   });
-  emitApprovalCreated({ requestId, eventRef: pendingEvent.eventId, timeoutSeconds: approval.timeoutSeconds });
+  emitApprovalCreated({
+    requestId,
+    eventRef: pendingEvent.eventId,
+    timeoutSeconds: approval.timeoutSeconds,
+  });
 
-  const rawDecision = await backend.awaitDecision(requestId, approval.timeoutSeconds * 1_000);
-  emitApprovalResolved({ requestId, eventRef: pendingEvent.eventId, decision: rawDecision });
+  const rawDecision = await backend.awaitDecision(
+    requestId,
+    approval.timeoutSeconds * 1_000,
+  );
+  emitApprovalResolved({
+    requestId,
+    eventRef: pendingEvent.eventId,
+    decision: rawDecision,
+  });
 
   // Same eventId/timestamp pairing rationale as `blockWithStandardError` above.
   const resolvedEventId = randomUUID();
   const resolvedTs = new Date().toISOString();
-  const outcome = resolveApprovalOutcome(ctx, decision, rawDecision, approval.allowMaskedApproval, resolvedEventId, resolvedTs);
-  emitGuardEvent(buildGuardEvent(ctx, decision, outcome.verdict, {
-    eventId: resolvedEventId,
-    ts: resolvedTs,
-    decidedBy: "approval-backend",
-    decidedAt: new Date().toISOString(),
-    ...(outcome.maskDiffRef ? { maskDiffRef: outcome.maskDiffRef } : {})
-  }, outcome.resolution));
+  const outcome = resolveApprovalOutcome(
+    ctx,
+    decision,
+    rawDecision,
+    approval.allowMaskedApproval,
+    resolvedEventId,
+    resolvedTs,
+  );
+  emitGuardEvent(
+    buildGuardEvent(
+      ctx,
+      decision,
+      outcome.verdict,
+      {
+        eventId: resolvedEventId,
+        ts: resolvedTs,
+        decidedBy: "approval-backend",
+        decidedAt: new Date().toISOString(),
+        ...(outcome.maskDiffRef ? { maskDiffRef: outcome.maskDiffRef } : {}),
+      },
+      outcome.resolution,
+    ),
+  );
   return outcome.result;
 }
 
@@ -101,30 +173,56 @@ function resolveApprovalOutcome(
   rawDecision: ApprovalDecision,
   allowMaskedApproval: boolean,
   eventId: string,
-  ts: string
-): { verdict: Action; result: RoutedResult; maskDiffRef?: string; resolution: ApprovalResolution } {
-  if (rawDecision === "approve") return { verdict: "allow", result: computePassthrough(ctx, "allow"), resolution: "approved" };
+  ts: string,
+): {
+  verdict: Action;
+  result: RoutedResult;
+  maskDiffRef?: string;
+  resolution: ApprovalResolution;
+} {
+  if (rawDecision === "approve")
+    return {
+      verdict: "allow",
+      result: computePassthrough(ctx, "allow"),
+      resolution: "approved",
+    };
   if (rawDecision === "approve_masked" && allowMaskedApproval) {
     const { result, maskDiffRef } = computeMask(ctx, decision);
-    return { verdict: "mask_then_allow", result, maskDiffRef, resolution: "masked" };
+    return {
+      verdict: "mask_then_allow",
+      result,
+      maskDiffRef,
+      resolution: "masked",
+    };
   }
   // "expired": the wait itself timed out, so reasonCode APPROVAL_TIMEOUT_BLOCKED (§4) applies.
   // "block" (reviewer explicitly denied it) and a disallowed approve_masked both had a real
   // reviewer response — neither is a timeout — so they keep the deciding policy's own reasonCode.
   // Either way it is a fail-closed block (NFR-03), and the resolution records which one it was.
-  const reasonCode = rawDecision === "expired" ? "APPROVAL_TIMEOUT_BLOCKED" : decision.reasonCode;
+  const reasonCode =
+    rawDecision === "expired"
+      ? "APPROVAL_TIMEOUT_BLOCKED"
+      : decision.reasonCode;
   return {
     verdict: "block",
     result: computeBlock(ctx, { ...decision, reasonCode }, eventId, ts),
-    resolution: rawDecision === "expired" ? "expired" : "denied"
+    resolution: rawDecision === "expired" ? "expired" : "denied",
   };
 }
 
-function computePassthrough(ctx: ToolCallContext, verdict: "allow" | "warn"): RoutedResult {
+function computePassthrough(
+  ctx: ToolCallContext,
+  verdict: "allow" | "warn",
+): RoutedResult {
   return { verdict, payload: ctx.payload };
 }
 
-function computeBlock(ctx: ToolCallContext, decision: PolicyDecision, eventId: string, ts: string): RoutedResult {
+function computeBlock(
+  ctx: ToolCallContext,
+  decision: PolicyDecision,
+  eventId: string,
+  ts: string,
+): RoutedResult {
   const policyId = decision.matchedPolicyIds[0] ?? "unknown_policy";
   return {
     verdict: "block",
@@ -138,16 +236,24 @@ function computeBlock(ctx: ToolCallContext, decision: PolicyDecision, eventId: s
       message: decision.message,
       detectionSummary: summarizeDetections(decision.detections),
       riskScore: decision.riskScore,
-      matchedPolicyIds: decision.matchedPolicyIds.filter((id) => id !== policyId)
-    })
+      matchedPolicyIds: decision.matchedPolicyIds.filter(
+        (id) => id !== policyId,
+      ),
+    }),
   };
 }
 
 /** Replaces detected spans back-to-front so earlier offsets never shift (§4.4). */
-function computeMask(ctx: ToolCallContext, decision: PolicyDecision): { result: RoutedResult; maskDiffRef: string } {
+function computeMask(
+  ctx: ToolCallContext,
+  decision: PolicyDecision,
+): { result: RoutedResult; maskDiffRef: string } {
   const masked = mask(ctx.payload, decision.detections);
   const maskDiffRef = recordMaskDiff(ctx.payload, masked);
-  return { result: { verdict: "mask_then_allow", payload: masked }, maskDiffRef };
+  return {
+    result: { verdict: "mask_then_allow", payload: masked },
+    maskDiffRef,
+  };
 }
 
 /** Shared so every producer of a GuardEvent normalizes spans the same way. */
@@ -157,7 +263,7 @@ export function toEventDetection(detection: Detection): GuardEventDetection {
     subtype: detection.subtype,
     span: { start: detection.start, end: detection.end },
     confidence: detection.confidence,
-    maskedAs: detection.maskedAs
+    maskedAs: detection.maskedAs,
   };
 }
 
@@ -180,7 +286,7 @@ function buildGuardEvent(
   decision: PolicyDecision,
   verdict: Action,
   extras: GuardEventExtras = {},
-  resolution?: ApprovalResolution
+  resolution?: ApprovalResolution,
 ): GuardEvent {
   const { eventId, ts, ...rest } = extras;
   return {
@@ -197,6 +303,11 @@ function buildGuardEvent(
     // Every event funnels through here, so generating the explanation at this one point
     // is what makes "100% of block events carry a reason" true rather than best-effort.
     explanation: explainDecision(decision, verdict, resolution),
-    ...rest
+    ...rest,
+    ...(decision.normalizedPath !== undefined
+      ? { normalizedPath: decision.normalizedPath }
+      : {}),
+    ...(storeRawPayload ? { rawPayload: ctx.payload } : {}),
+    ...extras,
   };
 }

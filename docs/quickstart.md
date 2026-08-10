@@ -47,6 +47,14 @@ curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?m
 curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?mode=vulnerable"
 ```
 
+상담 로그 조회에서 휴대전화·주민등록번호·계좌번호가 마스킹되는 T-02/T-08 시나리오도 같은 방식으로 실행합니다. 이쪽은 조회 자체가 정당하므로 차단이 아니라 `mask_then_allow`로 끝납니다. 자세한 내용은 [한국어 개인정보 마스킹 데모](korean-pii-demo.md)를 참고하세요.
+
+```bash
+curl --fail --silent --request POST http://localhost:3002/demo/consultation-log
+# 마스킹 결과를 검증까지 하려면
+./scripts/demo-korean-pii.sh
+```
+
 ## 프로파일
 
 | 목적 | 명령 | 포함 범위 |

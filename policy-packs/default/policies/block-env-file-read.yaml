@@ -16,3 +16,9 @@ severity: critical
 # Never echo the matched path or source content in a block message.
 message: Credential-file access was blocked by policy.
 reasonCode: SECRET_FILE_ACCESS_BLOCKED # FR-GW-05 §4 taxonomy; §7's own worked example.
+# FR-SEC-04 (GMCP-73): the matcher normalizes args.path/file_path/filename
+# before this regex ever sees it — repeated percent-decoding, NFKC, null-byte
+# truncation, `~`/`$HOME` expansion, `.`/`..` resolution, lowercasing — and
+# tests both the normalized full path and its basename. So this pattern does
+# not need to special-case obfuscated variants like `./config/../.env`,
+# `%2e%65%6e%76`, or `id_rsa%00.png`; see packages/policy-engine/src/pathNormalize.ts.

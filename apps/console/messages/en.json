@@ -99,7 +99,6 @@
       "pause": "Pause",
       "toStart": "To start",
       "nextVerdict": "Next verdict",
-      "blocked": "Block",
       "empty": "This session has no recorded events.",
       "node": {
         "user": "User",
@@ -123,6 +122,7 @@
       "target": "Target",
       "args": "Arguments",
       "argsCount": "{count}",
+      "normalizedPath": "Normalized path",
       "morePolicies": "+{count}"
     },
     "policy": {

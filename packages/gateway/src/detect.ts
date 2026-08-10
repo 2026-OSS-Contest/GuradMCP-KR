@@ -1,6 +1,7 @@
 import bankAccountTable from "./rules/bank-accounts.json" with { type: "json" };
 import filePathCatalog from "./rules/file-path.json" with { type: "json" };
 import injectionCatalog from "./rules/injection.json" with { type: "json" };
+import koreanServiceTokenTable from "./rules/korean-service-tokens.json" with { type: "json" };
 import piiCatalog from "./rules/pii.json" with { type: "json" };
 import secretCatalog from "./rules/secret.json" with { type: "json" };
 
@@ -73,11 +74,11 @@ const validators: Record<string, (value: string) => boolean> = {
 };
 
 const rules: Rule[] = [
-  piiCatalog,
-  secretCatalog,
-  injectionCatalog,
-  filePathCatalog,
-].flatMap(parseCatalog);
+  ...[piiCatalog, secretCatalog, injectionCatalog, filePathCatalog].flatMap(
+    parseCatalog,
+  ),
+  ...parseKoreanServiceTokens(koreanServiceTokenTable),
+];
 const injectionRules = rules.filter(({ type }) => type === "INJECTION");
 const bankAccounts = parseBankAccountTable(bankAccountTable);
 
@@ -338,6 +339,56 @@ function parseRule(type: DetectionKind, entry: unknown): Rule {
     onValidationFailure,
     unvalidatedConfidence,
   };
+}
+
+/**
+ * Compiles `rules/korean-service-tokens.json` into ordinary SECRET rules
+ * (FR-SEC-02, GMCP-71). The file is separate from `secret.json` so that adding
+ * a domestic service is a data change a contributor can make without reading
+ * any TypeScript, and so the shared `[KR_SERVICE_TOKEN]` tag is declared once
+ * rather than repeated on every entry.
+ *
+ * Entries are validated the same way catalog rules are; a malformed one throws
+ * at module load, because a credential detector that silently drops a rule is
+ * worse than one that refuses to start.
+ */
+function parseKoreanServiceTokens(source: unknown): Rule[] {
+  if (!isRecord(source))
+    throw new Error("Korean service-token table must be an object.");
+  if (source.version !== 1)
+    throw new Error("Korean service-token table must declare version 1.");
+  const maskedAs = source.maskedAs;
+  if (!isNonEmptyString(maskedAs))
+    throw new Error("Korean service-token table must declare a mask tag.");
+  if (!Array.isArray(source.credentials) || source.credentials.length === 0)
+    throw new Error(
+      "Korean service-token table must list at least one credential.",
+    );
+  const seen = new Set<string>();
+  return source.credentials.map((entry) => {
+    if (!isRecord(entry))
+      throw new Error("Korean service-token entry must be an object.");
+    const { id, service, credential, match, basis } = entry;
+    if (!isNonEmptyString(id))
+      throw new Error("Korean service-token entry must declare an id.");
+    if (seen.has(id))
+      throw new Error(`Korean service-token table repeats id ${id}.`);
+    seen.add(id);
+    const label = `SECRET.${id}`;
+    // Provenance is not decoration here: without it nobody can tell a verified
+    // vendor format from a guess, which is what makes the file contributable.
+    for (const [name, value] of [
+      ["service", service],
+      ["credential", credential],
+      ["basis", basis],
+    ] as const) {
+      if (!isNonEmptyString(value))
+        throw new Error(`${label} must document its ${name}.`);
+    }
+    if (match !== "signature" && match !== "context")
+      throw new Error(`${label} must declare match as signature or context.`);
+    return parseRule("SECRET", { ...entry, subtype: id, description: basis, maskedAs });
+  });
 }
 
 /**
