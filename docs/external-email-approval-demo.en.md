@@ -1,0 +1,47 @@
+# Demo: external email blocked and held for approval
+
+**English** | [한국어](external-email-approval-demo.md)
+
+When an agent tries to `send_email` a body carrying something like an API key to an external domain, the gateway does not block it outright — it holds the call for a human decision (`require_approval`). If the operator chooses "approve masked," only the **masked body** is actually delivered. If nobody answers within 120 seconds, the call fails closed automatically. This demo drives both paths through the real Gateway and Control Plane.
+
+## What gets compared
+
+| | Approve masked (default) | No response (`--timeout`) |
+| --- | --- | --- |
+| Operator action | Sends `approve_masked` to Control Plane | None (waits out 120s) |
+| Verdict | `require_approval` → `mask_then_allow` | `require_approval` → `block` (`APPROVAL_TIMEOUT_BLOCKED`) |
+| Outbox (fake SMTP) | `to` unchanged, `body` has the secret replaced by `[SECRET]` | Nothing recorded |
+| What the Agent gets back | No error | The standard `GuardBlockError` (no raw sensitive content) |
+
+## Reproducing it
+
+Gateway and Control Plane are always-on regardless of profile; `demo-mcp-tools` (the fake SMTP) ships under the `demo` profile.
+
+```bash
+docker compose --profile demo up -d
+```
+
+```bash
+./scripts/demo-external-email-block.sh            # approve-masked path
+./scripts/demo-external-email-block.sh --timeout   # 120s no-response auto-block path (really waits 120s)
+```
+
+Like `demo-korean-pii.sh`, this does not just print a result — it **asserts** one. On the masked path it checks that the message actually recorded in the outbox kept its original recipient and had the raw secret replaced by `[SECRET]`. On the timeout path it checks the `reasonCode` is `APPROVAL_TIMEOUT_BLOCKED` and that nothing was added to the outbox. Either check failing exits non-zero. Both paths were run against a real `docker compose` stack (Gateway, Control Plane, demo-mcp-tools) and confirmed passing — the timeout path really does wait out the full 120 seconds.
+
+Because the gateway's `/mcp` response for this call stays open until the approval resolves (§5.1), the script runs the Agent's own request in the background and plays the operator's part (or deliberately does nothing) against the Control Plane API in the meantime — the same `POST /api/v1/approvals/{id}/decision` a console click makes.
+
+## The policy
+
+`policy-packs/default/policies/require-approval-external-secret-email.yaml` (`id: approve_external_email_with_secret`). Matches `to_not_domain: [company.co.kr]` plus a `SECRET`/`PII.RRN_LIKE` detection plus `risk_score >= 70`, and declares `approval.timeout_seconds: 120`, `on_timeout: block`, `allow_masked_approval: true`.
+
+## Implementation overview
+
+- **Gateway** (`packages/gateway/src`): in `server.ts`'s `tools/call` handling, when the tool is `send_email` and its `body` is a string, the text under inspection/masking (`emailBody`) is scoped to the body alone — the `to` address is itself something the PII detector flags as `PII.EMAIL`, so inspecting/masking the whole arguments JSON would corrupt the recipient into `[EMAIL]` on a masked approval (confirmed by actually reproducing it). The masked result is spliced back into the original `to`/`subject` before the call goes upstream. When `CONTROL_PLANE_URL` is set, `server.ts` selects `controlPlane/approvalBackend.ts` as the approval backend — it registers the hold with the real Control Plane (`POST /api/v1/approvals`) and polls for the decision (§10's "SSE or polling," the polling half), failing closed on a local deadline if Control Plane is unreachable or never answers. Without `CONTROL_PLANE_URL`, the existing instant-expire backend (`approval/backend.ts`) keeps the prior fail-closed behavior. The risk tags and mask preview an Approval Card needs are computed from the pending request by `pipeline/approvalPreview.ts` and sent along by `actionRouter.ts`'s `awaitApproval()` (the raw text is legitimately in flight at that point — NFR-04; the mask preview is only sent when the policy allows masked approval). The card's `arguments` deliberately drops `body` — `maskPreview` already carries that same text (with its own clearing lifecycle), so sending it again as a plain arg would leave a copy nothing ever clears; only `to`/`subject` are sent, and no other tool gets `arguments` at all. Forwarding GuardEvents to Control Plane's audit log (`POST /api/v1/events`) was already handled by `pipeline/auditPublisher.ts` (GMCP-24, predates this ticket), so nothing new was built for that.
+- **Control Plane** (`services/control-plane`): `ApprovalController`'s `POST /api/v1/approvals` no longer requires a pre-registered session. It used to type `sessionId` as a `UUID` and check it against the demo-seeded `GuardEventStore`, but the session ids the gateway actually sends (e.g. `req-1`, or this demo script's own `demo-external-email-<timestamp>-<pid>`) are not UUIDs and could never pass that check. `sessionId` is now a plain string and the pre-registration check is gone. `ApprovalStore` now holds `riskTags`/`threatScore`/`maskPreview` (opaque, uninterpreted) while `PENDING`, and both `decide()` and the newly added `sweepExpired()` null out `maskPreview` (raw text included) the moment the hold ends (NFR-04) — nothing sensitive survives outside the pending window. The card's own `arguments` (`to`/`subject`) never carry a secret to begin with, courtesy of the Gateway-side design above, so there is nothing further to clear there. `sweepExpired()` flips overdue `PENDING` approvals to `EXPIRED` with `decidedBy: "system:timeout"`; it runs on a 1-second scheduler (`ApprovalTimeoutScheduler`, which needed `@EnableScheduling` added alongside it) and opportunistically on every `list()`/`get()`/`decide()` call. A human decision's own `decidedBy` reaches the audit trail unchanged.
+- **demo-agent** (`apps/demo-agent`): since `require_approval` can now genuinely hold a response open for up to 120 seconds (it used to always expire instantly), `GatewayToolInvoker`'s HTTP timeout to the gateway went from 5 to 130 seconds. Neither existing demo-agent scenario actually exercises the new hold path — the T-01 malicious-README run is stopped earlier at `read_file(".env")`, and the consultation-log demo only ever goes through `mask_then_allow` — confirmed by running both against the rebuilt stack. The timeout was still worth fixing so a future `send_email`-reaches-`require_approval` scenario doesn't rediscover the same failure mode.
+
+## Limitations
+
+- **No Redis queue.** §5.1 of the spec mentions one, but the Definition of Done (§9) only requires that a held request waits durably and can be resolved by poll or push. Control Plane's `ApprovalStore` is that store; the gateway polls it.
+- **Replay (SCR-301) is not wired to this demo's real data.** The console's `TimelineResponse`/`EventDetail` contract is a narrative model built from `user`/`agent`/`tool_call`/`verdict`/`result` nodes, backed by `ReplayStore` (GMCP-28) — which only holds hardcoded seed sessions and has no ingest path for the GuardEvents the gateway actually emits. `AuditEventController` (`POST /api/v1/events`, GMCP-24) does store real events, but into `GuardEventRepository`, a separate store `ReplayStore` never reads from. Closing that gap belongs to the Control Plane API work (GMCP-80) — the same kind of limitation `docs/korean-pii-demo.md` already notes for the Detector Console. **The hash chain can't verify this demo's events for the same reason**: `AuditChain` only covers trust-level-change events today, not `GuardEvent`, and `GuardEventRepository` (where real events actually land) has no hash-chain fields at all. `ReplayStore`'s `chain.status` (from `GET /sessions/{id}/timeline`) is real, but only over its own seed data — never over this demo's real approval events. In other words, the DoD's (§9) "hash chain verified" item is not something §5's walkthrough can actually show.
+- **Rendering the console straight against a live Control Plane is blocked by a separate infrastructure gap.** The `riskTags`/`threatScore`/`maskPreview` an approval card needs are now genuinely stored and returned by Control Plane — this session brought up the `docker compose` stack and checked before/after over curl (populated pre-decision, `maskPreview` nulled out after). But pointing a browser at the real Control Plane directly hits two pre-existing problems that are not specific to approvals: (a) Control Plane sends no CORS headers, so a cross-origin fetch is blocked outright, and (b) `GET /overview` returns a different shape than the console's `Overview` contract, which crashes the shared layout (StatusBar) before the approvals screen ever renders. Both belong to GMCP-80.
