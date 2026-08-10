@@ -173,6 +173,62 @@ describe("Secret detection rule set v1 (GMCP-29)", () => {
   });
 });
 
+describe("High-entropy credential safety net (FR-SEC-03, GMCP-72)", () => {
+  // Every value below is synthetic and authenticates nowhere.
+  const entropy = (text: string) => detect(text).filter(({ subtype }) => subtype === "HIGH_ENTROPY");
+
+  it("catches a credential whose format is in no catalog", () => {
+    const text = "INTERNAL_API_KEY=q7Zm2Xk9Rb4Tn8Wv3Lc6Yd1Pf5Hs0Ja";
+    const [detection] = entropy(text);
+    expect(detection?.type).toBe("SECRET");
+    expect(detection?.maskedAs).toBe("[SECRET]");
+    // Below every catalogued rule: this says "shaped like a credential", not "is a GitHub token".
+    expect(detection?.confidence).toBe(0.6);
+    expect(mask(text, detect(text))).toBe("INTERNAL_API_KEY=[SECRET]");
+  });
+
+  it("reads the field name through a prefix, a quote, and a Bearer scheme", () => {
+    // The three shapes credentials actually take in configuration and logs.
+    expect(entropy("legacy_secret_key = 3f8a1c6e9b2d5074af3c81e6b95d2740")).toHaveLength(1);
+    expect(entropy('{"access_token":"8Kd2Qw6Zx9Vb3Nm7Tr1Yu4Ip0Ol5As"}')).toHaveLength(1);
+    expect(entropy("Authorization: Bearer f4Hj8Kl2Mn6Pq0Rs3Tv7Wx1Yz5Ab9Cd")).toHaveLength(1);
+  });
+
+  it("does not fire on high-entropy values that are not credentials", () => {
+    // The whole reason the field name gates this: all four are high-entropy.
+    expect(entropy("checksum: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")).toEqual([]);
+    expect(entropy("commit=9f2a4b8c1d3e5f7a0b2c4d6e8f0a1b3c5d7e9f01")).toEqual([]);
+    expect(entropy("request_id: 550e8400-e29b-41d4-a716-446655440000")).toEqual([]);
+    expect(entropy('ETag: "33a64df551425fcc55e4d42a148795d9f25f89d4"')).toEqual([]);
+  });
+
+  it("does not fire on a credential field holding a value someone typed", () => {
+    // Placeholders and instructions land in these fields constantly; entropy is
+    // what separates them from a generated secret.
+    expect(entropy("token=please_rotate_this_before_release")).toEqual([]);
+    expect(entropy("api_key 필드는 콘솔의 설정 화면에서 확인할 수 있습니다.")).toEqual([]);
+  });
+
+  it("ignores a value too short to judge", () => {
+    // Shannon entropy over a handful of characters is noise, so there is a floor.
+    expect(entropy("api_key=demo1234")).toEqual([]);
+  });
+
+  it("yields to a catalogued rule rather than double-reporting the same span", () => {
+    // sk-... is already LLM_API_KEY. Two detections over one span would double-count
+    // the credential and hand mask() overlapping ranges to replace.
+    const text = "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz1234";
+    expect(entropy(text)).toEqual([]);
+    expect(detect(text).map(({ subtype }) => subtype)).toContain("LLM_API_KEY");
+    expect(mask(text, detect(text))).toBe("OPENAI_API_KEY=[SECRET]");
+  });
+
+  it("never retains the credential in the detection output (NFR-04)", () => {
+    const text = "client_secret: Zt5Ku8Rf2Nb7Wq1Xe4Yd0Mc9Pa3Lo6";
+    expect(JSON.stringify(entropy(text))).not.toContain("Zt5Ku8Rf2Nb7Wq1Xe4Yd0Mc9Pa3Lo6");
+  });
+});
+
 describe("Korean service credentials (FR-SEC-02, GMCP-71)", () => {
   // Every value below is synthetic and authenticates nowhere; the shapes exist
   // so the detector has something of the right form to recognize.
