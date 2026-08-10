@@ -203,7 +203,7 @@ export const runtimePolicyPacks: Record<string, RuntimePolicyPack> = {
         "pack": "default",
         "version": 1,
         "description": "신뢰 등급이 untrusted인 서버로 향하는 고위험 Tool 호출은 사람 승인을 거친다",
-        "priority": 150,
+        "priority": 210,
         "match": {
           "direction": "request",
           "tool": "send_*",

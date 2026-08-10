@@ -6,7 +6,9 @@ id: require_approval_untrusted_high_risk_tool
 pack: default
 version: 1
 description: 신뢰 등급이 untrusted인 서버로 향하는 고위험 Tool 호출은 사람 승인을 거친다
-priority: 150
+priority: 210 # After the more specific external-secret-email guard (200); a broader
+              # untrusted/high-risk backstop still matches (attack-lab A-07) but doesn't
+              # preempt it as the deciding policy when both fire.
 match:
   direction: request
   # DSL v1의 match.tool은 단일 glob만 지원한다(목록 미지원). send_*는 부록 예시의
