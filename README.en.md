@@ -84,6 +84,7 @@ Do not disclose vulnerabilities in public issues. [SECURITY.md](SECURITY.md#engl
 | Korean PII masking demo | [Open](docs/korean-pii-demo.en.md) | [열기](docs/korean-pii-demo.md) |
 | Benchmark gate | [Open](docs/benchmark-gate.en.md) | [열기](docs/benchmark-gate.md) |
 | Attack scenario catalog | [Open](docs/attack-scenarios.en.md) | [열기](docs/attack-scenarios.md) |
+| Attack Scenario Runner | [Open](docs/attack-lab-runner.en.md) | [열기](docs/attack-lab-runner.md) |
 | Contribution guide | [Open](CONTRIBUTING.md#english) | [열기](CONTRIBUTING.md#한국어) |
 | Development workflow | [Open](docs/contributing/development-workflow.en.md) | [열기](docs/contributing/development-workflow.md) |
 | Commit convention | [Open](docs/contributing/commit-convention.en.md) | [열기](docs/contributing/commit-convention.md) |
