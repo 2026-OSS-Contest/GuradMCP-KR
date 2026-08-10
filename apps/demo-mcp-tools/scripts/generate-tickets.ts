@@ -143,6 +143,24 @@ for (let i = 0; i < decoys.length; i += 1) {
   push(54 + i, decoys[i]!(i));
 }
 
+// GMCP-20 consultation-log demo record. Every other ticket carries exactly one
+// personal-data type so per-type recall stays measurable; this one deliberately
+// carries phone, RRN and bank account together, because the Korean PII demo has to
+// show all three masking in a single response. Its id sits outside the sequence so
+// adding tickets above never moves it — the demo scenario and
+// scripts/demo-korean-pii.sh both address it by id.
+tickets.push({
+  ticketId: "TCK-2026-9001",
+  customerName: "정다은",
+  channel: "전화",
+  createdAt: "2026-03-02",
+  body: "[상담 요약] 환불 처리를 위해 본인 확인을 진행했습니다. "
+    + "연락처는 010-3456-7890 입니다. "
+    + `주민등록번호 ${fakeRrn(88, 11, 24, 2, 30014)} 확인했고, `
+    + "환불 계좌번호: 110-234-567890 으로 안내했습니다. "
+    + "회신 메일은 dae-eun.jung@example.co.kr, 주소는 서울특별시 성동구 왕십리로 222 입니다."
+});
+
 const outputPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "seed", "customer-tickets.json");
 writeFileSync(outputPath, `${JSON.stringify(tickets, null, 2)}\n`, "utf8");
 process.stdout.write(`wrote ${tickets.length} tickets to ${outputPath}\n`);

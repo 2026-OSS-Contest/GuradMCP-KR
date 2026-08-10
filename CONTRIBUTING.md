@@ -49,7 +49,9 @@ npm ci
 
 #### 3. 공격 또는 정상 샘플
 
-`attack-lab/datasets/`에 최소 한 개 공격 샘플과 회귀를 막을 정상 샘플을 추가합니다. 출처, 위협 ID(T-01~T-08), 기대 verdict, 난독화가 있다면 해제 과정을 기록하세요. 악성 payload는 프로젝트 테스트 목적에서만 사용합니다.
+`attack-lab/datasets/`에 최소 한 개 공격 샘플과 회귀를 막을 정상 샘플을 추가합니다. 출처, 위협 ID(T-01~T-09), 기대 verdict, 난독화가 있다면 해제 과정을 기록하세요. 악성 payload는 프로젝트 테스트 목적에서만 사용합니다.
+
+`attack-lab/scenarios/threats.json`에 프로브를 추가할 때는 [공격 시나리오 카탈로그](docs/attack-scenarios.md)에도 그 프로브를 청구하는 시나리오를 함께 넣어야 합니다. 청구되지 않은 프로브가 있으면 `npm run scenarios:validate`가 실패합니다.
 
 ### 개발 환경
 
@@ -146,7 +148,9 @@ Submit positive samples and easily confused negative samples together. Every val
 
 #### 3. An attack or benign sample
 
-Add at least one attack sample and a benign regression sample under `attack-lab/datasets/`. Record its source, T-01–T-08 threat ID, expected verdict, and de-obfuscation steps. Use malicious payloads only for project testing.
+Add at least one attack sample and a benign regression sample under `attack-lab/datasets/`. Record its source, T-01–T-09 threat ID, expected verdict, and de-obfuscation steps. Use malicious payloads only for project testing.
+
+When you add a probe to `attack-lab/scenarios/threats.json`, also add the scenario that claims it to the [attack scenario catalog](docs/attack-scenarios.en.md). An unclaimed probe fails `npm run scenarios:validate`.
 
 ### Development environment
 

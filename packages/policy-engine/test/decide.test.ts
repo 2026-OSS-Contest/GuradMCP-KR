@@ -96,9 +96,17 @@ describe("no policy matches", () => {
     expect(result.verdict).toBe("warn");
   });
 
-  it("forces warn under strictMode regardless of defaultAction", () => {
-    const result = decide(input({ strictMode: true, defaultAction: "block" }));
+  it("resolves to warn under strictMode when no defaultAction is given", () => {
+    const result = decide(input({ strictMode: true }));
     expect(result.verdict).toBe("warn");
+  });
+
+  // GMCP-75 §4.3/§7 규칙 3: explicit default_action always wins, even under
+  // strict mode. This supersedes the pre-GMCP-75 behavior where strictMode
+  // unconditionally forced warn.
+  it("honors an explicit defaultAction even under strictMode", () => {
+    const result = decide(input({ strictMode: true, defaultAction: "block" }));
+    expect(result.verdict).toBe("block");
   });
 });
 
@@ -131,7 +139,11 @@ it("records every matched policy id under severity-max even though one policy de
   expect(result.matchedPolicyIds).toEqual(["p1_allow", "p2_block", "p3_warn"]);
 });
 
-it("records only matches up to the break point under first-match", () => {
+// GMCP-75 §3 규칙 5: matchedPolicyIds has no first-match exception. Only
+// action adoption short-circuits at the first match; matches after it are
+// still recorded. This supersedes the pre-GMCP-75 behavior where evaluation
+// stopped entirely at the break point.
+it("adopts the first match's action but still records later matches under first-match", () => {
   const result = decide(
     input({
       strategy: "first-match",
@@ -144,7 +156,7 @@ it("records only matches up to the break point under first-match", () => {
   );
   expect(result.verdict).toBe("allow");
   expect(result.decidingPolicyId).toBe("p1_allow");
-  expect(result.matchedPolicyIds).toEqual(["p1_allow"]);
+  expect(result.matchedPolicyIds).toEqual(["p1_allow", "p2_block", "p3_warn"]);
 });
 
 // --- Recommended additional coverage -----------------------------------------

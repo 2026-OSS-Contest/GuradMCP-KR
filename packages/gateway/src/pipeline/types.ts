@@ -6,11 +6,24 @@
 // precedent in `@guardmcp/policy-engine` (types.ts), the real detector output
 // wins; spans are normalized to the `{ start, end }` shape only at the
 // GuardEvent boundary (see `buildGuardEvent` in actionRouter.ts).
-import type { Action, Direction, ReasonCode, Severity, ServerTrust } from "@guardmcp/policy-engine";
+import type {
+  Action,
+  Direction,
+  ReasonCode,
+  Severity,
+  ServerTrust,
+} from "@guardmcp/policy-engine";
 import type { Detection } from "../detect.js";
 import type { GuardBlockError } from "../errors/guard-block-error.js";
 
-export type { Action, Direction, ReasonCode, Severity, ServerTrust, GuardBlockError };
+export type {
+  Action,
+  Direction,
+  ReasonCode,
+  Severity,
+  ServerTrust,
+  GuardBlockError,
+};
 
 /** Everything the router needs about the Tool Call being routed. */
 export interface ToolCallContext {
@@ -40,6 +53,8 @@ export interface PolicyDecision {
   reasonCode: string;
   message: string;
   detections: Detection[];
+  /** FR-SEC-04 §3.3: the path-like arg (path/file_path/filename) after normalization, when present. */
+  normalizedPath?: string;
   approval?: {
     timeoutSeconds: number;
     onTimeout: "block";
@@ -92,7 +107,16 @@ export interface GuardEvent {
    * every event so an explanation never has to be reconstructed by a reader.
    */
   explanation: Explanation;
+  /** FR-SEC-04 §3.3: normalized form of a path-like Tool Call arg, when one was present. */
+  normalizedPath?: string;
   maskDiffRef?: string;
   decidedBy?: string;
   decidedAt?: string;
+  /**
+   * NFR-04 opt-in only: populated by `buildGuardEvent` (actionRouter.ts) solely when
+   * `AUDIT_STORE_RAW_PAYLOAD=true`. `./auditPublisher.ts` must be the only reader — it strips
+   * this from the shared bus object synchronously before any other `guardEventBus` subscriber
+   * (e.g. a future SSE writer) can observe it. Every other consumer must treat it as absent.
+   */
+  rawPayload?: string;
 }

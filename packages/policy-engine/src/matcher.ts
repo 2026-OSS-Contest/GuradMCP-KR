@@ -15,9 +15,7 @@
 // {@link isSafePolicyRegex}; the matcher additionally re-checks defensively.
 
 import type { Detection, MatchDefinition, Policy, PolicyContext, ToolCallContext } from "./types.js";
-
-/** Fields probed, in order, for a `path_regex` condition (spec §5.3). */
-const PATH_LIKE_KEYS = ["path", "file_path", "filename"] as const;
+import { basename, extractPathArg, normalizePath } from "./pathNormalize.js";
 
 /**
  * Evaluate a full policy's match block against a Tool Call context.
@@ -123,9 +121,13 @@ function matchesArgs(expected: Record<string, unknown>, actual: Record<string, u
     }
     if (condition.endsWith("_regex")) {
       const key = condition.slice(0, -"_regex".length);
-      // §5.3: for a path target, probe path -> file_path -> filename and use
-      // the first string field; a non-path key reads exactly that key.
-      const target = key === "path" ? firstStringField(actual, PATH_LIKE_KEYS) : actual[key];
+      // §5.3/FR-SEC-04 §3: a path target is normalized (URL-decode, NFKC,
+      // null-byte truncation, `~`/`$HOME`, `.`/`..` resolution, lowercase —
+      // see pathNormalize.ts) before matching, so obfuscated variants of the
+      // same file resolve the same way; other `_regex` keys read the raw
+      // field verbatim, since path semantics don't apply to them.
+      if (key === "path") return matchesPathRegex(value, extractPathArg(actual));
+      const target = actual[key];
       return (
         target !== undefined &&
         typeof value === "string" &&
@@ -165,12 +167,16 @@ function matchesArgs(expected: Record<string, unknown>, actual: Record<string, u
   });
 }
 
-function firstStringField(source: Record<string, unknown>, keys: readonly string[]): string | undefined {
-  for (const key of keys) {
-    const candidate = source[key];
-    if (typeof candidate === "string") return candidate;
-  }
-  return undefined;
+/**
+ * FR-SEC-04 §3.2: evaluate a `path_regex` against both the full normalized
+ * path and its basename, so a nested credential file (`config/nested/.env`)
+ * and a bare filename argument both resolve the same way.
+ */
+function matchesPathRegex(pattern: unknown, rawPath: string | undefined): boolean {
+  if (rawPath === undefined || typeof pattern !== "string" || !isSafePolicyRegex(pattern)) return false;
+  const { normalized } = normalizePath(rawPath);
+  const regex = new RegExp(pattern);
+  return regex.test(normalized) || regex.test(basename(normalized));
 }
 
 /**

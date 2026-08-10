@@ -65,6 +65,54 @@ describe("block_env_file_read (Appendix A.1)", () => {
   });
 });
 
+// --- FR-SEC-04 §4 (GMCP-73): the 5 required bypass variants + 2 benign
+// controls, evaluated against the exact regex shipped in
+// policy-packs/default/policies/block-env-file-read.yaml. -------------------
+describe("block_env_file_read — FR-SEC-04 bypass variants (spec §4, DoD)", () => {
+  const policy: Policy = {
+    id: "block_env_file_read",
+    pack: "default",
+    priority: 100,
+    match: {
+      direction: "request",
+      tool: "read_file",
+      server_trust: "any",
+      args: { path_regex: "(^|/)(\\.env(\\..*)?|id_(rsa|ed25519)|credentials(\\.json)?)$" }
+    },
+    action: "block",
+    severity: "critical"
+  };
+
+  it("#1 relative-path traversal — ./config/../.env", () => {
+    expect(matchesPolicy(policy, context({ args: { path: "./config/../.env" } }))).toBe(true);
+  });
+
+  it("#2 URL percent-encoding — %2e%65%6e%76", () => {
+    expect(matchesPolicy(policy, context({ args: { path: "%2e%65%6e%76" } }))).toBe(true);
+  });
+
+  it("#3 double percent-encoding — %252e%2565%256e%2576", () => {
+    expect(matchesPolicy(policy, context({ args: { path: "%252e%2565%256e%2576" } }))).toBe(true);
+  });
+
+  it("#4 null-byte trailing — id_rsa%00.png", () => {
+    expect(matchesPolicy(policy, context({ args: { path: "id_rsa%00.png" } }))).toBe(true);
+  });
+
+  it("#5 home-directory shorthand — ~/credentials.json", () => {
+    expect(matchesPolicy(policy, context({ args: { path: "~/credentials.json" } }))).toBe(true);
+  });
+
+  it("N1 unrelated file does not match", () => {
+    expect(matchesPolicy(policy, context({ args: { path: "./config/settings.json" } }))).toBe(false);
+  });
+
+  it("N2 an .env-prefixed-but-different filename does not match", () => {
+    expect(matchesPolicy(policy, context({ args: { path: "environment.md" } }))).toBe(false);
+    expect(matchesPolicy(policy, context({ args: { path: "env_backup.txt" } }))).toBe(false);
+  });
+});
+
 describe("approve_external_email_with_secret (Appendix A.2)", () => {
   const policy: Policy = {
     id: "approve_external_email_with_secret",

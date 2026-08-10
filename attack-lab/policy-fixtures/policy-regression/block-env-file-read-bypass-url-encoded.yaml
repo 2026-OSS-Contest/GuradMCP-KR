@@ -1,0 +1,16 @@
+id: block_env_file_read_bypass_url_encoded
+description: FR-SEC-04 §4 case #2 — percent-encoded path (%2e%65%6e%76) decodes to .env and is blocked.
+coverage:
+  policy_id: block_env_file_read
+  expectation: match
+event:
+  direction: request
+  tool: read_file
+  server_trust: trusted
+  args:
+    path: "%2e%65%6e%76"
+  detections: []
+  risk_score: 10
+expected:
+  action: block
+  matched_policy_ids: [block_env_file_read]

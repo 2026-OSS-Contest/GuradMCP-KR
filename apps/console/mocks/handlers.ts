@@ -1,5 +1,7 @@
 import { HttpResponse, delay, http, sse } from "msw";
 import type {
+  ApiSessionsResponse,
+  ApiSessionTimelineResponse,
   ApprovalDecision,
   AttackRunMode,
   AttackScenariosResponse,
@@ -8,8 +10,6 @@ import type {
   RecentEventsResponse,
   SecurityEvent,
   ServersResponse,
-  SessionsResponse,
-  TimelineResponse
 } from "@/lib/api/types";
 import { allApprovals, decide, raiseApproval, resetApprovals, resolveRaised } from "./approvals";
 import { EMPTY_OVERVIEW, SERVERS, liveEvent, overviewOf, recentEvents } from "./data";
@@ -23,9 +23,15 @@ import {
   policyYaml,
   seedPolicies,
   togglePack,
-  togglePolicy
+  togglePolicy,
 } from "./policies";
-import { SESSIONS, policyDetail, revealOf, timelineOf } from "./replay";
+import {
+  SESSIONS,
+  eventLookup,
+  policyDetail,
+  revealOf,
+  timelineOf,
+} from "./replay";
 import { readScenario } from "./scenario";
 
 // Long enough that a slow render is visible, short enough that the 500ms skeleton rule
@@ -44,9 +50,9 @@ async function respond(
     | Overview
     | ServersResponse
     | RecentEventsResponse
-    | SessionsResponse
-    | TimelineResponse
-    | AttackScenariosResponse
+    | ApiSessionsResponse
+    | ApiSessionTimelineResponse
+    | AttackScenariosResponse,
 ) {
   await delay(LATENCY_MS);
   if (readScenario() === "offline") return HttpResponse.error();
@@ -59,42 +65,64 @@ export const handlers = [
     return respond(empty ? EMPTY_OVERVIEW : overviewOf(SERVERS));
   }),
 
-  http.get("*/api/v1/servers", async () => respond({ servers: readScenario() === "empty" ? [] : SERVERS })),
+  http.get("*/api/v1/servers", async () =>
+    respond({ servers: readScenario() === "empty" ? [] : SERVERS }),
+  ),
 
-  http.get("*/api/v1/events/recent", async () => respond({ events: readScenario() === "empty" ? [] : recentEvents() })),
+  http.get("*/api/v1/events/recent", async () =>
+    respond({ events: readScenario() === "empty" ? [] : recentEvents() }),
+  ),
 
-  // SCR-301 Replay (spec §5.3). Empty scenario has no recorded sessions.
-  http.get("*/api/v1/sessions", async () => respond({ sessions: readScenario() === "empty" ? [] : SESSIONS })),
+  // SCR-301 Replay (GMCP-28 wire contract). Empty scenario has no recorded sessions.
+  http.get("*/api/v1/sessions", async () =>
+    respond({
+      items: readScenario() === "empty" ? [] : SESSIONS,
+      nextCursor: null,
+    }),
+  ),
 
   http.get("*/api/v1/sessions/:id/timeline", async ({ params }) =>
-    respond(timelineOf(String(params.id)))
+    respond(timelineOf(String(params.id))),
   ),
 
   // SCR-201 Attack Lab (spec §5.2). The catalogue is static; unavailable scenarios still list so
   // the picker can show them as 준비 중.
-  http.get("*/api/v1/attacklab/scenarios", async () => respond({ scenarios: ATTACK_SCENARIOS })),
+  http.get("*/api/v1/attacklab/scenarios", async () =>
+    respond({ scenarios: ATTACK_SCENARIOS }),
+  ),
 
   // The real endpoint only queues the run (the runner is GMCP-55); the mock plays it out and
   // returns the finished result the panes render. The delay stands in for that execution.
   http.post("*/api/v1/attacklab/run/:id", async ({ params, request }) => {
-    const mode = (new URL(request.url).searchParams.get("mode") ?? "guarded") as AttackRunMode;
+    const mode = (new URL(request.url).searchParams.get("mode") ??
+      "guarded") as AttackRunMode;
     await delay(600);
     if (readScenario() === "offline") return HttpResponse.error();
     const run = attackRun(String(params.id), mode);
     return run
       ? HttpResponse.json(run)
-      : HttpResponse.json({ code: "scenario_not_found", message: "unknown or unavailable scenario" }, { status: 404 });
+      : HttpResponse.json(
+          {
+            code: "scenario_not_found",
+            message: "unknown or unavailable scenario",
+          },
+          { status: 404 },
+        );
   }),
 
   // SCR-401 Detector (spec §5.4). The control plane serves this for real; the mock covers the
   // detectors the design draws (RRN, secrets) that the seeded pack does not reach yet.
   http.post("*/api/v1/detect/preview", async ({ request }) => {
-    const direction = (new URL(request.url).searchParams.get("direction") ?? "request") as DetectDirection;
+    const direction = (new URL(request.url).searchParams.get("direction") ??
+      "request") as DetectDirection;
     const { text } = (await request.json()) as { text?: string };
     await delay(LATENCY_MS);
     if (readScenario() === "offline") return HttpResponse.error();
     if (!text?.trim()) {
-      return HttpResponse.json({ code: "invalid_preview_text", message: "text must not be blank" }, { status: 400 });
+      return HttpResponse.json(
+        { code: "invalid_preview_text", message: "text must not be blank" },
+        { status: 400 },
+      );
     }
     return HttpResponse.json(previewOf(text, direction));
   }),
@@ -209,9 +237,12 @@ export const handlers = [
       live = false;
       clearInterval(timer);
     };
-    const emitter = (client as unknown as Record<symbol, { on?: (type: string, fn: () => void) => void }>)[
-      Symbol.for("kClientEmitter")
-    ];
+    const emitter = (
+      client as unknown as Record<
+        symbol,
+        { on?: (type: string, fn: () => void) => void }
+      >
+    )[Symbol.for("kClientEmitter")];
     emitter?.on?.("close", stop);
     emitter?.on?.("error", stop);
     request.signal.addEventListener("abort", stop);
@@ -246,5 +277,20 @@ export const handlers = [
       }
       seq += 1;
     }, STREAM_INTERVAL_MS);
-  })
+  }),
+
+  // Deep-link support (spec §3.3): a single node lookup by eventId. Registered after the
+  // `/events/stream` sse() handler (which is itself a GET matcher) so a literal ":id" path
+  // param can never shadow the stream route — MSW resolves handlers in array order, first match
+  // wins.
+  http.get("*/api/v1/events/:id", async ({ params }) => {
+    await delay(LATENCY_MS);
+    const event = eventLookup(String(params.id));
+    return event
+      ? HttpResponse.json(event)
+      : HttpResponse.json(
+          { code: "event_not_found", message: "unknown eventId" },
+          { status: 404 },
+        );
+  }),
 ];

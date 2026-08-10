@@ -6,19 +6,25 @@ import tools.jackson.module.kotlin.jacksonObjectMapper
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain as shouldContainString
+import io.kotest.matchers.string.shouldNotContain as shouldNotContainString
 import kr.guardmcp.demoagent.agent.DemoAgentService
 import kr.guardmcp.demoagent.agent.DeterministicPlanner
 import kr.guardmcp.demoagent.agent.ToolCallChainLogger
 import kr.guardmcp.demoagent.config.DemoAgentProperties
 import kr.guardmcp.demoagent.mcp.DemoMode
+import kr.guardmcp.demoagent.mcp.DirectToolInvoker
 import kr.guardmcp.demoagent.mcp.GatewayToolInvoker
 import kr.guardmcp.demoagent.mcp.McpCallResult
 import kr.guardmcp.demoagent.mcp.ToolInvoker
 import kr.guardmcp.demoagent.support.GatewayStub
+import kr.guardmcp.demoagent.support.ToolsStub
 import java.net.http.HttpClient
 
 /** Records what it was asked to run so tests can assert on the send_email body. */
@@ -139,6 +145,65 @@ class DemoAgentServiceTest : StringSpec({
             )
             result.blocked.shouldBeTrue()
             result.verdict shouldBe "error"
+        } finally {
+            stub.stop()
+        }
+    }
+
+    "consultation log masks all three Korean PII types and keeps the lookup allowed" {
+        val stub = GatewayStub().start()
+        val tools = ToolsStub().start()
+        try {
+            val gateway = GatewayToolInvoker(
+                DemoAgentProperties(gatewayUrl = stub.baseUrl),
+                mapper,
+                HttpClient.newHttpClient(),
+            )
+            val direct = DirectToolInvoker(
+                DemoAgentProperties(demoMcpToolsUrl = tools.baseUrl),
+                mapper,
+                HttpClient.newHttpClient(),
+            )
+            val service = serviceWith(gateway, direct, gateway = gateway)
+
+            val run = service.runConsultationLog(sessionId = "s-consult")
+
+            // The lookup is legitimate, so it is masked and delivered — not blocked.
+            run.guarded.verdict shouldBe "mask_then_allow"
+            run.guarded.policyIds shouldContain "mask_korean_pii_response"
+            run.guarded.maskedTypes.map { it.tag } shouldContainAll listOf("PHONE", "RRN_LIKE", "BANK_ACCOUNT")
+            run.maskedSpanCount shouldBe 4
+            run.summary shouldContainString "마스킹"
+
+            // NFR-04: nothing unmasked may survive on the guarded side.
+            run.guarded.text shouldNotContainString "010-3456-7890"
+            run.guarded.text shouldNotContainString "881124-2300149"
+            run.guarded.text shouldNotContainString "110-234-567890"
+
+            // The unguarded run is the "before" half of the Mask Diff, and it does leak.
+            val vulnerable = run.vulnerable.shouldNotBeNull()
+            vulnerable.text shouldContainString "010-3456-7890"
+            vulnerable.maskedTypes.shouldBeEmpty()
+        } finally {
+            tools.stop()
+            stub.stop()
+        }
+    }
+
+    "consultation log can skip the unguarded comparison run" {
+        val stub = GatewayStub().start()
+        try {
+            val gateway = GatewayToolInvoker(
+                DemoAgentProperties(gatewayUrl = stub.baseUrl),
+                mapper,
+                HttpClient.newHttpClient(),
+            )
+            val service = serviceWith(gateway, gateway = gateway)
+
+            val run = service.runConsultationLog(withVulnerable = false, sessionId = "s-guarded-only")
+
+            run.vulnerable.shouldBeNull()
+            run.ticketId shouldBe "TCK-2026-9001"
         } finally {
             stub.stop()
         }

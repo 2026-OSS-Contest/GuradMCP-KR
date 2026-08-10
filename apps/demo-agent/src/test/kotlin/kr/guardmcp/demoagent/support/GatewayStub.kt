@@ -25,6 +25,7 @@ class GatewayStub {
             val (status, payload) = when (tool) {
                 "read_file" -> 200 to blockResponse(id)
                 "customer_lookup" -> 200 to maskResponse(id)
+                "search_tickets" -> 200 to consultationMaskResponse(id)
                 "missing_guard" -> 200 to missingGuardResponse(id)
                 "unknown_verdict" -> 200 to unknownVerdictResponse(id)
                 "server_error" -> 500 to """{"error":"boom"}"""
@@ -54,6 +55,20 @@ class GatewayStub {
         {"jsonrpc":"2.0","id":"$id","result":{"content":[{"phone":"[PHONE]"}]},
         "_guardmcp":{"verdict":"mask_then_allow","riskScore":75,"policyIds":["mask_korean_pii_response"],
         "detections":[{"type":"PII","subtype":"PHONE"}],"masked":"[PHONE]"}}
+    """.trimIndent()
+
+    /**
+     * GMCP-20: what the gateway returns for the consultation-log lookup once
+     * `mask_korean_pii_response` has run — the ticket body with every personal-data span
+     * replaced by its tag. Three Korean PII types in one body is the whole point of the
+     * scenario, so all three tags appear here.
+     */
+    private fun consultationMaskResponse(id: String) = """
+        {"jsonrpc":"2.0","id":"$id","result":{"content":[{"ticketId":"TCK-2026-9001",
+        "body":"연락처는 [PHONE] 입니다. 주민등록번호 [RRN_LIKE] 확인했고, 환불 [BANK_ACCOUNT] 으로 안내했습니다. 회신 메일은 [EMAIL]."}]},
+        "_guardmcp":{"verdict":"mask_then_allow","riskScore":75,"policyIds":["mask_korean_pii_response"],
+        "detections":[{"type":"PII","subtype":"PHONE"},{"type":"PII","subtype":"RRN_LIKE"},
+        {"type":"PII","subtype":"BANK_ACCOUNT"},{"type":"PII","subtype":"EMAIL"}],"masked":""}}
     """.trimIndent()
 
     private fun allowResponse(id: String) = """

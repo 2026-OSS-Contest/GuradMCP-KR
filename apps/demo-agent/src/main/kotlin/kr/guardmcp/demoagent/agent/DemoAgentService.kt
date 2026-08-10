@@ -61,6 +61,73 @@ class DemoAgentService(
     }
 
     /**
+     * T-02/T-08 consultation-log run (GMCP-20). Looks the ticket up in the requested
+     * mode; when [withVulnerable] is set it also runs the unguarded path so the caller
+     * can put the two bodies side by side for the Mask Diff view.
+     *
+     * The lookup itself is legitimate, so the guarded verdict is `mask_then_allow`, not a
+     * block: the agent still gets its answer, minus the personal data.
+     */
+    fun runConsultationLog(
+        withVulnerable: Boolean = true,
+        sessionId: String = newSessionId(),
+    ): ConsultationLogResponse {
+        val guarded = lookupConsultation(DemoMode.GUARDED, sessionId)
+        val vulnerable = if (withVulnerable) lookupConsultation(DemoMode.VULNERABLE, sessionId) else null
+        val maskedSpans = guarded.maskedTypes.sumOf(MaskedTypeCount::count)
+        return ConsultationLogResponse(
+            sessionId = sessionId,
+            task = DemoScenarios.CONSULTATION_TASK,
+            ticketId = DemoScenarios.CONSULTATION_TICKET_ID,
+            guarded = guarded,
+            vulnerable = vulnerable,
+            maskedSpanCount = maskedSpans,
+            summary = summarizeConsultation(guarded, maskedSpans),
+        )
+    }
+
+    private fun lookupConsultation(mode: DemoMode, sessionId: String): ConsultationLookup {
+        val invoker = invokerByMode.getValue(mode)
+        val request = planner.planConsultationLog().single()
+        val result = invoker.call(request, sessionId)
+        chainLogger.log(sessionId, mode, 1, request, result)
+        val text = result.resultJson ?: ""
+        return ConsultationLookup(
+            mode = mode.name.lowercase(),
+            verdict = result.verdict,
+            riskScore = result.riskScore,
+            policyIds = result.policyIds,
+            detections = result.detections,
+            text = text,
+            maskedTypes = countMaskTags(text),
+            message = result.message,
+        )
+    }
+
+    /**
+     * Counts `[TAG]` stand-ins in a masked body. Reading the applied tags back out of the
+     * text keeps the count honest about what the gateway actually replaced, rather than
+     * restating what the detector claimed to find.
+     */
+    private fun countMaskTags(text: String): List<MaskedTypeCount> =
+        MASK_TAG.findAll(text)
+            .map { it.groupValues[1] }
+            .groupingBy { it }
+            .eachCount()
+            .toList()
+            .sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first })
+            .map { (tag, count) -> MaskedTypeCount(tag, count) }
+
+    private fun summarizeConsultation(guarded: ConsultationLookup, maskedSpans: Int): String = when {
+        guarded.verdict == "error" -> guarded.message ?: "게이트웨이 응답을 확인할 수 없습니다."
+        maskedSpans == 0 -> "상담 로그에서 마스킹된 개인정보가 없습니다."
+        else -> {
+            val tags = guarded.maskedTypes.joinToString(", ") { "${it.tag} ${it.count}건" }
+            "상담 로그 응답에서 개인정보 ${maskedSpans}건이 마스킹된 뒤 전달되었습니다 ($tags)."
+        }
+    }
+
+    /**
      * Preserves the original `/demo/pii` contract: proxy `customer_lookup` through the
      * gateway and return `{...guardmcp, result, error}`. GMCP-30 readiness and the
      * quickstart curl both depend on this exact shape.
@@ -107,4 +174,9 @@ class DemoAgentService(
     }
 
     private fun newSessionId(): String = "s-${UUID.randomUUID().toString().take(8)}"
+
+    private companion object {
+        /** The `[PHONE]`/`[RRN_LIKE]`/`[BANK_ACCOUNT]` stand-ins the gateway substitutes. */
+        val MASK_TAG = Regex("""\[([A-Z][A-Z0-9_]*)]""")
+    }
 }
