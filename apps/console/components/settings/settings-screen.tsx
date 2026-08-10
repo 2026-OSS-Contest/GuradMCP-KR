@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { Info } from "lucide-react";
+import { BannerInfoIcon } from "@/components/icons";
 import { getServers, getSettings, setServerTrust, updateSettings } from "@/lib/api/client";
 import type { FailMode, GatewaySettings, McpServer, SettingsUpdate, TrustLevel } from "@/lib/api/types";
 import { useResource } from "@/lib/api/use-resource";
@@ -115,7 +115,7 @@ export function SettingsScreen() {
           role="status"
           className="text-body-text-b3-md flex items-center gap-2 bg-grayscale-700 px-8 py-3 text-grayscale-white"
         >
-          <Info className="size-4 flex-none" aria-hidden />
+          <BannerInfoIcon className="size-4 flex-none" aria-hidden />
           {t(notice)}
         </p>
       )}
