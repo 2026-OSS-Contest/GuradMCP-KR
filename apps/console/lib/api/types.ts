@@ -455,3 +455,68 @@ export interface TimelineResponse {
   /** Full detail for each event id the panel can select. */
   details: Record<string, EventDetail>;
 }
+
+// ── SCR-302 Policy Builder (spec §5.5, FR-POL-02/04) ────────────────────────
+// `GET /policy-packs`, `GET /policies`, `PUT /policy-packs/{packId}` and `PUT /policies/{policyId}`
+// are all served by the control plane today (`PolicyController`). Both GETs answer with a bare
+// array rather than an envelope, and they speak the same `GuardAction`/`Severity` vocabulary as
+// the detector — not the wider one the YAML DSL accepts, which has `warn` and `info` besides.
+//
+// The fields marked optional below are what the design draws and the control plane does not
+// report. They are enrichment, exactly as on SCR-402: present under the mock, absent against a
+// real gateway, and every one of them degrades to something the screen can still render.
+
+export interface PolicyPack {
+  id: string;
+  /** A write counter the control plane bumps, not a semver string. */
+  version: number;
+  enabled: boolean;
+  description: string;
+  /** ISO-8601. Bumped alongside `version` on every write, including a policy's. */
+  updatedAt: string;
+
+  /**
+   * Packs this one extends, which is what indents the tree. The control plane's `PolicyPack`
+   * has no such field, so without it the tree renders flat — correct, just less informative.
+   */
+  extends?: string[];
+}
+
+export interface PolicyRow {
+  id: string;
+  packId: string;
+  priority: number;
+  action: GuardAction;
+  severity: Severity;
+  description: string;
+
+  /**
+   * Whether the policy is live. **The control plane has no per-policy enable/disable**:
+   * `PolicyUpdateRequest` takes `action`, `severity` and `priority` and nothing else, and only
+   * a *pack* can be switched off. The design draws a per-row toggle regardless, so the field is
+   * optional and the screen treats a missing value as enabled.
+   */
+  enabled?: boolean;
+  /** Evaluated but acting on nothing (GMCP-77). No DSL field and no endpoint reports it yet. */
+  dryRun?: boolean;
+  /** Repo-relative path of the file defining it, shown as the YAML pane's caption. */
+  path?: string;
+}
+
+
+/**
+ * `GET /policies/{policyId}/stats` — how often a policy actually fired, and what it *would* have
+ * decided while in dry-run. GMCP-80 owns the endpoint and it is not built yet, so the mock is
+ * the only server; the path and shape are the ones that ticket names.
+ *
+ * Both of the table's counts come from here: the 30-day column and the dry-run panel beneath the
+ * YAML are two readings of the same record.
+ */
+export interface PolicyStats {
+  policyId: string;
+  /** Times it fired over the window; `null` when it never has — the table's "–". */
+  firedLast30d: number | null;
+  /** Present only while the policy is in dry-run: the verdicts it would have produced. */
+  dryRun?: { wouldFire: number; windowDays: number };
+}
+

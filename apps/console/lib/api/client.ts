@@ -12,6 +12,9 @@ import type {
   EventDetail,
   Overview,
   PolicyDetail,
+  PolicyPack,
+  PolicyRow,
+  PolicyStats,
   RecentEventsResponse,
   RevealContent,
   ServersResponse,
@@ -51,6 +54,17 @@ async function post<T>(path: string, signal?: AbortSignal): Promise<T> {
     method: "POST",
     signal,
     headers: { Accept: "application/json" },
+  });
+  if (!response.ok) throw new ApiError(response.status, response.statusText);
+  return (await response.json()) as T;
+}
+
+async function putJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(`${BASE}/api/v1${path}`, {
+    method: "PUT",
+    signal,
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
   if (!response.ok) throw new ApiError(response.status, response.statusText);
   return (await response.json()) as T;
@@ -138,3 +152,35 @@ export const getApprovals = (signal?: AbortSignal) => get<Approval[]>("/approval
  */
 export const decideApproval = (id: string, decision: ApprovalDecision, signal?: AbortSignal) =>
   postJson<Approval>(`/approvals/${encodeURIComponent(id)}/decision`, { decision }, signal);
+
+/**
+ * SCR-302 Policy Builder (spec §5.5), served by the control plane today.
+ *
+ * Packs and policies are two endpoints, not one payload, and each answers with a bare array —
+ * so the screen asks for both and joins them on `packId` itself.
+ */
+export const getPolicyPacks = (signal?: AbortSignal) => get<PolicyPack[]>("/policy-packs", signal);
+export const getPolicies = (signal?: AbortSignal) => get<PolicyRow[]>("/policies", signal);
+
+/** Flip a whole pack. The one policy mutation the control plane fully supports. */
+export const setPackEnabled = (id: string, enabled: boolean, signal?: AbortSignal) =>
+  putJson<PolicyPack>(`/policy-packs/${encodeURIComponent(id)}`, { enabled }, signal);
+
+
+/**
+ * Flip one policy on or off.
+ *
+ * The path and verb are the real ones, but `enabled` is **not** a field
+ * `PolicyUpdateRequest` declares, so a real control plane accepts the call and changes nothing.
+ * Only the mock honours it. Until the control plane grows the field, this is the SCR-302 toggle
+ * the design asks for and nothing more.
+ */
+export const setPolicyEnabled = (id: string, enabled: boolean, signal?: AbortSignal) =>
+  putJson<PolicyRow>(`/policies/${encodeURIComponent(id)}`, { enabled }, signal);
+
+/**
+ * How often one policy fired, and what it would have decided in dry-run. GMCP-80 defines this
+ * path; nothing serves it yet, so today it only ever reaches the mock.
+ */
+export const getPolicyStats = (id: string, signal?: AbortSignal) =>
+  get<PolicyStats>(`/policies/${encodeURIComponent(id)}/stats`, signal);

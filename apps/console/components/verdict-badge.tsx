@@ -46,10 +46,16 @@ export interface VerdictBadgeProps {
   size?: "sm" | "md";
   /** Trailing detail, such as the number of pending approvals. */
   count?: number;
+  /**
+   * Short labels — 승인 rather than 승인 대기. For narrow columns that cannot hold the full
+   * wording: the SCR-302 policy table gives the action 74px, and the design writes it short
+   * there. Icon and colour are unchanged, so §4.3's never-colour-alone rule still holds.
+   */
+  compact?: boolean;
   className?: string;
 }
 
-export function VerdictBadge({ verdict, size = "md", count, className }: VerdictBadgeProps) {
+export function VerdictBadge({ verdict, size = "md", count, compact, className }: VerdictBadgeProps) {
   const t = useTranslations("verdict");
   const { Icon, key, tone } = STYLES[verdict];
 
@@ -63,7 +69,7 @@ export function VerdictBadge({ verdict, size = "md", count, className }: Verdict
       )}
     >
       <Icon className="h-5 w-4 flex-none" aria-hidden />
-      {t(key)}
+      {compact ? t(`short.${key}`) : t(key)}
       {count !== undefined && <span>{count}</span>}
     </span>
   );
