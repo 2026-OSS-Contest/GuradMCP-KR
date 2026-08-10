@@ -243,7 +243,7 @@
       },
       "fail_open": {
         "label": "Fail-Open",
-        "desc": "위협 발견 시마다 체크"
+        "desc": "게이트웨이 장애 시에도 Tool Call을 허용"
       }
     },
     "log": {

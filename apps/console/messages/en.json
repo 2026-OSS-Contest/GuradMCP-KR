@@ -243,7 +243,7 @@
       },
       "fail_open": {
         "label": "Fail-Open",
-        "desc": "Ask about each threat as it is found"
+        "desc": "Allow tool calls even while the gateway is down"
       }
     },
     "log": {
