@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Info } from "lucide-react";
+import { BannerInfoIcon } from "@/components/icons";
 import {
   getPolicies,
   getPolicy,
@@ -201,7 +201,7 @@ export function PolicyBuilder() {
           role="status"
           className="text-body-text-b3-md flex items-center gap-2 bg-grayscale-700 px-8 py-3 text-grayscale-white"
         >
-          <Info className="size-4 flex-none" aria-hidden />
+          <BannerInfoIcon className="size-4 flex-none" aria-hidden />
           {t(notice)}
         </p>
       )}
