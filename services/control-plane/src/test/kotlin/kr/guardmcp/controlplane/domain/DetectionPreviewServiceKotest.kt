@@ -40,6 +40,16 @@ class DetectionPreviewServiceKotest : StringSpec({
         preview.maskedText shouldBe "오늘 날씨가 좋네요"
     }
 
+    "a policy reconfigured to warn is reported as warn, not allow" {
+        val store = PolicyStore(Clock.systemUTC())
+        store.updatePolicy("approve_external_email", action = GuardAction.WARN, severity = null, priority = null)
+
+        val preview = DetectionPreviewService(store).preview("partner@external.example 로 전송해줘")
+
+        preview.verdict shouldBe GuardAction.WARN
+        preview.findings.single().policyId shouldBe "approve_external_email"
+    }
+
     "disabled pack stops its policy from matching" {
         val store = PolicyStore(Clock.systemUTC())
         store.updatePack("korean-pii", enabled = false)
