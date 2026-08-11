@@ -87,6 +87,7 @@ npm run bench
 | 벤치마크 결과 정리 | [열기](docs/benchmark-results.md) | [Open](docs/benchmark-results.md) |
 | 공격 시나리오 카탈로그 | [열기](docs/attack-scenarios.md) | [Open](docs/attack-scenarios.en.md) |
 | Attack Lab 러너 | [열기](docs/attack-lab-runner.md) | [Open](docs/attack-lab-runner.en.md) |
+| Replay 세션·타임라인 | [열기](docs/replay.md) | [Open](docs/replay.en.md) |
 | 기여 가이드 | [열기](CONTRIBUTING.md#한국어) | [Open](CONTRIBUTING.md#english) |
 | 개발 워크플로 | [열기](docs/contributing/development-workflow.md) | [Open](docs/contributing/development-workflow.en.md) |
 | 커밋 컨벤션 | [열기](docs/contributing/commit-convention.md) | [Open](docs/contributing/commit-convention.en.md) |

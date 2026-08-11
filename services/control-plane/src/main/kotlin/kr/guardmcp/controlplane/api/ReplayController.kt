@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.annotation.JsonUnwrapped
 import kr.guardmcp.controlplane.domain.ChainStatus
-import kr.guardmcp.controlplane.domain.ReplayStore
+import kr.guardmcp.controlplane.domain.ReplayTimelines
 import kr.guardmcp.controlplane.domain.TimelineNode
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.GetMapping
@@ -44,10 +44,14 @@ data class EventLookupResponse(
     @get:JsonUnwrapped val node: TimelineNode,
 )
 
-/** `GET /sessions`, `GET /sessions/{id}/timeline`, `GET /events/{id}` — the Replay screen's data source (GMCP-28). */
+/**
+ * `GET /sessions`, `GET /sessions/{id}/timeline`, `GET /events/{id}` — the Replay screen's data
+ * source (GMCP-28). Reads through [ReplayTimelines], which serves seeded demo sessions and the
+ * sessions projected from ingested audit events alike (GMCP-114).
+ */
 @RestController
 @RequestMapping("/api/v1")
-class ReplayController(private val replayStore: ReplayStore) {
+class ReplayController(private val replayStore: ReplayTimelines) {
 
     @GetMapping("/sessions")
     fun sessions(
