@@ -49,7 +49,7 @@ test("SCR-401 choosing a finding selects it in the input", async ({ page }) => {
   expect(selected).toBe("010-1234-5678");
 });
 
-test("SCR-401 editing or switching direction drops the stale result", async ({ page }) => {
+test("SCR-401 switching direction drops the stale result, then runs the text the other way", async ({ page }) => {
   await page.goto("/detector");
   await page.getByRole("button", { name: "한국형 PII 샘플" }).click();
   await page.getByRole("button", { name: "검사 실행" }).click();
@@ -58,12 +58,147 @@ test("SCR-401 editing or switching direction drops the stale result", async ({ p
   // The verdicts differ by direction, so a result from the other one no longer applies.
   await page.getByRole("button", { name: "response" }).click();
   await expect(page.getByText("텍스트를 입력 후 검사 실행 버튼을 클릭하세요.")).toBeVisible();
+
+  // …and the debounce then runs the same text the other way, without anyone pressing anything.
+  // Asserting the empty state *leaves* again is what keeps this honest: without the second half
+  // the first would pass simply by being quicker than the 500ms pause.
+  await expect(page.getByText("텍스트를 입력 후 검사 실행 버튼을 클릭하세요.")).toBeHidden();
 });
 
-test("SCR-401 explains the direction toggle on demand", async ({ page }) => {
+test("SCR-401 runs on its own once typing settles", async ({ page }) => {
+  await page.goto("/detector");
+
+  // No button pressed anywhere in this test — spec §5.4 asks for a 500ms debounce beside the
+  // manual run, and this is the automatic half.
+  await page
+    .getByRole("textbox", { name: "검사할 텍스트" })
+    .fill("고객 연락처는 010-1234-5678입니다.");
+
+  await expect(page.getByRole("region", { name: "탐지 결과" }).getByText("PHONE")).toBeVisible();
+});
+
+test("SCR-401 each sample loads its own material", async ({ page }) => {
+  await page.goto("/detector");
+
+  await page.getByRole("button", { name: "SECRET 샘플" }).click();
+  const findings = page.getByRole("region", { name: "탐지 결과" });
+  await expect(findings.getByText("SECRET").first()).toBeVisible();
+
+  await page.getByRole("button", { name: "인젝션 샘플" }).click();
+  await expect(findings.getByText("PATH").first()).toBeVisible();
+  await expect(findings.getByText("attacker@evil.example")).toBeVisible();
+});
+
+test("SCR-401 inspects the first 64KB of a longer text and says the rest went unchecked", async ({ page }) => {
+  await page.goto("/detector");
+
+  // Korean runs three bytes a character, so this filler is 66KB on its own: the first number
+  // falls inside the cap and the second past it. Announcing the cut is what stops the result
+  // from reading as "nothing found" for text nobody looked at.
+  const filler = "가".repeat(22 * 1024);
+  await page.getByRole("textbox", { name: "검사할 텍스트" }).fill(`010-1234-5678 ${filler} 010-9999-8888`);
+
+  await expect(page.getByText(/앞부분만 검사했습니다/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "검사 실행" })).toBeEnabled();
+
+  const findings = page.getByRole("region", { name: "탐지 결과" });
+  await expect(findings.getByText("010-1234-5678")).toBeVisible();
+  await expect(findings.getByText("010-9999-8888")).toBeHidden();
+});
+
+test("SCR-401 stays usable when one run replaces another mid-flight", async ({ page }) => {
+  await page.goto("/detector");
+  const input = page.getByRole("textbox", { name: "검사할 텍스트" });
+
+  // Type, wait past the debounce so the request is actually out, then type again — which aborts
+  // it. The replaced run must not leave the spinner on, or the button never comes back.
+  await input.fill("010-1234-5678");
+  await page.waitForTimeout(600);
+  await input.fill("010-1234-5678 그리고 900101-1234567");
+
+  await expect(page.getByRole("button", { name: "검사 실행" })).toBeEnabled();
+  // …and it is the newer run's answer that lands, not the one it replaced.
+  const findings = page.getByRole("region", { name: "탐지 결과" });
+  await expect(findings.getByText("RRN")).toBeVisible();
+});
+
+test("SCR-401 names the secret's issuer and the file a blocked path leads to", async ({ page }) => {
+  await page.goto("/detector");
+
+  // Neither subtype is in the payload — `DetectionFinding` carries no such field. Both are read
+  // out of the matched text, so they hold up against the real control plane too.
+  await page
+    .getByRole("textbox", { name: "검사할 텍스트" })
+    .fill("AKIA0123456789ABCD 를 .env 에 넣어두었습니다");
+
+  const findings = page.getByRole("region", { name: "탐지 결과" });
+  await expect(findings.getByText("AWS")).toBeVisible();
+  await expect(findings.getByText("DOTENV")).toBeVisible();
+
+  // The masked stand-in names the same issuer rather than a fixed one.
+  await expect(page.getByRole("region", { name: "마스킹 결과" }).getByText("SECRET_AWS")).toBeVisible();
+});
+
+test("SCR-401 copies the masked text", async ({ page }) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/detector");
+  await page.getByRole("button", { name: "한국형 PII 샘플" }).click();
+  await expect(page.getByRole("region", { name: "마스킹 결과" }).getByText("SECRET_OPENAI")).toBeVisible();
+
+  await page.getByRole("button", { name: "마스킹 결과 복사" }).click();
+
+  await expect(page.getByText("복사했습니다.")).toBeVisible();
+  // What lands on the clipboard is the masked form — never the text that was pasted in.
+  const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+  expect(clipboard).toContain("[SECRET_OPENAI]");
+  expect(clipboard).not.toContain("sk-af1k2j3h4h5g6");
+});
+
+test("SCR-401 floats the results over the input at 1024", async ({ page }) => {
+  // The 1024 frame gives the results no column of its own — the input keeps the full width and
+  // the panel sits on top of its right edge, the same rule SCR-302 follows at that width.
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await page.goto("/detector");
+
+  const input = await page.getByRole("textbox", { name: "검사할 텍스트" }).boundingBox();
+  const panel = await page.getByRole("region", { name: "탐지 결과" }).boundingBox();
+  expect(panel!.x).toBeLessThan(input!.x + input!.width);
+
+  // At 1280 the two split the row evenly and stop overlapping.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const wide = await page.getByRole("textbox", { name: "검사할 텍스트" }).boundingBox();
+  const panelWide = await page.getByRole("region", { name: "탐지 결과" }).boundingBox();
+  expect(panelWide!.x).toBeGreaterThanOrEqual(wide!.x + wide!.width - 1);
+});
+
+test("SCR-401 stacks rather than covering its controls when narrower than the frames", async ({ page }) => {
+  // The frames stop at 1024. Narrower than that the floating panel would sit on top of the run
+  // button and half the samples, so the two panes stack instead.
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.goto("/detector");
+
+  const panel = await page.getByRole("region", { name: "탐지 결과" }).boundingBox();
+  const input = await page.getByRole("textbox", { name: "검사할 텍스트" }).boundingBox();
+  expect(panel!.y).toBeGreaterThan(input!.y + input!.height - 1);
+
+  // And every control the screen offers is still reachable.
+  await expect(page.getByRole("button", { name: "검사 실행" })).toBeVisible();
+  for (const sample of ["한국형 PII 샘플", "SECRET 샘플", "인젝션 샘플"]) {
+    await expect(page.getByRole("button", { name: sample })).toBeVisible();
+  }
+});
+
+test("SCR-401 explains the direction toggle on demand, and takes 확인 for an answer", async ({ page }) => {
   await page.goto("/detector");
   await page.getByRole("button", { name: "방향별 기본 정책 강도가 다릅니다." }).click();
-  await expect(page.getByRole("tooltip")).toHaveText("방향별 기본 정책 강도가 다릅니다.");
+
+  const tooltip = page.getByRole("tooltip");
+  await expect(tooltip).toContainText("방향별 기본 정책 강도가 다릅니다.");
+
+  // The design's coach-mark carries its own dismiss, so reading it does not depend on knowing
+  // that clicking away or pressing Escape would also work.
+  await tooltip.getByRole("button", { name: "확인" }).click();
+  await expect(tooltip).toBeHidden();
 });
 
 test("SCR-401 says what to do when the gateway is unreachable", async ({ page }) => {

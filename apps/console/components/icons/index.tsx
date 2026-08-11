@@ -238,6 +238,20 @@ export const PolicyEmptyIcon = (props: P) => (
   </svg>
 );
 
+// SCR-401 Detector.
+export const FieldInfoIcon = (props: P) => (
+  <svg {...props} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g clipPath="url(#f3b91c48-clip0_171_13602)">
+  <path d="M8.00004 1.33398C4.32004 1.33398 1.33337 4.32065 1.33337 8.00065C1.33337 11.6807 4.32004 14.6673 8.00004 14.6673C11.68 14.6673 14.6667 11.6807 14.6667 8.00065C14.6667 4.32065 11.68 1.33398 8.00004 1.33398ZM8.00004 11.334C7.63337 11.334 7.33337 11.034 7.33337 10.6673V8.00065C7.33337 7.63398 7.63337 7.33398 8.00004 7.33398C8.36671 7.33398 8.66671 7.63398 8.66671 8.00065V10.6673C8.66671 11.034 8.36671 11.334 8.00004 11.334ZM8.66671 6.00065H7.33337V4.66732H8.66671V6.00065Z" fill="#7B838E"/>
+  </g>
+  <defs>
+  <clipPath id="f3b91c48-clip0_171_13602">
+  <rect width="16" height="16" fill="white"/>
+  </clipPath>
+  </defs>
+  </svg>
+);
+
 export const CopyIcon = (props: P) => (
   <svg {...props} viewBox="6 6 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
   <g clipPath="url(#d7e2a915-clip0_171_13624)">
@@ -246,6 +260,20 @@ export const CopyIcon = (props: P) => (
   <defs>
   <clipPath id="d7e2a915-clip0_171_13624">
   <rect width="20" height="20" fill="white" transform="translate(6 6)"/>
+  </clipPath>
+  </defs>
+  </svg>
+);
+
+export const DetectorEmptyIcon = (props: P) => (
+  <svg {...props} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="#FCFCFD" fillOpacity="0.06"/>
+  <g clipPath="url(#b6d0e731-clip0_377_2334)">
+  <path d="M23.5 22.0006H22.71L22.43 21.7306C23.63 20.3306 24.25 18.4206 23.91 16.3906C23.44 13.6106 21.12 11.3906 18.32 11.0506C14.09 10.5306 10.53 14.0906 11.05 18.3206C11.39 21.1206 13.61 23.4406 16.39 23.9106C18.42 24.2506 20.33 23.6306 21.73 22.4306L22 22.7106V23.5006L26.25 27.7506C26.66 28.1606 27.33 28.1606 27.74 27.7506C28.15 27.3406 28.15 26.6706 27.74 26.2606L23.5 22.0006ZM17.5 22.0006C15.01 22.0006 13 19.9906 13 17.5006C13 15.0106 15.01 13.0006 17.5 13.0006C19.99 13.0006 22 15.0106 22 17.5006C22 19.9906 19.99 22.0006 17.5 22.0006Z" fill="#FCFCFD" fillOpacity="0.25"/>
+  </g>
+  <defs>
+  <clipPath id="b6d0e731-clip0_377_2334">
+  <rect width="24" height="24" fill="white" transform="translate(8 8)"/>
   </clipPath>
   </defs>
   </svg>
