@@ -1,4 +1,5 @@
 import bankAccountTable from "./rules/bank-accounts.json" with { type: "json" };
+import entropyTable from "./rules/entropy.json" with { type: "json" };
 import filePathCatalog from "./rules/file-path.json" with { type: "json" };
 import injectionCatalog from "./rules/injection.json" with { type: "json" };
 import koreanServiceTokenTable from "./rules/korean-service-tokens.json" with { type: "json" };
@@ -88,10 +89,147 @@ export function detect(
 ): Detection[] {
   const normalized = normalizeInput(input);
   const skipValidation = options.skipValidation === true;
-  return [
+  const catalogued = [
     ...rules.flatMap((rule) => findRule(rule, normalized, skipValidation)),
     ...findEncodedInjections(normalized, skipValidation),
   ];
+  return [...catalogued, ...findHighEntropySecrets(normalized, catalogued)];
+}
+
+// --- High-entropy credential safety net (GMCP-72, FR-SEC-03) -----------------
+//
+// secret.json recognizes credentials by their shape, which only works for shapes
+// somebody already wrote down. This pass is the fallback for the ones nobody did:
+// an internal service token, a rotated format, a vendor the catalog has never
+// heard of.
+//
+// Entropy on its own cannot make that call. A SHA-256 digest, a UUID, a commit
+// hash, and a minified bundle are all high-entropy and none of them is a secret,
+// so a bare entropy threshold reports every build log. What separates a
+// credential from a digest is not the value — it is that somebody named the
+// field `token` instead of `checksum`. So the field name decides candidacy and
+// entropy only decides whether the value looks generated rather than typed.
+//
+// Confidence is 0.6, below every catalogued rule: this pass says "this is shaped
+// like a credential and is introduced as one", not "this is a GitHub token".
+const entropyConfig = parseEntropyTable(entropyTable);
+
+function findHighEntropySecrets(
+  input: NormalizedInput,
+  catalogued: Detection[],
+): Detection[] {
+  const found: Detection[] = [];
+  for (const match of input.text.matchAll(entropyConfig.pattern)) {
+    const value = match.groups?.value;
+    if (match.index === undefined || value === undefined) continue;
+    if (!isGeneratedLooking(value)) continue;
+    const valueIndex = match.index + match[0].lastIndexOf(value);
+    const span = input.identity
+      ? { start: valueIndex, end: valueIndex + value.length }
+      : resolveSourceSpan(input, valueIndex, value.length);
+    if (!span) continue;
+    // A catalogued rule already covering this span said something more specific.
+    // Reporting both would double-count the same credential and hand `mask()`
+    // overlapping spans to replace.
+    if (catalogued.some((other) => other.start < span.end && span.start < other.end)) continue;
+    found.push({
+      type: "SECRET",
+      subtype: entropyConfig.subtype,
+      maskedAs: entropyConfig.maskedAs,
+      start: span.start,
+      end: span.end,
+      confidence: entropyConfig.confidence,
+    });
+  }
+  return found;
+}
+
+/**
+ * Decides whether a value looks generated rather than typed, using Shannon
+ * entropy per character against a charset-aware threshold.
+ *
+ * Hex gets a lower bar than everything else because it draws from 16 symbols and
+ * tops out near 4 bits; holding it to the general threshold would exempt every
+ * hex-encoded credential.
+ */
+function isGeneratedLooking(value: string): boolean {
+  if (value.length < entropyConfig.minLength) return false;
+  if (value.length > entropyConfig.maxLength) return false;
+  const threshold = /^[0-9a-fA-F]+$/.test(value)
+    ? entropyConfig.thresholds.hex
+    : entropyConfig.thresholds.default;
+  return shannonEntropy(value) >= threshold;
+}
+
+/** Bits per character: -Σ p·log₂(p) over the value's own symbol distribution. */
+function shannonEntropy(value: string): number {
+  const counts = new Map<string, number>();
+  for (const character of value)
+    counts.set(character, (counts.get(character) ?? 0) + 1);
+  let entropy = 0;
+  for (const count of counts.values()) {
+    const probability = count / value.length;
+    entropy -= probability * Math.log2(probability);
+  }
+  return entropy;
+}
+
+interface EntropyConfig {
+  subtype: string;
+  maskedAs: string;
+  confidence: number;
+  minLength: number;
+  maxLength: number;
+  thresholds: { hex: number; default: number };
+  pattern: RegExp;
+}
+
+/**
+ * Compiles `rules/entropy.json`. Thresholds and the field-name list are data so
+ * they can be tuned against the dataset without touching this module; a
+ * malformed table throws at load rather than silently disabling the net.
+ */
+function parseEntropyTable(source: unknown): EntropyConfig {
+  if (!isRecord(source)) throw new Error("Entropy table must be an object.");
+  if (source.version !== 1)
+    throw new Error("Entropy table must declare version 1.");
+  const { subtype, maskedAs, confidence, minLength, maxLength } = source;
+  if (!isNonEmptyString(subtype) || !isNonEmptyString(maskedAs))
+    throw new Error("Entropy table must declare a subtype and mask tag.");
+  if (typeof confidence !== "number" || !(confidence > 0 && confidence <= 1))
+    throw new Error("Entropy table must declare a confidence in (0, 1].");
+  if (typeof minLength !== "number" || typeof maxLength !== "number" || minLength < 1 || maxLength <= minLength)
+    throw new Error("Entropy table must declare minLength < maxLength.");
+  const thresholds = source.thresholds;
+  if (!isRecord(thresholds) || typeof thresholds.hex !== "number" || typeof thresholds.default !== "number")
+    throw new Error("Entropy table must declare hex and default thresholds.");
+  const fields = source.fields;
+  if (!isRecord(fields) || !Array.isArray(fields.keywords) || fields.keywords.length === 0)
+    throw new Error("Entropy table must list at least one field keyword.");
+  for (const keyword of fields.keywords) {
+    if (!isNonEmptyString(keyword))
+      throw new Error("Entropy field keyword must be a non-empty string.");
+  }
+  const names = fields.keywords.join("|");
+  // The field name may be quoted (JSON body), followed by `=` or `:`, and the
+  // value may be quoted too. `Authorization: Bearer <token>` is covered by
+  // letting an optional scheme word sit between the separator and the value.
+  // `(?<![A-Za-z])` rather than `\b`: an underscore is a word character, so a
+  // boundary never appears in INTERNAL_API_KEY or legacy_secret_key — the two
+  // shapes credentials most often take in real configuration.
+  const pattern = new RegExp(
+    `(?<![A-Za-z])(?:${names})["']?\\s*[=:]\\s*["']?(?:Bearer\\s+|Basic\\s+|Token\\s+)?(?<value>[A-Za-z0-9+/_.~-]{8,}={0,2})`,
+    "gi",
+  );
+  return {
+    subtype,
+    maskedAs,
+    confidence,
+    minLength,
+    maxLength,
+    thresholds: { hex: thresholds.hex, default: thresholds.default },
+    pattern,
+  };
 }
 
 // --- Base64 de-obfuscation (GMCP-8, FR-INJ-02, threat T-07) -------------------

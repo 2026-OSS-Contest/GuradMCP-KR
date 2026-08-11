@@ -10,6 +10,8 @@ import { evaluate, type Action, type Detection, type Direction, type EvaluationS
 interface Sample { id: string; label: boolean; text: string; type?: string }
 /** FR-SEC-02: a domestic-credential sample names the entry it must trip, not just "some secret". */
 interface KoreanServiceTokenSample { id: string; label: boolean; text: string; credential?: string }
+/** FR-SEC-03: the entropy net has no vendor to name, so a sample only carries its verdict. */
+interface EntropySample { id: string; label: boolean; text: string; note?: string }
 interface Scenario { id: string; text: string; expectBlocked: boolean }
 interface AuthorFixture {
   id: string;
@@ -44,6 +46,7 @@ const outputPath = resolve(
 const samples = JSON.parse(await readFile(new URL("../datasets/pii-benchmark.json", import.meta.url), "utf8")) as Sample[];
 const scenarios = JSON.parse(await readFile(new URL("../scenarios/threats.json", import.meta.url), "utf8")) as Scenario[];
 const koreanServiceTokenSamples = JSON.parse(await readFile(new URL("../datasets/korean-service-tokens.json", import.meta.url), "utf8")) as KoreanServiceTokenSample[];
+const entropySamples = JSON.parse(await readFile(new URL("../datasets/high-entropy-secrets.json", import.meta.url), "utf8")) as EntropySample[];
 const policyRoot = fileURLToPath(new URL("../../policy-packs", import.meta.url));
 const fixtureRoot = fileURLToPath(new URL("../policy-fixtures", import.meta.url));
 const policyPacks = await loadPolicyPacks(policyRoot);
@@ -169,7 +172,28 @@ const koreanServiceTokens = {
   misses: koreanServiceTokenResults.filter(({ passed }) => !passed).map(({ id, credential, detected }) => ({ id, credential, detected }))
 };
 
-const thresholds = { recall: 0.90, fpr: 0.05, p95Ms: 50, blockRate: 0.80, scenarioPassRate: 1, fixturePassRate: 1, fixtureCoverageRate: 1, koreanServiceTokenRecall: 0.90, koreanServiceTokenFpr: 0.05 };
+/**
+ * FR-SEC-03 (GMCP-72). The entropy net is the one detector that can fire on text
+ * nobody wrote a pattern for, so its false-positive rate is the number that
+ * decides whether it is usable at all — a net that flags every build log gets
+ * turned off, and then it protects nothing.
+ */
+const entropyResults = entropySamples.map((sample) => {
+  const detected = detect(sample.text).some(({ subtype }) => subtype === "HIGH_ENTROPY");
+  return { id: sample.id, label: sample.label, note: sample.note ?? null, detected, passed: detected === sample.label };
+});
+const entropyPositives = entropyResults.filter(({ label }) => label);
+const entropyNegatives = entropyResults.filter(({ label }) => !label);
+const highEntropySecrets = {
+  samples: entropyResults.length,
+  positives: entropyPositives.length,
+  negatives: entropyNegatives.length,
+  recall: entropyPositives.length === 0 ? 0 : entropyPositives.filter(({ detected }) => detected).length / entropyPositives.length,
+  fpr: entropyNegatives.length === 0 ? 0 : entropyNegatives.filter(({ detected }) => detected).length / entropyNegatives.length,
+  misses: entropyResults.filter(({ passed }) => !passed).map(({ id, note, detected }) => ({ id, note, detected }))
+};
+
+const thresholds = { recall: 0.90, fpr: 0.05, p95Ms: 50, blockRate: 0.80, scenarioPassRate: 1, fixturePassRate: 1, fixtureCoverageRate: 1, koreanServiceTokenRecall: 0.90, koreanServiceTokenFpr: 0.05, highEntropyRecall: 0.90, highEntropyFpr: 0.05 };
 const metrics = {
   recall,
   fpr,
@@ -188,6 +212,9 @@ const metrics = {
   threats: scenarios.length,
   authorFixtures: fixtureResults.length,
   policyCount: policies.length,
+  highEntropySamples: highEntropySecrets.samples,
+  highEntropyRecall: highEntropySecrets.recall,
+  highEntropyFpr: highEntropySecrets.fpr,
   koreanServiceTokenSamples: koreanServiceTokens.samples,
   koreanServiceTokenRecall: koreanServiceTokens.recall,
   koreanServiceTokenFpr: koreanServiceTokens.fpr
@@ -199,6 +226,8 @@ const passed = metrics.recall >= thresholds.recall
   && metrics.scenarioPassRate >= thresholds.scenarioPassRate
   && metrics.fixturePassRate >= thresholds.fixturePassRate
   && metrics.fixtureCoverageRate >= thresholds.fixtureCoverageRate
+  && metrics.highEntropyRecall >= thresholds.highEntropyRecall
+  && metrics.highEntropyFpr <= thresholds.highEntropyFpr
   && metrics.koreanServiceTokenRecall >= thresholds.koreanServiceTokenRecall
   && metrics.koreanServiceTokenFpr <= thresholds.koreanServiceTokenFpr;
 const fprWithoutValidation = negatives === 0 ? 0 : falsePositiveWithoutValidation / negatives;
@@ -208,7 +237,7 @@ const validationImpact = {
   falsePositivesPrevented: falsePositiveWithoutValidation - falsePositive,
   fprReduction: fprWithoutValidation - fpr
 };
-const report = { generatedAt: new Date().toISOString(), metrics, thresholds, perTypeRecall, koreanServiceTokens, validationImpact, scenarios: scenarioResults, fixtures: fixtureResults, fixtureCoverage, passed };
+const report = { generatedAt: new Date().toISOString(), metrics, thresholds, perTypeRecall, koreanServiceTokens, highEntropySecrets, validationImpact, scenarios: scenarioResults, fixtures: fixtureResults, fixtureCoverage, passed };
 
 await mkdir(dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`);

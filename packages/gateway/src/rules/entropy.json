@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "subtype": "HIGH_ENTROPY",
+  "maskedAs": "[SECRET]",
+  "confidence": 0.6,
+  "note": "FR-SEC-03 safety net for credentials whose format is not in secret.json. Entropy alone cannot decide this: a SHA-256 digest, a UUID, and a minified bundle are all high-entropy and none of them is a secret. So a value only counts when a credential-naming field introduces it, and the thresholds below are tuned against attack-lab/datasets/high-entropy-secrets.json.",
+  "minLength": 20,
+  "maxLength": 200,
+  "thresholds": {
+    "hex": 3.6,
+    "default": 4.0,
+    "note": "Bits per character (Shannon). Hex tops out near 4.0 because it draws from 16 symbols, so it needs a lower bar than a base64-ish value drawing from 64."
+  },
+  "fields": {
+    "note": "Field names that introduce a credential. Deliberately excludes hash, checksum, digest, sha, commit, etag, id, and uuid: those name high-entropy values that are not secrets, and including them is how an entropy rule starts reporting every build log.",
+    "keywords": [
+      "api[_-]?key",
+      "secret[_-]?key",
+      "secret",
+      "access[_-]?key",
+      "private[_-]?key",
+      "client[_-]?secret",
+      "auth[_-]?token",
+      "access[_-]?token",
+      "refresh[_-]?token",
+      "session[_-]?token",
+      "bearer[_-]?token",
+      "token",
+      "passwd",
+      "password",
+      "credential",
+      "authorization"
+    ]
+  }
+}

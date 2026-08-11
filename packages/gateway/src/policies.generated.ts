@@ -177,6 +177,46 @@ export const runtimePolicyPacks: Record<string, RuntimePolicyPack> = {
           "allow_masked_approval": true
         },
         "message": "External transmission is waiting for human approval."
+      },
+      {
+        "id": "mask_secret_response",
+        "pack": "default",
+        "version": 1,
+        "description": "Mask credentials detected in MCP tool responses",
+        "priority": 310,
+        "match": {
+          "direction": "response",
+          "tool": "*",
+          "server_trust": "any",
+          "detections": {
+            "any_of": [
+              "SECRET"
+            ]
+          }
+        },
+        "action": "mask_then_allow",
+        "severity": "high",
+        "message": "Credential spans were masked before the tool response was delivered."
+      },
+      {
+        "id": "require_approval_untrusted_high_risk_tool",
+        "pack": "default",
+        "version": 1,
+        "description": "신뢰 등급이 untrusted인 서버로 향하는 고위험 Tool 호출은 사람 승인을 거친다",
+        "priority": 210,
+        "match": {
+          "direction": "request",
+          "tool": "send_*",
+          "server_trust": "untrusted"
+        },
+        "action": "require_approval",
+        "severity": "high",
+        "approval": {
+          "timeout_seconds": 120,
+          "on_timeout": "block",
+          "allow_masked_approval": false
+        },
+        "message": "미검증(untrusted) 서버로 향하는 고위험 도구 호출은 승인이 필요합니다."
       }
     ]
   },

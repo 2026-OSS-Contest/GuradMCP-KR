@@ -29,13 +29,14 @@
     "test:unit": "vitest run",
     "test:e2e": "playwright test --config apps/console/playwright.config.ts",
     "bench": "tsx attack-lab/benchmark/run.ts",
+    "attacklab": "tsx attack-lab/runner/run.ts",
     "policy:generate": "tsx scripts/compile-runtime-policies.ts",
     "policy:check-generated": "tsx scripts/compile-runtime-policies.ts --check",
     "policy:validate": "tsx scripts/validate-policies.ts && npm run policy:generate",
     "scenarios:validate": "tsx scripts/validate-scenarios.ts",
     "license:report": "node scripts/ci/generate-license-report.mjs --output artifacts/licenses",
     "figma:bridge": "node apps/console/tools/figma-tokens/bridge/server.mjs",
-    "check": "npm run lint && npm run typecheck && npm run test:unit && npm run policy:validate && npm run scenarios:validate && npm run bench"
+    "check": "npm run lint && npm run typecheck && npm run test:unit && npm run policy:validate && npm run scenarios:validate && npm run bench && npm run attacklab"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",

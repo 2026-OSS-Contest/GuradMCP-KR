@@ -80,4 +80,14 @@ A-09, A-11, and A-14 cannot yet be reproduced with a text probe. Tool-definition
 npm run scenarios:validate && npm run bench
 ```
 
-Validation covers more than the schema: it checks that `expectedControl.detections` still matches what the detector produces. If a detector change stops emitting an expected tag, this is where it fails.
+Validation covers more than the schema: it checks that `expectedControl.detections` still matches what the detector produces.
+
+## Running them
+
+The [Attack Scenario Runner](attack-lab-runner.en.md) executes the expected control point each scenario claims.
+
+```bash
+npm run attacklab
+```
+
+A scenario whose `expectedControl.policy` is `null` is reported as a `GAP`: no policy owns it, so the target verdict does not appear. That does not fail CI, but it is listed on every run. If a detector change stops emitting an expected tag, this is where it fails.

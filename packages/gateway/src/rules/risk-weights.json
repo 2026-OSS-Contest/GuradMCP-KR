@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "trustMultiplier": {
+    "trusted": 1.0,
+    "limited": 1.3,
+    "untrusted": 1.6
+  },
+  "untrustedHighRiskFloor": 70
+}

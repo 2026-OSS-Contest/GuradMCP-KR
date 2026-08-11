@@ -272,6 +272,119 @@ class ControlPlaneApiTest : ApiTestSupport() {
     }
 
     @Test
+    fun `server list exposes the lean summary the console inventory and gateway registry consume`() {
+        val response = get("/api/v1/servers")
+
+        assertEquals(200, response.statusCode())
+        val servers = parseMap(response.body())["servers"] as List<*>
+        assertEquals(3, servers.size)
+        val fileServer = servers.map { it as Map<*, *> }.single { it["id"] == DemoSeed.SERVER_FILE_ID.toString() }
+        assertEquals("file-server", fileServer["name"])
+        assertEquals(true, fileServer["connected"])
+        assertEquals("limited", fileServer["trust"])
+        // apps/console/lib/api/types.ts's McpServer requires `tools`; this satisfies that wire
+        // contract exactly (FR-GW-03 per-server tool data is not sourced from here yet) so the
+        // console's server-inventory component never dereferences a missing field against the
+        // real backend.
+        assertEquals(emptyList<Any>(), fileServer["tools"])
+    }
+
+    @Test
+    fun `server detail exposes the full entity including endpoint and provenance`() {
+        // file-server is never mutated by another test (only ever round-tripped back to its
+        // seeded grade), so its starting fields are safe to assert regardless of test order.
+        val response = get("/api/v1/servers/${DemoSeed.SERVER_FILE_ID}")
+
+        assertEquals(200, response.statusCode())
+        val body = parseMap(response.body())
+        assertEquals("file-server", body["name"])
+        assertEquals("limited", body["trustLevel"])
+        assertEquals("connected", body["connectionStatus"])
+        assertNotNull(body["endpoint"])
+    }
+
+    @Test
+    fun `unknown server id returns the standardized 404 error`() {
+        val response = get("/api/v1/servers/${UUID.randomUUID()}")
+
+        assertEquals(404, response.statusCode())
+        assertEquals("server_not_found", parseMap(response.body())["code"])
+    }
+
+    // The Spring context (and its in-memory stores) is shared across every @Test in this class,
+    // same as the existing policy-pack/approval tests. Each server-trust test below claims one
+    // seeded server exclusively (mail-server, db-server) so mutations in one test cannot leak
+    // into another test's assumptions about that server's starting grade, regardless of JUnit's
+    // execution order. file-server is only ever touched by no-op writes, so read-only tests can
+    // rely on its seeded "limited" grade unconditionally.
+
+    @Test
+    fun `downgrading a server trust level applies immediately without confirmation`() {
+        val response = send("PUT", "/api/v1/servers/${DemoSeed.SERVER_MAIL_ID}/trust", mapOf("trustLevel" to "untrusted", "confirmed" to false))
+
+        assertEquals(200, response.statusCode())
+        assertEquals("untrusted", parseMap(response.body())["trust"])
+
+        val events = parseList(get("/api/v1/servers/trust-events").body())
+        val recorded = events.last()
+        assertEquals(DemoSeed.SERVER_MAIL_ID.toString(), recorded["serverId"])
+        assertEquals("downgrade", recorded["direction"])
+        assertNotNull(recorded["hash"])
+        assertNotNull(recorded["prevHash"])
+    }
+
+    @Test
+    fun `an unconfirmed upgrade is rejected with an impact summary, and confirming it then applies`() {
+        val rejected = send("PUT", "/api/v1/servers/${DemoSeed.SERVER_DB_ID}/trust", mapOf("trustLevel" to "trusted", "confirmed" to false))
+
+        assertEquals(409, rejected.statusCode())
+        val rejectedBody = parseMap(rejected.body())
+        assertEquals("upgrade_requires_confirmation", rejectedBody["code"])
+        @Suppress("UNCHECKED_CAST")
+        val details = rejectedBody["details"] as Map<String, Any?>
+        assertEquals("untrusted", details["fromTrust"])
+        assertEquals("trusted", details["toTrust"])
+        assertNotNull(details["affectedPolicyCount"])
+        assertEquals("untrusted", parseMap(get("/api/v1/servers/${DemoSeed.SERVER_DB_ID}").body())["trustLevel"])
+
+        val confirmed = send("PUT", "/api/v1/servers/${DemoSeed.SERVER_DB_ID}/trust", mapOf("trustLevel" to "trusted", "confirmed" to true))
+
+        assertEquals(200, confirmed.statusCode())
+        assertEquals("trusted", parseMap(confirmed.body())["trust"])
+        val detail = parseMap(get("/api/v1/servers/${DemoSeed.SERVER_DB_ID}").body())
+        assertEquals("console", detail["trustLevelUpdatedBy"])
+
+        val events = parseList(get("/api/v1/servers/trust-events").body())
+        val recorded = events.last()
+        assertEquals("upgrade", recorded["direction"])
+        assertEquals("console", recorded["confirmedBy"])
+    }
+
+    @Test
+    fun `requesting the current trust level is a no-op`() {
+        val response = send("PUT", "/api/v1/servers/${DemoSeed.SERVER_FILE_ID}/trust", mapOf("trustLevel" to "limited", "confirmed" to false))
+
+        assertEquals(200, response.statusCode())
+        assertEquals("limited", parseMap(response.body())["trust"])
+    }
+
+    @Test
+    fun `the registry stream pushes a snapshot on connect and again on every trust change`() {
+        openStream("/api/v1/servers/stream").use { stream ->
+            val initial = nextEventData(stream.reader)
+            assertTrue(initial.contains(DemoSeed.SERVER_FILE_ID.toString()))
+
+            // A downgrade always applies regardless of the file server's current grade in other
+            // tests, and is restored below so later tests still see the seeded "limited" grade.
+            send("PUT", "/api/v1/servers/${DemoSeed.SERVER_FILE_ID}/trust", mapOf("trustLevel" to "untrusted", "confirmed" to false))
+            val pushed = nextEventData(stream.reader)
+            assertTrue(pushed.contains(DemoSeed.SERVER_FILE_ID.toString()))
+            assertTrue(pushed.contains("\"trust\":\"untrusted\""))
+        }
+        send("PUT", "/api/v1/servers/${DemoSeed.SERVER_FILE_ID}/trust", mapOf("trustLevel" to "limited", "confirmed" to true))
+    }
+
+    @Test
     fun `attack lab run accepts known scenarios and rejects unknown ones`() {
         val accepted = send("POST", "/api/v1/attacklab/run/T-01", null)
         assertEquals(202, accepted.statusCode())

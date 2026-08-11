@@ -6,6 +6,7 @@ build/
 # because an IDE opened the project, and its contents duplicate src/.
 bin/
 .gradle/
+bin/
 coverage/
 playwright-report/
 test-results/

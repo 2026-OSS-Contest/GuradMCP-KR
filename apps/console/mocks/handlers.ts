@@ -1,20 +1,40 @@
 import { HttpResponse, delay, http, sse } from "msw";
-import type {
-  ApiSessionsResponse,
-  ApiSessionTimelineResponse,
-  ApprovalDecision,
-  AttackRunMode,
-  AttackScenariosResponse,
-  DetectDirection,
-  Overview,
-  RecentEventsResponse,
-  SecurityEvent,
-  ServersResponse,
+import {
+  TRUST_RANK,
+  type ApiSessionsResponse,
+  type ApiSessionTimelineResponse,
+  type ApprovalDecision,
+  type AttackRunMode,
+  type AttackScenariosResponse,
+  type DetectDirection,
+  type Overview,
+  type RecentEventsResponse,
+  type SecurityEvent,
+  type ServersResponse,
+  type ServerTrustChangeRequest,
 } from "@/lib/api/types";
 import { allApprovals, decide, raiseApproval, resetApprovals, resolveRaised } from "./approvals";
-import { EMPTY_OVERVIEW, SERVERS, liveEvent, overviewOf, recentEvents } from "./data";
 import { ATTACK_SCENARIOS, attackRun } from "./attack-lab";
+
 import { previewOf } from "./detect";
+import {
+  POLICY_YAML,
+  currentPacks,
+  currentPolicies,
+  policyStats,
+  policyYaml,
+  seedPolicies,
+  togglePack,
+  togglePolicy,
+} from "./policies";
+import {
+  EMPTY_OVERVIEW,
+  SERVERS,
+  affectedPolicyCount,
+  liveEvent,
+  overviewOf,
+  recentEvents,
+} from "./data";
 import {
   SESSIONS,
   eventLookup,
@@ -30,6 +50,9 @@ const LATENCY_MS = 250;
 
 /** How often the live stream pushes a new event. */
 const STREAM_INTERVAL_MS = 4_000;
+
+/** Stream ticks between `policy.reloaded` events — every 10th, so roughly once a minute. */
+const POLICY_RELOAD_EVERY = 10;
 
 /** `offline` fails at the network level, which is what a down gateway looks like to fetch(). */
 async function respond(
@@ -55,6 +78,54 @@ export const handlers = [
   http.get("*/api/v1/servers", async () =>
     respond({ servers: readScenario() === "empty" ? [] : SERVERS }),
   ),
+
+  // FR-GW-02 §5.1: downgrade applies immediately; an upgrade needs a follow-up confirmed:true
+  // request or 409s with an impact summary. Mirrors services/control-plane's ServerController.
+  http.put("*/api/v1/servers/:id/trust", async ({ params, request }) => {
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    const server = SERVERS.find(
+      (candidate) => candidate.id === String(params.id),
+    );
+    if (!server)
+      return HttpResponse.json(
+        { code: "server_not_found", message: "server not found" },
+        { status: 404 },
+      );
+
+    const body = (await request.json()) as ServerTrustChangeRequest;
+    const toTrust = body.trustLevel;
+    if (toTrust === server.trust)
+      return HttpResponse.json({
+        id: server.id,
+        name: server.name,
+        connected: server.connected,
+        trust: server.trust,
+      });
+
+    const isUpgrade = TRUST_RANK[toTrust] > TRUST_RANK[server.trust];
+    if (isUpgrade && !body.confirmed) {
+      return HttpResponse.json(
+        {
+          code: "upgrade_requires_confirmation",
+          message: `upgrading ${server.id} to ${toTrust} requires confirmation`,
+          details: {
+            fromTrust: server.trust,
+            toTrust,
+            affectedPolicyCount: String(affectedPolicyCount(server.id)),
+          },
+        },
+        { status: 409 },
+      );
+    }
+    server.trust = toTrust;
+    return HttpResponse.json({
+      id: server.id,
+      name: server.name,
+      connected: server.connected,
+      trust: server.trust,
+    });
+  }),
 
   http.get("*/api/v1/events/recent", async () =>
     respond({ events: readScenario() === "empty" ? [] : recentEvents() }),
@@ -137,10 +208,63 @@ export const handlers = [
       : HttpResponse.json({ code: "approval_already_resolved", message: "already decided" }, { status: 409 });
   }),
 
-  // Policy Chip popover (spec §3). Not gated by scenario — a chip resolves even offline-ish.
-  http.get("*/api/v1/policies/:id", async ({ params }) => {
+  // SCR-302 Policy Builder (spec §5.5), served by the control plane's `PolicyController`. Both
+  // GETs answer with a bare array, and both writes are PUT — the mock matches that rather than
+  // the envelope the screen would have preferred.
+  //
+  // Per-policy stats are GMCP-80's `GET /policies/{policyId}/stats`, not built yet — the mock is
+  // the only server. Registered ahead of `/policies/:id`, whose parameter would otherwise take it.
+  http.get("*/api/v1/policies/:id/stats", async ({ params }) => {
     await delay(LATENCY_MS);
-    return HttpResponse.json(policyDetail(String(params.id)));
+    if (readScenario() === "offline") return HttpResponse.error();
+    return HttpResponse.json(policyStats(String(params.id)));
+  }),
+
+  // An empty console has no packs loaded at all, which is the screen's empty state.
+  http.get("*/api/v1/policy-packs", async () => {
+    seedPolicies(readScenario() === "empty");
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    return HttpResponse.json(currentPacks());
+  }),
+
+  http.get("*/api/v1/policies", async () => {
+    seedPolicies(readScenario() === "empty");
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    return HttpResponse.json(currentPolicies());
+  }),
+
+  // `PolicyUpdateRequest` takes action/severity/priority; `enabled` is the console's own
+  // addition, which the real endpoint would accept and ignore. Here it is what actually moves.
+  http.put("*/api/v1/policies/:id", async ({ params, request }) => {
+    const { enabled } = (await request.json()) as { enabled?: boolean };
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    if (enabled === undefined) return new HttpResponse(null, { status: 400 });
+    const row = togglePolicy(String(params.id), enabled);
+    return row ? HttpResponse.json(row) : new HttpResponse(null, { status: 404 });
+  }),
+
+  http.put("*/api/v1/policy-packs/:id", async ({ params, request }) => {
+    const { enabled } = (await request.json()) as { enabled: boolean };
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    const pack = togglePack(String(params.id), enabled);
+    return pack ? HttpResponse.json(pack) : new HttpResponse(null, { status: 404 });
+  }),
+
+  // Policy Chip popover (spec §3), and the SCR-302 YAML pane. Not gated by scenario — a chip
+  // resolves even offline-ish. The policy catalogue answers first; the replay fixtures keep
+  // serving the older synthetic ids their timelines still reference.
+  http.get("*/api/v1/policies/:id", async ({ params }) => {
+    const id = String(params.id);
+    await delay(LATENCY_MS);
+    if (id in POLICY_YAML) return HttpResponse.json({ id, yaml: policyYaml(id) });
+    // The replay fixtures still reference older synthetic ids and their chips must resolve.
+    if (id.startsWith("mask_kr") || id.startsWith("deny_")) return HttpResponse.json(policyDetail(id));
+    // Anything else has no source to serve — which is every policy against a real gateway.
+    return new HttpResponse(null, { status: 404 });
   }),
 
   // Reveal-original (spec §5.3 no.5). POST — the real endpoint writes an audit record.
@@ -150,13 +274,15 @@ export const handlers = [
   }),
 
   // The gateway event stream (spec §6.3). Real backends emit several event types; the console
-  // consumes `guard.event` (SCR-101 recent events) and `approval.created`/`approval.resolved`
-  // (the SCR-000 status-bar pending badge, spec §4.1). A named event maps onto the client's
-  // `addEventListener(type, …)`, and objects are JSON-serialised for it.
+  // consumes `guard.event` (SCR-101 recent events), `approval.created`/`approval.resolved`
+  // (the SCR-000 status-bar pending badge, spec §4.1) and `policy.reloaded` (the SCR-302
+  // hot-reload banner). A named event maps onto the client's `addEventListener(type, …)`, and
+  // objects are JSON-serialised for it.
   sse<{
     "guard.event": SecurityEvent;
     "approval.created": { id: string };
     "approval.resolved": { id: string };
+    "policy.reloaded": { packId: string };
   }>("*/api/v1/events/stream", ({ client, request }) => {
     if (readScenario() === "offline") return void client.error();
 
@@ -200,6 +326,12 @@ export const handlers = [
           resolveRaised();
           client.send({ event: "approval.resolved", data: { id: `apr-${seq - 1}` } });
         }
+      }
+      // Someone edited a pack on disk and the gateway reloaded it. Rare on purpose: the SCR-302
+      // banner it raises is a call to action, and one arriving every few seconds is noise.
+      if (seq > 0 && seq % POLICY_RELOAD_EVERY === 0) {
+        // The gateway names the pack it reloaded; the console only needs to know one did.
+        client.send({ event: "policy.reloaded", data: { packId: currentPacks()[0]?.id ?? "default" } });
       }
       seq += 1;
     }, STREAM_INTERVAL_MS);
