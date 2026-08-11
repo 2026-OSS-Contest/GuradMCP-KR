@@ -10,6 +10,7 @@ Success means opening the console and being ready to run the deterministic demo 
 - Docker Compose v2.20 or later (`docker compose version`)
 - Git
 - available local ports: `3000`–`3003`, `8080`, `5432`, and `6379`
+  (if taken, use the **port overrides** below)
 
 ```bash
 git clone https://github.com/2026-OSS-Contest/GuradMCP-KR.git
@@ -20,6 +21,16 @@ cd GuradMCP-KR
 
 ```bash
 docker compose --profile demo up -d --build
+```
+
+If host ports are already allocated, override them (pattern validated in GMCP-30 re-check):
+
+```bash
+export POSTGRES_PORT=25432 REDIS_PORT=26379 \
+  CONSOLE_PORT=23000 GATEWAY_PORT=23001 CONTROL_PLANE_PORT=28080 \
+  DEMO_AGENT_PORT=23002 DEMO_MCP_TOOLS_PORT=23003
+docker compose --profile demo up -d --build
+# Console: http://127.0.0.1:23000  Gateway: http://127.0.0.1:23001
 ```
 
 The `demo` profile starts `demo-agent`, `demo-mcp-tools`, and deterministic seed data in addition to the product services: `gateway`, `control-plane`, `console`, `postgres`, and `redis`. The command is identical on ARM64 and AMD64 hosts.
