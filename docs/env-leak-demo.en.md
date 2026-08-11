@@ -61,12 +61,22 @@ The gateway emits the block as a GuardEvent and forwards it to the control plane
 | `argsDigest` | Digest of the inspected arguments — **not** the arguments |
 | `normalizedPath` | `.env` |
 
-`normalizedPath` is included deliberately (FR-SEC-04 §3.3): Replay has to be able to show **what the `path_regex` matched against**. The file's contents appear nowhere.
+`normalizedPath` is included deliberately (FR-SEC-04 §3.3) — it records **what the `path_regex` matched against**, and the file's contents appear nowhere. Note that the field is not part of the control plane's ingest DTO, so it is dropped at that boundary; it does not reach the Replay timeline.
 
-## Current limitation — it does not reach the Replay screen yet
+## Seeing it in Replay
 
-The block event **does** arrive at the control plane carrying its policy id and risk score, exactly as tabled above. What is missing is that Replay does not read it.
+The block event arrives at the control plane carrying its policy id and risk score exactly as tabled above, and **Replay reads it** (GMCP-114). The run you just executed appears in the session list.
 
-`ReplayStore` holds three sessions seeded at startup and is not connected to the ingested audit events (`GuardEventRepository`). So what Replay shows today is fixed seed data, and the run you just executed does not appear in the list.
+```bash
+curl --fail --silent "http://localhost:8080/api/v1/sessions?limit=100"
+```
 
-Wiring the two is control-plane work and is tracked as **GMCP-114**. Until then, this demo's evidence is the script above, the demo-agent response, and the audit event.
+Find the entry whose `agentLabel` is this demo's gateway session id, then open its timeline by `sessionId` (the UUID).
+
+```bash
+curl --fail --silent "http://localhost:8080/api/v1/sessions/<uuid>/timeline"
+```
+
+The blocked node carries `verdict: "block"`, its `riskScore`, and `detail.matchedPolicyIds: ["block_env_file_read"]` with the same values as the table above. See [Replay sessions and timelines](replay.en.md) for the details.
+
+Projection happens at read time, so new events appear on reload — there is no live push yet.
