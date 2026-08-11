@@ -10,6 +10,7 @@
 - Docker Compose v2.20 이상 (`docker compose version`)
 - Git
 - 사용 가능한 로컬 포트: `3000`–`3003`, `8080`, `5432`, `6379`
+  (이미 점유된 경우 아래 **포트 오버라이드**를 사용)
 
 ```bash
 git clone https://github.com/2026-OSS-Contest/GuradMCP-KR.git
@@ -20,6 +21,16 @@ cd GuradMCP-KR
 
 ```bash
 docker compose --profile demo up -d --build
+```
+
+호스트 포트가 이미 쓰이고 있으면 기본값 대신 오버라이드합니다 (GMCP-30 재검증에서 확인한 패턴).
+
+```bash
+export POSTGRES_PORT=25432 REDIS_PORT=26379 \
+  CONSOLE_PORT=23000 GATEWAY_PORT=23001 CONTROL_PLANE_PORT=28080 \
+  DEMO_AGENT_PORT=23002 DEMO_MCP_TOOLS_PORT=23003
+docker compose --profile demo up -d --build
+# 콘솔: http://127.0.0.1:23000  게이트웨이: http://127.0.0.1:23001
 ```
 
 `demo` 프로파일은 제품 서비스인 `gateway`, `control-plane`, `console`, `postgres`, `redis`에 더해 `demo-agent`, `demo-mcp-tools`와 고정 시드 데이터를 시작합니다. 호스트 아키텍처가 ARM64 또는 AMD64여도 같은 명령을 사용합니다.
