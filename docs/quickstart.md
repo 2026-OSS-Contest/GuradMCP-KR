@@ -10,6 +10,7 @@
 - Docker Compose v2.20 이상 (`docker compose version`)
 - Git
 - 사용 가능한 로컬 포트: `3000`–`3003`, `8080`, `5432`, `6379`
+  (이미 점유된 경우 아래 **포트 오버라이드**를 사용)
 
 ```bash
 git clone https://github.com/2026-OSS-Contest/GuradMCP-KR.git
@@ -20,6 +21,16 @@ cd GuradMCP-KR
 
 ```bash
 docker compose --profile demo up -d --build
+```
+
+호스트 포트가 이미 쓰이고 있으면 기본값 대신 오버라이드합니다 (GMCP-30 재검증에서 확인한 패턴).
+
+```bash
+export POSTGRES_PORT=25432 REDIS_PORT=26379 \
+  CONSOLE_PORT=23000 GATEWAY_PORT=23001 CONTROL_PLANE_PORT=28080 \
+  DEMO_AGENT_PORT=23002 DEMO_MCP_TOOLS_PORT=23003
+docker compose --profile demo up -d --build
+# 콘솔: http://127.0.0.1:23000  게이트웨이: http://127.0.0.1:23001
 ```
 
 `demo` 프로파일은 제품 서비스인 `gateway`, `control-plane`, `console`, `postgres`, `redis`에 더해 `demo-agent`, `demo-mcp-tools`와 고정 시드 데이터를 시작합니다. 호스트 아키텍처가 ARM64 또는 AMD64여도 같은 명령을 사용합니다.
@@ -45,6 +56,12 @@ Demo Agent(LangChain4j)는 T-01 악성 README 시나리오도 재현합니다. �
 ```bash
 curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?mode=guarded"
 curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?mode=vulnerable"
+```
+
+차단 여부를 눈으로 읽는 대신 검증까지 하려면 다음을 실행합니다. 자세한 내용은 [.env 유출 공격 데모](env-leak-demo.md)에 있습니다.
+
+```bash
+./scripts/demo-env-leak.sh
 ```
 
 상담 로그 조회에서 휴대전화·주민등록번호·계좌번호가 마스킹되는 T-02/T-08 시나리오도 같은 방식으로 실행합니다. 이쪽은 조회 자체가 정당하므로 차단이 아니라 `mask_then_allow`로 끝납니다. 자세한 내용은 [한국어 개인정보 마스킹 데모](korean-pii-demo.md)를 참고하세요.

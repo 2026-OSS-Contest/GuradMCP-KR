@@ -2,19 +2,38 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Info } from "lucide-react";
+import { FieldInfoIcon } from "@/components/icons";
 import type { DetectDirection, DetectionFinding } from "@/lib/api/types";
 import { toVerdict } from "@/lib/verdict";
 import { cn } from "@/lib/utils";
 
-/** Spec §5.4: the input is capped, and the counter reports bytes rather than characters. */
+/** Spec §5.5: the input is capped, and the counter reports bytes rather than characters. */
 export const MAX_BYTES = 64 * 1024;
 
+/**
+ * The prefix of `text` that fits the cap, cut on a character boundary.
+ *
+ * Slicing the encoded bytes can land mid-character — Korean runs three bytes each — and the
+ * decoder marks such a tail with U+FFFD. Re-encoding is what tells a substituted one from a
+ * U+FFFD that was in the text to begin with: the substitute grows the byte length past the cap,
+ * an original cannot.
+ */
+export function clampToBytes(text: string, max = MAX_BYTES): string {
+  const bytes = new TextEncoder().encode(text);
+  if (bytes.length <= max) return text;
+  const cut = new TextDecoder().decode(bytes.subarray(0, max));
+  return new TextEncoder().encode(cut).length > max ? cut.slice(0, -1) : cut;
+}
+
+// The matched runs are tinted and nothing more: the frame's own HTML renders each as a bare
+// `<span style="color:…">`, so no ground and no underline. The two the design shows use the 300
+// step rather than the 500 the verdict tokens point at — a lighter tint reads as emphasis inside
+// a sentence, where the badge colours are meant to read as labels. The other two follow it.
 const TONE = {
-  block: "text-verdict-block",
-  warn: "text-verdict-warn",
+  block: "text-red-300",
+  warn: "text-yellow-300",
   require_approval: "text-violet-100",
-  allow: "text-verdict-allow"
+  allow: "text-green-300"
 } as const;
 
 /** Splits the text at the finding offsets so each match can carry its verdict's colour. */
@@ -87,7 +106,7 @@ export function DetectorInput({
   const over = bytes > MAX_BYTES;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 py-6">
       <div ref={hintRef} className="relative flex flex-none items-center gap-2">
         <span className="text-body-text-b3-md text-grayscale-300">{t("direction")}</span>
         <button
@@ -97,14 +116,27 @@ export function DetectorInput({
           aria-label={t("directionHint")}
           className="flex size-4 flex-none items-center justify-center rounded-full text-grayscale-400 transition-colors hover:text-grayscale-200"
         >
-          <Info className="size-4" aria-hidden />
+          <FieldInfoIcon className="size-4" aria-hidden />
         </button>
         {hint && (
+          /*
+            The design's Tooltip is a shared coach-mark: title, body, icon, a 확인 dismiss and
+            `{n}/{n}` step pagination. This instance fills only the title — its body reads
+            "서브 텍스트" and its pagination "{n}", both unfilled placeholders — so the dismiss
+            is the one other part that is actually specified here.
+          */
           <span
             role="tooltip"
-            className="absolute left-16 z-20 rounded-lg bg-grayscale-700 px-3 py-2 text-body-text-b3-md whitespace-nowrap text-grayscale-white shadow-lg"
+            className="text-body-text-b3-md absolute left-16 z-20 flex items-center gap-10 rounded-lg bg-grayscale-700 py-1 pr-2 pl-3 whitespace-nowrap text-grayscale-white shadow-lg"
           >
             {t("directionHint")}
+            <button
+              type="button"
+              onClick={() => setHint(false)}
+              className="text-caption-text-c-rg flex-none cursor-pointer text-grayscale-300 transition-colors hover:text-grayscale-white"
+            >
+              {t("directionHintDismiss")}
+            </button>
           </span>
         )}
       </div>
@@ -128,21 +160,20 @@ export function DetectorInput({
         ))}
       </div>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl bg-grayscale-900">
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-(--primitive-radius-rounded-xl) bg-grayscale-900">
         {/* Mirror layer: same metrics as the textarea, so a highlight lands on its word. */}
         <div
           ref={mirror}
           aria-hidden
-          className="pointer-events-none absolute inset-0 overflow-hidden p-4 text-body-text-b2-md break-words whitespace-pre-wrap text-grayscale-white"
+          className="pointer-events-none absolute inset-0 overflow-hidden p-4 text-body-text-b3-md break-words whitespace-pre-wrap text-grayscale-white"
         >
           {segments(text, findings).map((part, index) =>
             part.finding ? (
               <mark
                 key={index}
-                className={cn(
-                  "bg-(--primitive-opacity-white-alpha-6) underline decoration-2 underline-offset-4",
-                  TONE[toVerdict(part.finding.action)]
-                )}
+                // `mark` brings a yellow ground and black type of its own; the design wants
+                // neither, so both are cleared rather than left to the user agent.
+                className={cn("bg-transparent", TONE[toVerdict(part.finding.action)])}
               >
                 {part.text}
               </mark>
@@ -160,9 +191,18 @@ export function DetectorInput({
           placeholder={t("placeholder")}
           aria-label={t("inputLabel")}
           spellCheck={false}
-          className="relative size-full resize-none bg-transparent p-4 text-body-text-b2-md break-words whitespace-pre-wrap text-transparent caret-white outline-none placeholder:text-grayscale-400"
+          className="relative size-full resize-none bg-transparent p-4 text-body-text-b3-md break-words whitespace-pre-wrap text-transparent caret-white outline-none placeholder:text-grayscale-400"
         />
       </div>
+
+      {/* Spec §5.5: past the cap the text is truncated and the truncation is announced. Saying
+          which part went uninspected is the whole point of the warning — a silent cut would let
+          "탐지 없음" stand for text nobody looked at. */}
+      {over && (
+        <p role="status" className="flex-none text-caption-text-c-rg text-verdict-block">
+          {t("truncated", { limit: MAX_BYTES / 1024 })}
+        </p>
+      )}
 
       <div className="flex flex-none items-center gap-3 text-caption-text-c-rg text-grayscale-400">
         <span className="flex-1">{t("notStored")}</span>
@@ -171,13 +211,15 @@ export function DetectorInput({
         </span>
       </div>
 
+      {/* The design keeps all four on one row: 40px tall, 16px side padding, 12px apart, 488px
+          across — which fits the 520px input column at 1280 without wrapping. */}
       <div className="flex flex-none flex-wrap items-center gap-3">
         {(["pii", "secret", "injection"] as const).map((kind) => (
           <button
             key={kind}
             type="button"
             onClick={() => onSample(kind)}
-            className="flex h-11 items-center rounded-xl bg-grayscale-800 px-5 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-grayscale-700"
+            className="flex h-10 flex-none items-center rounded-(--primitive-radius-rounded-xl) bg-grayscale-800 px-4 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-grayscale-700"
           >
             {t(`sample.${kind}`)}
           </button>
@@ -185,10 +227,10 @@ export function DetectorInput({
         <button
           type="button"
           onClick={onRun}
-          disabled={running || !text.trim() || over}
+          disabled={running || !text.trim()}
           className={cn(
-            "ml-auto flex h-11 flex-none items-center rounded-xl bg-blue-800 px-6 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-blue-700",
-            (running || !text.trim() || over) && "cursor-not-allowed opacity-50"
+            "flex h-10 flex-none items-center rounded-(--primitive-radius-rounded-xl) bg-blue-800 px-4 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-blue-700",
+            (running || !text.trim()) && "cursor-not-allowed opacity-50"
           )}
         >
           {running ? t("running") : t("run")}
