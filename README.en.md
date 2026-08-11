@@ -83,6 +83,7 @@ Do not disclose vulnerabilities in public issues. [SECURITY.md](SECURITY.md#engl
 | Korean service credentials | [Open](docs/korean-service-tokens.en.md) | [열기](docs/korean-service-tokens.md) |
 | High-entropy credential net | [Open](docs/high-entropy-secrets.en.md) | [열기](docs/high-entropy-secrets.md) |
 | Korean PII masking demo | [Open](docs/korean-pii-demo.en.md) | [열기](docs/korean-pii-demo.md) |
+| .env exfiltration demo | [Open](docs/env-leak-demo.en.md) | [열기](docs/env-leak-demo.md) |
 | Benchmark gate | [Open](docs/benchmark-gate.en.md) | [열기](docs/benchmark-gate.md) |
 | Attack scenario catalog | [Open](docs/attack-scenarios.en.md) | [열기](docs/attack-scenarios.md) |
 | Attack Scenario Runner | [Open](docs/attack-lab-runner.en.md) | [열기](docs/attack-lab-runner.md) |
