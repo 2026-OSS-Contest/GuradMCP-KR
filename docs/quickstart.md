@@ -47,6 +47,12 @@ curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?m
 curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?mode=vulnerable"
 ```
 
+차단 여부를 눈으로 읽는 대신 검증까지 하려면 다음을 실행합니다. 자세한 내용은 [.env 유출 공격 데모](env-leak-demo.md)에 있습니다.
+
+```bash
+./scripts/demo-env-leak.sh
+```
+
 상담 로그 조회에서 휴대전화·주민등록번호·계좌번호가 마스킹되는 T-02/T-08 시나리오도 같은 방식으로 실행합니다. 이쪽은 조회 자체가 정당하므로 차단이 아니라 `mask_then_allow`로 끝납니다. 자세한 내용은 [한국어 개인정보 마스킹 데모](korean-pii-demo.md)를 참고하세요.
 
 ```bash

@@ -52,6 +52,12 @@ curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?m
 curl --fail --silent --request POST "http://localhost:3002/demo/readme-summary?mode=vulnerable"
 ```
 
+To assert the block rather than read it, run the check below. See the [.env exfiltration demo](env-leak-demo.en.md).
+
+```bash
+./scripts/demo-env-leak.sh
+```
+
 The T-02/T-08 scenario runs the same way: a support-ticket lookup whose phone number, resident
 registration number, and bank account are masked. That lookup is legitimate work, so it ends in
 `mask_then_allow` rather than a block. See the [Korean PII masking demo](korean-pii-demo.en.md).
