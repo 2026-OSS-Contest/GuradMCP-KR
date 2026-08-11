@@ -27,7 +27,13 @@
     "allow": "허용",
     "warn": "경고",
     "requireApproval": "승인 대기",
-    "block": "차단"
+    "block": "차단",
+    "short": {
+      "allow": "허용",
+      "warn": "경고",
+      "requireApproval": "승인",
+      "block": "차단"
+    }
   },
   "time": {
     "justNow": "방금 전",
@@ -217,22 +223,124 @@
     "colDecidedBy": "처리자",
     "colTook": "소요시간"
   },
+  "policies": {
+    "loading": "정책을 불러오는 중입니다.",
+    "error": "정책을 불러오지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 시도하세요.",
+    "toggleFailed": "정책을 변경하지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 시도하세요.",
+    "packs": {
+      "title": "정책팩",
+      "toggle": "{name} 정책팩 사용"
+    },
+    "table": {
+      "title": "정책 테이블",
+      "id": "ID",
+      "priority": "PRI",
+      "action": "Action",
+      "severity": "Severity",
+      "enabled": "Enabled",
+      "fired": "30일 발동 수",
+      "dryRun": "dry-run",
+      "toggle": "{id} 정책 사용",
+      "toggleUnsupported": "이 게이트웨이는 정책 단위 사용 설정을 지원하지 않습니다."
+    },
+    "yaml": {
+      "title": "YAML",
+      "copy": "YAML 복사",
+      "none": "정책을 선택하면 정의가 표시됩니다.",
+      "loading": "정의를 불러오는 중입니다.",
+      "unavailable": "이 게이트웨이는 정책 원문을 제공하지 않습니다."
+    },
+    "dryRun": {
+      "title": "Dry-Run 통계",
+      "window": "최근 {days}일",
+      "none": "dry-run 중인 정책이 없습니다.",
+      "wouldFire": "가상 판정",
+      "unit": "건",
+      "demo": "최근 30일 · 데모 데이터"
+    },
+    "reload": {
+      "message": "정책이 갱신되었습니다.",
+      "action": "새로고침"
+    },
+    "confirmDisable": {
+      "title": "정책을 비활성화할까요?",
+      "body": "{id}는 차단 또는 critical 등급 정책입니다. 비활성화하면 해당 보호가 즉시 사라집니다.",
+      "packBody": "{name} 정책팩에는 차단 또는 critical 등급 정책이 포함되어 있습니다. 비활성화하면 해당 보호가 모두 즉시 사라집니다.",
+      "cancel": "취소",
+      "confirm": "비활성화"
+    },
+    "empty": {
+      "title": "아직 정책이 없습니다",
+      "body": "정책 작성 가이드의 예제를 복사해 첫 정책을 만들고, validation과 benchmark로 안전하게 확인하세요.",
+      "primary": "정책 작성 가이드 열기",
+      "primaryAria": "정책 작성 가이드 새 창에서 열기",
+      "secondary": "기본 정책팩 예제 보기",
+      "secondaryAria": "기본 정책팩 예제 새 창에서 열기",
+      "note": "코드를 작성하지 않아도 YAML 정책으로 기여할 수 있습니다."
+    }
+  },
+  "screens": {
+    "gateway": {
+      "title": "Gateway",
+      "desc": "MCP 서버·활성 정책·최근 보안 이벤트 개요"
+    },
+    "liveConsole": {
+      "title": "Demo & Live Console",
+      "desc": "공격 시나리오 실행과 실시간 판정 스트림"
+    },
+    "replay": {
+      "title": "Replay",
+      "desc": "세션 타임라인 재생과 이벤트 상세"
+    },
+    "detector": {
+      "title": "Detector 테스트기",
+      "desc": "PII·시크릿·인젝션 탐지 미리보기"
+    },
+    "approval": {
+      "title": "Approval Console",
+      "desc": "승인 대기열과 처리 이력"
+    },
+    "policies": {
+      "title": "Policies",
+      "desc": "정책팩·정책 열람과 활성/비활성"
+    },
+    "settings": {
+      "title": "Settings",
+      "desc": "업스트림 서버·장애 정책·로그 설정"
+    }
+  },
   "settings": {
-    "loading": "설정을 불러오는 중입니다.",
-    "error": "설정을 불러오지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 시도하세요.",
-    "saveFailed": "설정을 저장하지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 시도하세요.",
-    "cancel": "취소",
     "servers": {
       "title": "UPSTREAM 서버",
+      "desc": "등록된 업스트림 MCP 서버별로 신뢰 등급을 관리합니다.",
+      "columnName": "서버",
+      "columnConnection": "연결 상태",
+      "columnTrust": "신뢰 등급",
+      "connected": "연결",
+      "disconnected": "연결 끊김",
+      "updated": "{name} 서버의 신뢰 등급이 {trust}(으)로 변경되었습니다.",
+      "updateFailed": "신뢰 등급 변경에 실패했습니다.",
+      "loadError": "서버 목록을 불러오지 못했습니다.",
+      "confirmUpgrade": {
+        "title": "신뢰 등급 상향 확인",
+        "impactLoading": "영향 범위를 확인하는 중입니다…",
+        "impact": "이 서버에 현재 적용 중인 정책 {count}개가 상향 후 더 이상 적용되지 않을 수 있습니다.",
+        "note": "상향 시 이 서버에서 오는 Tool Call의 위험 점수 가중치가 낮아집니다.",
+        "cancel": "취소",
+        "confirm": "이해했으며 등급을 상향합니다"
+      },
       "name": "이름",
       "endpoint": "엔드포인트",
       "trust": "신뢰 등급",
       "snapshot": "Tool 스냅샷",
       "trustOf": "{name} 신뢰 등급",
       "snapshotChanged": "변경 감지 {count}",
-      "snapshotClean": "정상",
-      "disconnected": "연결 끊김"
+      "snapshotClean": "정상"
     },
+    "loading": "설정을 불러오는 중입니다.",
+    "error": "설정을 불러오지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 시도하세요.",
+    "saveFailed": "설정을 저장하지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 시도하세요.",
+    "cancel": "취소",
     "failPolicy": {
       "title": "장애 정책",
       "default": "기본",
@@ -274,36 +382,6 @@
       "title": "신뢰 등급 상향",
       "body": "{name}의 신뢰 등급을 {trust}로 올리면 해당 서버에 적용되던 제한이 완화됩니다. 계속 진행하시겠습니까?",
       "confirm": "적용"
-    }
-  },
-  "screens": {
-    "gateway": {
-      "title": "Gateway",
-      "desc": "MCP 서버·활성 정책·최근 보안 이벤트 개요"
-    },
-    "liveConsole": {
-      "title": "Demo & Live Console",
-      "desc": "공격 시나리오 실행과 실시간 판정 스트림"
-    },
-    "replay": {
-      "title": "Replay",
-      "desc": "세션 타임라인 재생과 이벤트 상세"
-    },
-    "detector": {
-      "title": "Detector 테스트기",
-      "desc": "PII·시크릿·인젝션 탐지 미리보기"
-    },
-    "approval": {
-      "title": "Approval Console",
-      "desc": "승인 대기열과 처리 이력"
-    },
-    "policies": {
-      "title": "Policies",
-      "desc": "정책팩·정책 열람과 활성/비활성"
-    },
-    "settings": {
-      "title": "Settings",
-      "desc": "업스트림 서버·장애 정책·로그 설정"
     }
   },
   "common": {

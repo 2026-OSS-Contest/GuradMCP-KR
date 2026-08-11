@@ -19,6 +19,35 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Tokens live **inside the app** (`app/`), not in a separate workspace package.
 - Style with token utilities (`bg-grayscale-900`, `text-verdict-block`) instead of hardcoded
   colors. To reference a raw primitive use the Tailwind v4 form: `bg-(--primitive-...)`.
+- **The radius names do not line up.** `theme.css` derives Tailwind's radius scale from shadcn's
+  `--radius`, so `rounded-sm` is 8px, `rounded-lg` 12px and `rounded-xl` 16px — while the design's
+  own `rounded-sm`/`lg`/`xl` are 4px, 8px and 12px. Every Tailwind radius is therefore one step
+  too large. The design uses exactly four values (4 · 8 · 12 · 1000), so reference the primitive —
+  `rounded-(--primitive-radius-rounded-xl)` — until that mapping is aligned.
+
+## Matching a screen to its Figma frames
+
+Each frame in `tools/figma-export/out/<scr-id>/<frame>/` exports three files, and they answer
+different questions. Use all three — checking one and inferring the rest is how details get lost.
+
+- **`.png`** — composition only. A 2px underline or a 6%-alpha ground is invisible at this size,
+  so never conclude "it matches" from the image.
+- **`.json`** — geometry and tokens: `x`/`y`/`w`/`h`, `fills` with their `variable` names,
+  `radius`/`radiusVar`, `layout.pad`/`gap`, `font`/`fontSize`. It answers only what you ask it,
+  so a property you did not think to query stays invisible.
+- **`.html`** — **the authority for styling.** It is the frame rendered with resolved CSS: the
+  typography class on each element (`text-body-text-b3-md`), and every inline run as its own
+  `<span style="color:…">`. If the design tints a word and nothing more, this is where you see
+  that there is no ground and no underline. Read it before writing any text-run styling.
+
+Two more rules that come from the same failure:
+
+- **Revising an existing screen means auditing the whole screen**, not just the lines you touch.
+  Code that predates you is not evidence of anything; the frames are.
+- Compare *every* exported frame, including the state variants. Their filenames say what state
+  they are (`-empty`, `-reload`, `-입력-전`), and a screen can be right in one state and wrong in
+  another — the SCR-401 result panes split evenly until findings arrive, and only the completed
+  frame shows it.
 
 ## Fonts
 
@@ -34,6 +63,17 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## API and mock data
 
+- **Follow the real implementation or the written spec — never invent a contract.** Before
+  adding a call, check `services/control-plane/src/main/kotlin/**/api/*Controller.kt` for the
+  route, verb and DTOs, and the domain types beside it for the wire enums. Match the path, the
+  HTTP method, the field names and the response shape exactly, including whether it answers a
+  bare array or an envelope. If an endpoint genuinely does not exist, say so in the type or
+  client comment and name the ticket that owns it — do not quietly design a nicer endpoint the
+  backend will never serve. A screen that talks to a shape nobody implements looks finished and
+  is not.
+- Where the design needs a field the control plane does not report, keep it **optional** on the
+  wire type, supply it from `mocks/`, and make the screen degrade when it is absent. That is why
+  `PolicyRow.enabled` and `SecurityEvent`'s risk enrichment are optional.
 - Screens fetch from `lib/api/client.ts` (`/api/v1/…`). The contracts in `lib/api/types.ts` are
   what the **UI specification** asks for, not what the control plane returns today — most of
   §6.2 is still unimplemented.
@@ -81,3 +121,48 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   ```bash
   VERCEL_ORG_ID=<org> VERCEL_PROJECT_ID=<project> vercel deploy --prod --token <token> --yes
   ```
+
+  Do **not** run `vercel link` to get those ids — it writes `.vercel/` and appends to the root
+  `.gitignore`. Read them from an existing deployment instead: `vercel project ls` names the
+  project (`guardmcp-kr-console`), and `vercel project inspect guardmcp-kr-console` prints its
+  Root Directory and Node version without touching the tree.
+
+### Two things break a Vercel build, every time
+
+Both are dormant in normal development and only bite on Vercel. Neither fix is committed,
+because both are only wanted for a deploy — apply them, deploy, then revert.
+
+1. **`output: "standalone"` fails the build.** `next.config.ts` sets it for the Docker image
+   (`containers.yml`), but Vercel's builder then cannot find `.next/next-server.js.nft.json`
+   and dies with `ENOENT` *after* reporting a successful compile — so the log looks fine until
+   the last line. Guard it on Vercel's own env var:
+
+   ```ts
+   output: process.env.VERCEL ? undefined : "standalone",
+   ```
+
+2. **MSW cannot start in a production build.** `mocks/scenario.ts` gates `MOCK_API` on
+   `NODE_ENV === "development"`, and Vercel builds with `NODE_ENV=production`. No environment
+   variable alone can switch the mocks on: without a code change the deployed console renders
+   its shell, fetches `/api/v1/…` against its own origin and 404s everywhere. To deploy a
+   mock-backed demo, widen the gate and pass the flag at **build** time — `NEXT_PUBLIC_*` is
+   inlined during the build, so `--build-env` is required and `--env` does nothing:
+
+   ```ts
+   const MOCKS_WANTED =
+     process.env.NODE_ENV === "development" || process.env.NEXT_PUBLIC_ENABLE_MOCK_API === "1";
+   export const MOCK_API = MOCKS_WANTED && !process.env.NEXT_PUBLIC_API_BASE_URL;
+   ```
+
+   ```bash
+   vercel deploy --prod --yes --build-env NEXT_PUBLIC_ENABLE_MOCK_API=1
+   ```
+
+   `msw` is a devDependency, which is fine — Vercel installs devDependencies — and
+   `public/mockServiceWorker.js` is committed, so nothing else is needed.
+
+- Setting `NEXT_PUBLIC_API_BASE_URL` switches the mocks off no matter what else is set; leave it
+  unset for a mock-backed deploy.
+- Verify a deploy by loading it and checking that `/api/v1/overview` answers **200**. The app
+  serves no such route itself, so a 200 there means the service worker is intercepting; a 404
+  means the build shipped without mocks.

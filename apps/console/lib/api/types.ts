@@ -1,8 +1,10 @@
 // Console API contracts (UI specification §6.1–6.2).
 //
-// `/servers` and `/events/recent` do not exist on the control plane yet, and `/overview`
-// currently returns a different shape. These types describe what the screens need; the MSW
-// handlers in `mocks/` serve exactly this, so wiring the real backend needs no UI change.
+// `/events/recent` does not exist on the control plane yet, and `/overview` currently returns a
+// different shape. These types describe what the screens need; the MSW handlers in `mocks/`
+// serve exactly this, so wiring the real backend needs no UI change. `/servers` (GET and PUT
+// .../trust) was implemented in GMCP-64 (FR-GW-02) to match this file's `McpServer` shape
+// exactly — `tools` is always `[]` from the real backend today (FR-GW-03 is a separate gap).
 
 export type Verdict = "allow" | "warn" | "require_approval" | "block";
 export type TrustLevel = "trusted" | "limited" | "untrusted";
@@ -55,6 +57,35 @@ export interface ServersResponse {
   servers: McpServer[];
 }
 
+/** Trust-grade order (FR-GW-02 §5.1): `untrusted < limited < trusted`. */
+export const TRUST_RANK: Record<TrustLevel, number> = {
+  untrusted: 0,
+  limited: 1,
+  trusted: 2,
+};
+
+export interface ServerTrustChangeRequest {
+  trustLevel: TrustLevel;
+  confirmed?: boolean;
+}
+
+/** `PUT /servers/{id}/trust` 200 response — the same lean shape `GET /servers` lists. */
+export type ServerTrustChangeResult = Omit<McpServer, "tools">;
+
+/** Standard control-plane error body (`services/control-plane/.../api/ApiError.kt`). */
+export interface ApiErrorBody {
+  code: string;
+  message: string;
+  details?: Record<string, string>;
+}
+
+/** `details` on the 409 `upgrade_requires_confirmation` response (FR-GW-02 §5.1). */
+export interface TrustUpgradeConflictDetails {
+  fromTrust: TrustLevel;
+  toTrust: TrustLevel;
+  affectedPolicyCount: string;
+}
+
 export interface RecentEventsResponse {
   events: SecurityEvent[];
 }
@@ -75,7 +106,12 @@ export interface SessionSummary {
 }
 
 /** Timeline node kinds and their markers (spec §5.3 no.3). */
-export type TimelineNodeType = "user" | "agent" | "tool_call" | "verdict" | "result";
+export type TimelineNodeType =
+  | "user"
+  | "agent"
+  | "tool_call"
+  | "verdict"
+  | "result";
 
 /** One node on the Timeline Rail. `detailId` links to its right-panel detail. */
 export interface TimelineEvent {
@@ -459,10 +495,13 @@ export interface TimelineResponse {
 }
 
 // ── SCR-501 Settings (spec §5.7, GMCP-88) ───────────────────────────────────
-// Neither `GET /settings` nor `PUT /servers/{id}` exists on the control plane — both belong to
-// GMCP-80, whose `PolicyController` counterpart has no settings sibling yet. So this screen is
-// mock-only today. The paths and verbs below are the ones it will use, so wiring the real
-// backend needs no UI change.
+// Server trust is real: FR-GW-02 shipped `PUT /servers/{id}/trust`, and this screen calls it
+// through `putServerTrust` rather than the shape an earlier reading here invented.
+//
+// `GET`/`PUT /settings` is not. It belongs to GMCP-80, whose `PolicyController` counterpart has
+// no settings sibling yet, so the three sections below — failure policy, raw-log opt-in and the
+// general preferences — are mock-only today. The path and verb are the ones that ticket names,
+// so wiring the real backend needs no UI change.
 
 /** What the gateway does when it cannot reach its own guard (GMCP-68). */
 export type FailMode = "fail_closed" | "fail_open";
@@ -481,3 +520,68 @@ export interface GatewaySettings {
 
 /** `PUT /settings` — every field independent, so one control never resends another's value. */
 export type SettingsUpdate = Partial<GatewaySettings>;
+
+// ── SCR-302 Policy Builder (spec §5.5, FR-POL-02/04) ────────────────────────
+// `GET /policy-packs`, `GET /policies`, `PUT /policy-packs/{packId}` and `PUT /policies/{policyId}`
+// are all served by the control plane today (`PolicyController`). Both GETs answer with a bare
+// array rather than an envelope, and they speak the same `GuardAction`/`Severity` vocabulary as
+// the detector — not the wider one the YAML DSL accepts, which has `warn` and `info` besides.
+//
+// The fields marked optional below are what the design draws and the control plane does not
+// report. They are enrichment, exactly as on SCR-402: present under the mock, absent against a
+// real gateway, and every one of them degrades to something the screen can still render.
+
+export interface PolicyPack {
+  id: string;
+  /** A write counter the control plane bumps, not a semver string. */
+  version: number;
+  enabled: boolean;
+  description: string;
+  /** ISO-8601. Bumped alongside `version` on every write, including a policy's. */
+  updatedAt: string;
+
+  /**
+   * Packs this one extends, which is what indents the tree. The control plane's `PolicyPack`
+   * has no such field, so without it the tree renders flat — correct, just less informative.
+   */
+  extends?: string[];
+}
+
+export interface PolicyRow {
+  id: string;
+  packId: string;
+  priority: number;
+  action: GuardAction;
+  severity: Severity;
+  description: string;
+
+  /**
+   * Whether the policy is live. **The control plane has no per-policy enable/disable**:
+   * `PolicyUpdateRequest` takes `action`, `severity` and `priority` and nothing else, and only
+   * a *pack* can be switched off. The design draws a per-row toggle regardless, so the field is
+   * optional and the screen treats a missing value as enabled.
+   */
+  enabled?: boolean;
+  /** Evaluated but acting on nothing (GMCP-77). No DSL field and no endpoint reports it yet. */
+  dryRun?: boolean;
+  /** Repo-relative path of the file defining it, shown as the YAML pane's caption. */
+  path?: string;
+}
+
+
+/**
+ * `GET /policies/{policyId}/stats` — how often a policy actually fired, and what it *would* have
+ * decided while in dry-run. GMCP-80 owns the endpoint and it is not built yet, so the mock is
+ * the only server; the path and shape are the ones that ticket names.
+ *
+ * Both of the table's counts come from here: the 30-day column and the dry-run panel beneath the
+ * YAML are two readings of the same record.
+ */
+export interface PolicyStats {
+  policyId: string;
+  /** Times it fired over the window; `null` when it never has — the table's "–". */
+  firedLast30d: number | null;
+  /** Present only while the policy is in dry-run: the verdicts it would have produced. */
+  dryRun?: { wouldFire: number; windowDays: number };
+}
+

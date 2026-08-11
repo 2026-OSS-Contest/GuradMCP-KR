@@ -27,7 +27,13 @@
     "allow": "Allowed",
     "warn": "Warning",
     "requireApproval": "Pending",
-    "block": "Blocked"
+    "block": "Blocked",
+    "short": {
+      "allow": "Allow",
+      "warn": "Warn",
+      "requireApproval": "Approve",
+      "block": "Block"
+    }
   },
   "time": {
     "justNow": "just now",
@@ -217,22 +223,124 @@
     "colDecidedBy": "Handled by",
     "colTook": "Took"
   },
+  "policies": {
+    "loading": "Loading policies…",
+    "error": "Could not load policies. Check the gateway connection and try again.",
+    "toggleFailed": "Could not change the policy. Check the gateway connection and try again.",
+    "packs": {
+      "title": "Policy packs",
+      "toggle": "Enable the {name} policy pack"
+    },
+    "table": {
+      "title": "Policies",
+      "id": "ID",
+      "priority": "PRI",
+      "action": "Action",
+      "severity": "Severity",
+      "enabled": "Enabled",
+      "fired": "Fired (30d)",
+      "dryRun": "dry-run",
+      "toggle": "Enable policy {id}",
+      "toggleUnsupported": "This gateway does not support enabling policies individually."
+    },
+    "yaml": {
+      "title": "YAML",
+      "copy": "Copy YAML",
+      "none": "Select a policy to see its definition.",
+      "loading": "Loading the definition…",
+      "unavailable": "This gateway does not serve policy sources."
+    },
+    "dryRun": {
+      "title": "Dry-run stats",
+      "window": "Last {days} days",
+      "none": "No policies are in dry-run.",
+      "wouldFire": "Would have fired",
+      "unit": "times",
+      "demo": "Last 30 days · demo data"
+    },
+    "reload": {
+      "message": "The policies were reloaded.",
+      "action": "Refresh"
+    },
+    "confirmDisable": {
+      "title": "Disable this policy?",
+      "body": "{id} blocks calls or is rated critical. Disabling it drops that protection immediately.",
+      "packBody": "The {name} pack carries policies that block calls or are rated critical. Disabling it drops all of those protections at once.",
+      "cancel": "Cancel",
+      "confirm": "Disable"
+    },
+    "empty": {
+      "title": "No policies yet",
+      "body": "Copy an example from the policy authoring guide to write your first policy, then check it safely with validation and the benchmark.",
+      "primary": "Open the policy authoring guide",
+      "primaryAria": "Open the policy authoring guide in a new tab",
+      "secondary": "See the default policy pack",
+      "secondaryAria": "See the default policy pack in a new tab",
+      "note": "You can contribute YAML policies without writing any code."
+    }
+  },
+  "screens": {
+    "gateway": {
+      "title": "Gateway",
+      "desc": "Overview of MCP servers, active policies and recent events"
+    },
+    "liveConsole": {
+      "title": "Demo & Live Console",
+      "desc": "Run attack scenarios and watch the live verdict stream"
+    },
+    "replay": {
+      "title": "Replay",
+      "desc": "Replay session timelines and inspect events"
+    },
+    "detector": {
+      "title": "Detector",
+      "desc": "Preview PII, secret and injection detection"
+    },
+    "approval": {
+      "title": "Approval Console",
+      "desc": "Approval queue and decision history"
+    },
+    "policies": {
+      "title": "Policies",
+      "desc": "Browse policy packs and toggle policies"
+    },
+    "settings": {
+      "title": "Settings",
+      "desc": "Upstream servers, failure policy and logging"
+    }
+  },
   "settings": {
-    "loading": "Loading settings…",
-    "error": "Could not load settings. Check the gateway connection and try again.",
-    "saveFailed": "Could not save the setting. Check the gateway connection and try again.",
-    "cancel": "Cancel",
     "servers": {
       "title": "Upstream servers",
+      "desc": "Manage the trust grade for each registered upstream MCP server.",
+      "columnName": "Server",
+      "columnConnection": "Connection",
+      "columnTrust": "Trust",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "updated": "{name}'s trust grade changed to {trust}.",
+      "updateFailed": "Could not change the trust grade.",
+      "loadError": "Could not load the server list.",
+      "confirmUpgrade": {
+        "title": "Confirm trust upgrade",
+        "impactLoading": "Checking what this affects…",
+        "impact": "{count} policies currently applied to this server may no longer apply after the upgrade.",
+        "note": "Upgrading lowers the risk-score weight applied to Tool Calls from this server.",
+        "cancel": "Cancel",
+        "confirm": "I understand — upgrade the trust grade"
+      },
       "name": "Name",
       "endpoint": "Endpoint",
       "trust": "Trust",
       "snapshot": "Tool snapshot",
       "trustOf": "Trust level for {name}",
       "snapshotChanged": "{count} changed",
-      "snapshotClean": "Unchanged",
-      "disconnected": "Disconnected"
+      "snapshotClean": "Unchanged"
     },
+    "loading": "Loading settings…",
+    "error": "Could not load settings. Check the gateway connection and try again.",
+    "saveFailed": "Could not save the setting. Check the gateway connection and try again.",
+    "cancel": "Cancel",
     "failPolicy": {
       "title": "Failure policy",
       "default": "Default",
@@ -274,36 +382,6 @@
       "title": "Raise trust level",
       "body": "Raising {name} to {trust} relaxes the limits that applied to that server. Continue?",
       "confirm": "Apply"
-    }
-  },
-  "screens": {
-    "gateway": {
-      "title": "Gateway",
-      "desc": "Overview of MCP servers, active policies and recent events"
-    },
-    "liveConsole": {
-      "title": "Demo & Live Console",
-      "desc": "Run attack scenarios and watch the live verdict stream"
-    },
-    "replay": {
-      "title": "Replay",
-      "desc": "Replay session timelines and inspect events"
-    },
-    "detector": {
-      "title": "Detector",
-      "desc": "Preview PII, secret and injection detection"
-    },
-    "approval": {
-      "title": "Approval Console",
-      "desc": "Approval queue and decision history"
-    },
-    "policies": {
-      "title": "Policies",
-      "desc": "Browse policy packs and toggle policies"
-    },
-    "settings": {
-      "title": "Settings",
-      "desc": "Upstream servers, failure policy and logging"
     }
   },
   "common": {

@@ -16,6 +16,8 @@ import { useTranslations } from "next-intl";
 export interface RiskDialogProps {
   title: string;
   body: string;
+  /** Second line, kept its own element so it can be read — and asserted — apart from the body. */
+  note?: string;
   /** Label for the acknowledgement checkbox. Omitted, the confirm button is live immediately. */
   acknowledgement?: string;
   confirmLabel: string;
@@ -27,6 +29,7 @@ export interface RiskDialogProps {
 export function RiskDialog({
   title,
   body,
+  note,
   acknowledgement,
   confirmLabel,
   pending,
@@ -90,6 +93,7 @@ export function RiskDialog({
         <p id="risk-dialog-body" className="text-body-text-b3-md mt-3 text-grayscale-300">
           {body}
         </p>
+        {note && <p className="text-body-text-b3-md mt-2 text-grayscale-400">{note}</p>}
 
         {acknowledgement && (
           <label className="text-body-text-b2-md mt-6 flex cursor-pointer items-center gap-3 text-grayscale-white">

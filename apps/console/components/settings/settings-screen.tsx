@@ -4,20 +4,28 @@ import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { BannerInfoIcon } from "@/components/icons";
-import { getServers, getSettings, setServerTrust, updateSettings } from "@/lib/api/client";
-import type { FailMode, GatewaySettings, McpServer, SettingsUpdate, TrustLevel } from "@/lib/api/types";
+import { ApiError, getServers, getSettings, putServerTrust, updateSettings } from "@/lib/api/client";
+import type {
+  FailMode,
+  GatewaySettings,
+  McpServer,
+  SettingsUpdate,
+  TrustLevel,
+  TrustUpgradeConflictDetails
+} from "@/lib/api/types";
 import { useResource } from "@/lib/api/use-resource";
 import { LOCALE_COOKIE } from "@/i18n/config";
 import { FailPolicy } from "./fail-policy";
 import { PreferenceCards } from "./preference-cards";
 import { RiskDialog } from "./risk-dialog";
-import { ServerTable, isPromotion } from "./server-table";
+import { ServerTable } from "./server-table";
 
 /** A change the operator has asked for and the screen has not applied yet. */
 type Pending =
   | { kind: "failOpen" }
   | { kind: "storeRaw" }
-  | { kind: "trust"; server: McpServer; trust: TrustLevel };
+  /** `impact` is what the gateway's 409 said the upgrade would cost, not a client-side guess. */
+  | { kind: "trust"; server: McpServer; trust: TrustLevel; impact?: TrustUpgradeConflictDetails };
 
 /**
  * SCR-501 Settings (spec §5.7): which upstreams the gateway talks to, what it does when its own
@@ -35,6 +43,8 @@ export function SettingsScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [notice, setNotice] = useState<"saveFailed" | null>(null);
+  /** Confirmation that a trust change landed — the one write with no visible result of its own. */
+  const [toast, setToast] = useState<string | null>(null);
 
   const settings = useResource((signal) => getSettings(signal), { key: `settings-${pulse}` });
   const servers = useResource((signal) => getServers(signal), { key: `settings-servers-${pulse}` });
@@ -55,19 +65,39 @@ export function SettingsScreen() {
     }
   }, []);
 
-  const applyTrust = useCallback(async (server: McpServer, trust: TrustLevel) => {
+  /**
+   * FR-GW-02 §5.1: the gateway decides which changes need a second look. A demotion is applied
+   * on the first request; an upgrade comes back 409 with the policies it would stop applying,
+   * and only a `confirmed` repeat goes through. Asking the server rather than ranking the tiers
+   * here means the dialog quotes the real impact instead of a number the console guessed.
+   */
+  const applyTrust = useCallback(async (server: McpServer, trust: TrustLevel, confirmed: boolean) => {
     setBusy(server.id);
     setNotice(null);
     try {
-      await setServerTrust(server.id, trust);
-    } catch {
-      setNotice("saveFailed");
-    } finally {
-      setBusy(null);
+      await putServerTrust(server.id, { trustLevel: trust, confirmed });
+      setToast(t("servers.updated", { name: server.name, trust }));
       setPending(null);
       setPulse((previous) => previous + 1);
+    } catch (error) {
+      const conflict =
+        error instanceof ApiError && error.status === 409 ? error.body?.details : undefined;
+      if (conflict) {
+        setPending({
+          kind: "trust",
+          server,
+          trust,
+          impact: conflict as unknown as TrustUpgradeConflictDetails
+        });
+        return;
+      }
+      setNotice("saveFailed");
+      setPending(null);
+      setPulse((previous) => previous + 1);
+    } finally {
+      setBusy(null);
     }
-  }, []);
+  }, [t]);
 
   /**
    * next-intl resolves the language from the `NEXT_LOCALE` cookie on the server, so persisting
@@ -95,8 +125,9 @@ export function SettingsScreen() {
 
   const onTrustChange = (server: McpServer, trust: TrustLevel) => {
     if (trust === server.trust) return;
-    if (isPromotion(server.trust, trust)) return setPending({ kind: "trust", server, trust });
-    void applyTrust(server, trust);
+    setToast(null);
+    // Unconfirmed either way: a demotion lands, an upgrade comes back 409 and opens the dialog.
+    void applyTrust(server, trust, false);
   };
 
   if ((settings.loading || servers.loading) && !(settings.data && servers.data)) {
@@ -117,6 +148,18 @@ export function SettingsScreen() {
         >
           <BannerInfoIcon className="size-4 flex-none" aria-hidden />
           {t(notice)}
+        </p>
+      )}
+
+      {/* A trust change leaves no trace on screen beyond the select it came from, so the screen
+          says what it did. `role="status"` so it reaches a screen reader too. */}
+      {toast && (
+        <p
+          role="status"
+          className="text-body-text-b3-md flex items-center gap-2 bg-grayscale-800 px-8 py-3 text-grayscale-white"
+        >
+          <BannerInfoIcon className="size-4 flex-none" aria-hidden />
+          {toast}
         </p>
       )}
 
@@ -165,12 +208,17 @@ export function SettingsScreen() {
 
       {pending?.kind === "trust" && (
         <RiskDialog
-          title={t("trustDialog.title")}
-          body={t("trustDialog.body", { name: pending.server.name, trust: pending.trust })}
-          confirmLabel={t("trustDialog.confirm")}
+          title={t("servers.confirmUpgrade.title")}
+          body={`${pending.server.name} — ${
+            pending.impact
+              ? t("servers.confirmUpgrade.impact", { count: pending.impact.affectedPolicyCount })
+              : t("servers.confirmUpgrade.impactLoading")
+          }`}
+          note={t("servers.confirmUpgrade.note")}
+          confirmLabel={t("servers.confirmUpgrade.confirm")}
           pending={busy === pending.server.id}
           onCancel={() => setPending(null)}
-          onConfirm={() => void applyTrust(pending.server, pending.trust)}
+          onConfirm={() => void applyTrust(pending.server, pending.trust, true)}
         />
       )}
     </div>

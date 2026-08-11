@@ -76,21 +76,72 @@ test("SCR-501 turning raw storage on explains itself first", async ({ page }) =>
   await expect(toggle).toHaveAttribute("aria-checked", "false");
 });
 
-test("SCR-501 raising a server's trust is confirmed, lowering it is not", async ({ page }) => {
-  await page.goto("/settings");
-  const trust = page.getByRole("combobox", { name: "file_server 신뢰 등급" });
+// FR-GW-02 §5.1 — `PUT /servers/{id}/trust`. Which direction needs confirming is the gateway's
+// call, not the console's: a downgrade lands on the first request, an upgrade comes back 409 with
+// the policies it would stop applying, and only a `confirmed` repeat goes through. The four cases
+// below came with that endpoint and are kept against this screen's own table.
 
-  // limited → trusted relaxes what that upstream may do.
-  await trust.selectOption("trusted");
-  const dialog = page.getByRole("alertdialog");
-  await expect(dialog.getByText(/제한이 완화됩니다/)).toBeVisible();
-  await dialog.getByRole("button", { name: "적용" }).click();
+test("SCR-501 downgrading a server's trust applies immediately with a confirmation toast", async ({ page }) => {
+  await page.goto("/settings");
+
+  const trust = page.locator("#trust-mail-server");
   await expect(trust).toHaveValue("trusted");
 
-  // trusted → untrusted tightens it, and goes straight through.
-  await trust.selectOption("untrusted");
-  await expect(page.getByRole("alertdialog")).toBeHidden();
+  await trust.selectOption("limited");
+
+  await expect(page.getByText("mail_server 서버의 신뢰 등급이 limited(으)로 변경되었습니다.")).toBeVisible();
+  await expect(trust).toHaveValue("limited");
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+});
+
+test("SCR-501 upgrading a server's trust requires confirmation", async ({ page }) => {
+  await page.goto("/settings");
+
+  const trust = page.locator("#trust-db-server");
   await expect(trust).toHaveValue("untrusted");
+
+  await trust.selectOption("trusted");
+
+  const dialog = page.getByRole("alertdialog", { name: "신뢰 등급 상향 확인" });
+  await expect(dialog).toBeVisible();
+  // The count comes from the 409 body, so this is the gateway's impact figure, not a guess.
+  await expect(dialog.getByText(/db_server.*상향 후 더 이상 적용되지 않을 수 있습니다/)).toBeVisible();
+  await expect(dialog.getByText("상향 시 이 서버에서 오는 Tool Call의 위험 점수 가중치가 낮아집니다.")).toBeVisible();
+
+  // The select must not have jumped ahead while the confirmation is pending.
+  await expect(trust).toHaveValue("untrusted");
+
+  await dialog.getByRole("button", { name: "이해했으며 등급을 상향합니다" }).click();
+
+  await expect(dialog).toBeHidden();
+  await expect(trust).toHaveValue("trusted");
+  await expect(page.getByText("db_server 서버의 신뢰 등급이 trusted(으)로 변경되었습니다.")).toBeVisible();
+});
+
+test("SCR-501 canceling an upgrade leaves the grade unchanged", async ({ page }) => {
+  await page.goto("/settings");
+
+  const trust = page.locator("#trust-file-server");
+  await expect(trust).toHaveValue("limited");
+  await trust.selectOption("trusted");
+
+  const dialog = page.getByRole("alertdialog", { name: "신뢰 등급 상향 확인" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "취소" }).click();
+
+  await expect(dialog).toBeHidden();
+  await expect(trust).toHaveValue("limited");
+});
+
+test("SCR-501 a Settings trust change is reflected on the Home inventory chip", async ({ page }) => {
+  await page.goto("/settings");
+  await page.locator("#trust-mail-server").selectOption("limited");
+  await expect(page.getByText("mail_server 서버의 신뢰 등급이 limited(으)로 변경되었습니다.")).toBeVisible();
+
+  // Client-side nav rather than page.goto, which would reload and reset the mock's in-memory
+  // state — the real control plane persists, so this only matters for the mocked harness.
+  await page.getByRole("link", { name: "Gateway" }).click();
+  await expect(page.getByRole("button", { name: /mail_server.*limited/ })).toBeVisible();
 });
 
 test("SCR-501 saves the preferences that carry no risk", async ({ page }) => {

@@ -122,7 +122,7 @@
         "stage": "secret-detector",
         "context": { "direction": "response", "tool": "read_file", "serverTrust": "untrusted" },
         "detections": ["SECRET.LLM_API_KEY"],
-        "policy": null,
+        "policy": "mask_secret_response",
         "verdict": "mask_then_allow"
       },
       "pass": "키 형식이 탐지되어 `[SECRET]`으로 마스킹된 뒤에만 전달된다.",
@@ -140,7 +140,7 @@
         "stage": "secret-detector",
         "context": { "direction": "response", "tool": "read_file", "serverTrust": "untrusted" },
         "detections": ["SECRET.GITHUB_TOKEN"],
-        "policy": null,
+        "policy": "mask_secret_response",
         "verdict": "mask_then_allow"
       },
       "pass": "토큰 접두사 규칙으로 탐지되어 마스킹된다.",
@@ -170,18 +170,18 @@
       "threat": "T-03",
       "kind": "attack",
       "title": "자격증명 읽기 후 외부 메일 전송 체인",
-      "premise": "자격증명 파일을 읽어 외부 주소로 보내라는 2단 지시가 들어온다.",
+      "premise": "자격증명 파일을 읽어 외부 주소로 보내라는 2단 지시가 들어오고, 두 번째 단계에서 실제 자격증명이 담긴 전송이 시도된다.",
       "vector": "숨긴 지시 → read_file → send_email",
       "expectedControl": {
         "stage": "injection-detector",
         "context": { "direction": "request", "tool": "send_email", "serverTrust": "untrusted" },
-        "detections": ["INJECTION.EXFILTRATION"],
-        "policy": "approve_external_email_with_secret",
+        "detections": ["INJECTION.EXFILTRATION", "SECRET.LLM_API_KEY"],
+        "policy": "require_approval_untrusted_high_risk_tool",
         "verdict": "require_approval"
       },
-      "pass": "유출 의도가 탐지되고, 사외 주소로 나가는 전송이 승인 대기로 묶인다.",
+      "pass": "유출 의도가 탐지되고, 자격증명을 실은 사외 전송이 승인 대기로 묶인다. FR-GW-02(T-06) 도입 이후에는 신뢰 등급이 untrusted인 서버로 향하는 send_email 호출 자체가 첫 단계(T-05)에서부터 승인 대기로 걸린다.",
       "fail": "전송이 승인 없이 실행되거나 승인 시간 초과가 허용으로 떨어진다.",
-      "automation": { "mode": "probe", "probes": ["T-05", "T-15"] }
+      "automation": { "mode": "probe", "probes": ["T-05", "T-05-b", "T-15"] }
     },
     {
       "id": "A-08",
@@ -350,7 +350,7 @@
         "stage": "secret-detector",
         "context": { "direction": "response", "tool": "read_file", "serverTrust": "untrusted" },
         "detections": ["SECRET.AWS_KEY"],
-        "policy": null,
+        "policy": "mask_secret_response",
         "verdict": "mask_then_allow"
       },
       "pass": "키 접두사 형식이 탐지되어 마스킹된 뒤에만 전달된다.",
@@ -368,7 +368,7 @@
         "stage": "secret-detector",
         "context": { "direction": "response", "tool": "read_file", "serverTrust": "untrusted" },
         "detections": ["SECRET.WEBHOOK_SLACK", "SECRET.WEBHOOK_DISCORD"],
-        "policy": null,
+        "policy": "mask_secret_response",
         "verdict": "mask_then_allow"
       },
       "pass": "웹훅 URL은 그 자체가 인증 수단이므로 자격증명으로 탐지되어 마스킹된다.",
@@ -386,7 +386,7 @@
         "stage": "secret-detector",
         "context": { "direction": "response", "tool": "read_file", "serverTrust": "untrusted" },
         "detections": ["SECRET.JWT"],
-        "policy": null,
+        "policy": "mask_secret_response",
         "verdict": "mask_then_allow"
       },
       "pass": "세 구간 구조가 탐지되어 마스킹된다.",
@@ -404,7 +404,7 @@
         "stage": "secret-detector",
         "context": { "direction": "response", "tool": "read_file", "serverTrust": "untrusted" },
         "detections": ["SECRET.PRIVATE_KEY", "SECRET.PRIVATE_KEY_HEADER"],
-        "policy": null,
+        "policy": "mask_secret_response",
         "verdict": "mask_then_allow"
       },
       "pass": "완결된 키 블록뿐 아니라 끝이 잘려 헤더만 남은 조각도 탐지된다.",

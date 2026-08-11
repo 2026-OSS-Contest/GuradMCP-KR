@@ -27,6 +27,8 @@ function makeEvent(overrides: Partial<GuardEvent> = {}): GuardEvent {
       ko: "차단했습니다 — 정책 block_env_file_read (심각도 critical)",
       en: "Blocked — policy block_env_file_read (severity critical)"
     },
+    targetServerId: "demo-mcp-tools",
+    targetServerTrust: "untrusted",
     ...overrides
   };
 }
@@ -162,6 +164,7 @@ describe("auditPublisher", () => {
         toolName: "read_file",
         payload: JSON.stringify({ path: ".env" }),
         sessionId: "s-isolation",
+        serverId: "demo-mcp-tools",
         serverTrust: "untrusted"
       };
       const decision: PolicyDecision = {
@@ -203,6 +206,7 @@ describe("auditPublisher", () => {
         toolName: "send_email",
         payload: JSON.stringify({ to: "partner@external.example" }),
         sessionId: "s-contract",
+        serverId: "demo-mcp-tools",
         serverTrust: "untrusted"
       };
       const decision: PolicyDecision = {

@@ -17,6 +17,8 @@ export interface SelectProps<T extends string | number> {
   onChange: (value: string) => void;
   disabled?: boolean;
   label: string;
+  /** Forwarded to the native control, so a caller can address one field among many. */
+  id?: string;
   /** Sizing and ink; the frame gives the settings fields 32px and the trust column 24px. */
   className?: string;
   children: ReactNode;
@@ -27,12 +29,14 @@ export function Select<T extends string | number>({
   onChange,
   disabled,
   label,
+  id,
   className,
   children
 }: SelectProps<T>) {
   return (
     <span className="relative inline-flex flex-none items-center">
       <select
+        id={id}
         value={value}
         disabled={disabled}
         aria-label={label}

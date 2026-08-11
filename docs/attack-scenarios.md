@@ -80,4 +80,14 @@ A-09·A-11·A-14는 아직 텍스트 프로브로 재현할 수 없습니다. �
 npm run scenarios:validate && npm run bench
 ```
 
-검증은 스키마뿐 아니라 `expectedControl.detections`가 실제 탐지기 출력과 맞는지도 확인합니다. 탐지기를 바꿔서 기대 태그가 더 이상 나오지 않으면 여기서 실패합니다.
+검증은 스키마뿐 아니라 `expectedControl.detections`가 실제 탐지기 출력과 맞는지도 확인합니다.
+
+## 실행
+
+카탈로그가 적은 기대 차단 지점을 실제로 실행해 확인하는 것은 [Attack Lab 러너](attack-lab-runner.md)입니다.
+
+```bash
+npm run attacklab
+```
+
+`expectedControl.policy`가 `null`인 시나리오는 러너에서 `GAP`으로 보고됩니다 — 담당 정책이 없어 목표 판정이 나오지 않는다는 뜻이고, CI를 실패시키지는 않되 매 실행마다 목록으로 드러납니다. 탐지기를 바꿔서 기대 태그가 더 이상 나오지 않으면 여기서 실패합니다.

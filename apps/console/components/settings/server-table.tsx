@@ -9,12 +9,9 @@ import { cn } from "@/lib/utils";
 
 const TRUST_LEVELS: readonly TrustLevel[] = ["trusted", "limited", "untrusted"];
 
-/** How much each tier is trusted, so the screen can tell a promotion from a demotion. */
-const RANK: Record<TrustLevel, number> = { untrusted: 0, limited: 1, trusted: 2 };
-
-export function isPromotion(from: TrustLevel, to: TrustLevel): boolean {
-  return RANK[to] > RANK[from];
-}
+// Which changes need confirming is the gateway's call, not this table's: FR-GW-02 answers an
+// upgrade with 409 and the policies it would drop. `TRUST_RANK` in lib/api/types mirrors the
+// server's ordering for anything that needs to read it.
 
 /** The select's ink follows the tier, straight off the design's text fills. */
 const TRUST_INK: Record<TrustLevel, string> = {
@@ -71,6 +68,7 @@ export function ServerTable({ servers, onTrustChange, busy }: ServerTableProps) 
                   </td>
                   <td className="px-4 py-4">
                     <Select
+                      id={`trust-${server.id}`}
                       value={server.trust}
                       disabled={busy === server.id}
                       label={t("servers.trustOf", { name: server.name })}

@@ -61,6 +61,8 @@ Different axes in one policy must **all match (AND)**. `any_of` and lists within
 
 Risky tools and destinations usually belong on `request`; PII exfiltration and indirect injection usually belong on `response`. Avoid `any` unless both directions are necessary.
 
+**Credentials follow the same asymmetry.** A secret arriving in a response is masked and delivered by `mask_secret_response` — the lookup itself is legitimate work, so the answer is to remove the Agent's reason to see the key, not to block the call. A secret in a request the Agent is about to *send* goes to `approve_external_email_with_secret` for human approval instead. Masking on the request direction would hide an exfiltration attempt rather than stop it.
+
 **Direction-split strength (FR-INJ-03).** The `default` pack treats the same injection detection differently per direction. The response direction carries external data the Agent is about to trust, so `block_untrusted_injection_response` **blocks** it; the request direction carries text the user or Agent authored, where the same wording is often a legitimate quote, so `warn_injection_request` only **warns and records**. One payload therefore yields different verdicts depending on direction. Preserve this asymmetry in new detection policies — blocking the request direction as well breaks ordinary work.
 
 ### 3.2 `tool`
@@ -85,6 +87,8 @@ The glob matches the complete tool name; regular expressions are not accepted. A
 | `any` | every trust class |
 
 An unknown server or missing trust configuration normalizes to `untrusted` as a fail-safe. `any` matches regardless of classification.
+
+A list is also accepted (`server_trust: [limited, untrusted]`). Values inside the list are OR-combined, so a policy can target "every grade except trusted" without one rule per grade. `any` cannot be mixed into a list.
 
 ### 3.4 `args`
 

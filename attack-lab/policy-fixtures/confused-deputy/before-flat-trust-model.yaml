@@ -1,0 +1,24 @@
+# T-06 Confused Deputy demo — "Before" (FR-GW-02 §8.3): PROJECT.md 2.2 describes the
+# pre-GMCP-64 gap as a flat trust model with no per-server distinction. Modeled here as
+# `server_trust: trusted` — the value every call effectively carried when nothing
+# distinguished an untrusted upstream from a reviewed one. An untrusted "notes" server
+# already returned a response steering the agent to relay its captured notes by email; the
+# outbound send_email call itself carries no secret/PII/injection detection — a successful
+# confused-deputy handoff looks clean at the point of the high-risk call. Without a trust
+# gate, this call is allowed straight through.
+id: confused_deputy_before_flat_trust_model
+description: Before GMCP-64, a Confused Deputy hand-off through an unreviewed server's high-risk tool call was allowed outright.
+coverage:
+  policy_id: require_approval_untrusted_high_risk_tool
+  expectation: not_match
+event:
+  direction: request
+  tool: send_email
+  server_trust: trusted
+  args:
+    to: partner@company.co.kr
+  detections: []
+  risk_score: 10
+expected:
+  action: allow
+  matched_policy_ids: []
