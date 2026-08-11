@@ -9,13 +9,14 @@
 | `v1.0.0` 태그 | `git tag v1.0.0` (GitHub Release) | 대기 | GMCP-48 |
 | README (ko/en) | `README.md`, `README.en.md` | 확인 필요(Quick Start·문서 표 최신화) | GMCP-48 |
 | 시연 영상 최종본 | `docs/submission/demo-video.md`(영상 링크·로컬 사본 경로 기록) | 대기 | GMCP-45 |
-| 결과보고서 | `docs/submission/final-report.md`(또는 PDF 링크) | 대기 | GMCP-47 |
+| 결과보고서 | `docs/submission/final-report.md`(또는 PDF 링크) | 초안 완료 | GMCP-47 |
 | 라이선스 리포트 | `artifacts/licenses/`(`npm run license:report`로 생성) | 대기 | GMCP-51 |
 | 저장소 공개 설정 점검 | GitHub 저장소 Settings(Visibility, LICENSE 파일, 브랜치 보호) | 대기 | GMCP-51 |
 | 제출 체크리스트 검수 | 본 문서 | 진행 중 | GMCP-48 |
-| 외부 1인 Quick Start 재현 증빙 | `docs/submission/reproduction-report.md`(재현자, 일시, 결과 스크린샷/로그) | 대기 | GMCP-48 |
+| 외부 1인 Quick Start 재현 증빙 | `docs/submission/reproduction-report.md`(재현자, 일시, 결과 스크린샷/로그) | 템플릿 완료·재현 대기 | GMCP-48 |
+| 시연 영상 기록 | `docs/submission/demo-video.md` | 템플릿 완료·영상 대기 | GMCP-45 |
 
-`docs/submission/` 아래 세 문서(`demo-video.md`, `final-report.md`, `reproduction-report.md`)는 아직 존재하지 않습니다. 각 담당 티켓의 산출물이 준비되는 대로 해당 경로에 추가합니다.
+`docs/submission/` 아래 세 문서 골격은 준비되어 있습니다. 외부 재현자·시연 영상 URL·최종 PDF만 마감 전 채우면 됩니다.
 
 ## 2. 태깅·패키징 절차
 
