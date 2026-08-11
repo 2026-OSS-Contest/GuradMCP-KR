@@ -7,7 +7,7 @@
 GuardMCP-KR is an open-source, Korean privacy-first security gateway that inspects requests and responses between AI agents and MCP servers. It combines YAML policies, Korean PII/secret/prompt-injection detections, and a risk score to return one of `allow`, `warn`, `mask_then_allow`, `require_approval`, or `block`.
 
 > [!IMPORTANT]
-> This repository is an early demo. The gateway evaluates the checked-in `default` and `korean-pii` packs, but human approval UI, replay, and durable audit storage are not implemented. `require_approval` fails closed in the demo. Do not use real personal data or production credentials.
+> This repository is an early demo. The gateway evaluates the checked-in `default` and `korean-pii` packs. In the demo environment, where `docker compose` injects `CONTROL_PLANE_URL` by default, a `require_approval` verdict holds on a real Control Plane approval: an operator decides (approve, approve-masked, or block), or it fails closed automatically after 120 seconds with no response. Without `CONTROL_PLANE_URL` set, it fails closed immediately. The console approval UI, the Replay screen, and the hash chain are not yet wired to these approval events (see the [external-email approval demo](docs/external-email-approval-demo.en.md) for the details). Do not use real personal data or production credentials.
 
 ## Five-minute quick start
 
@@ -84,6 +84,7 @@ Do not disclose vulnerabilities in public issues. [SECURITY.md](SECURITY.md#engl
 | High-entropy credential net | [Open](docs/high-entropy-secrets.en.md) | [열기](docs/high-entropy-secrets.md) |
 | Korean PII masking demo | [Open](docs/korean-pii-demo.en.md) | [열기](docs/korean-pii-demo.md) |
 | .env exfiltration demo | [Open](docs/env-leak-demo.en.md) | [열기](docs/env-leak-demo.md) |
+| External-email approval demo | [Open](docs/external-email-approval-demo.en.md) | [열기](docs/external-email-approval-demo.md) |
 | Benchmark gate | [Open](docs/benchmark-gate.en.md) | [열기](docs/benchmark-gate.md) |
 | Attack scenario catalog | [Open](docs/attack-scenarios.en.md) | [열기](docs/attack-scenarios.md) |
 | Attack Scenario Runner | [Open](docs/attack-lab-runner.en.md) | [열기](docs/attack-lab-runner.md) |

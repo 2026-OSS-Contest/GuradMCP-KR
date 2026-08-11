@@ -169,7 +169,7 @@ risk_score:
 
 정책 action의 강도는 `block > require_approval > warn > mask_then_allow > allow`입니다. `warn`이 `mask_then_allow`보다 강한 순서는 Appendix A v1의 판정 합성 규칙이며, severity와 별개입니다.
 
-이 절은 DSL v1의 규범 계약입니다. 현재 데모 Gateway는 체크인된 팩을 평가해 `allow`/`warn`/`mask_then_allow`/`block`을 적용하며, 승인 서비스가 아직 없으므로 `require_approval`은 upstream을 실행하지 않고 fail-closed 오류를 반환합니다. Approval Card와 영구 감사 로그는 구현 예정이며 데모에서 제공된다고 가정하면 안 됩니다.
+이 절은 DSL v1의 규범 계약입니다. 현재 데모 Gateway는 체크인된 팩을 평가해 `allow`/`warn`/`mask_then_allow`/`block`을 적용합니다. `docker compose`가 `CONTROL_PLANE_URL`을 기본으로 주입하는 데모 환경에서는 `require_approval`이 실제 Control Plane 승인으로 이어져, 운영자가 결정하거나(승인/마스킹 후 승인/거부) timeout(120초) 동안 무응답이면 자동으로 fail-closed 차단됩니다. `CONTROL_PLANE_URL`이 없으면 즉시 fail-closed로 거부합니다. 승인 카드는 이제 실제로 위험 태그와 마스킹 미리보기를 담아 게시되지만, 콘솔 승인 UI·Replay·해시 체인은 아직 이 승인 이벤트와 연동되지 않았습니다 — 자세한 내용은 [외부 이메일 승인 데모](../external-email-approval-demo.md)를 참고하세요. 영구 감사 로그는 구현 예정이며 데모에서 제공된다고 가정하면 안 됩니다.
 
 ## 5. severity 다섯 단계
 

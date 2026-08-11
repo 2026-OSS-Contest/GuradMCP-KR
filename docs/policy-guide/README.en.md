@@ -169,7 +169,7 @@ risk_score:
 
 Action precedence is `block > require_approval > warn > mask_then_allow > allow`. The placement of `warn` above `mask_then_allow` is the Appendix A v1 composition rule and is independent of severity.
 
-This section is the normative DSL v1 contract. The current demo gateway evaluates checked-in packs and applies `allow`, `warn`, `mask_then_allow`, and `block`; because no approval service exists yet, `require_approval` returns a fail-closed error without invoking upstream. Approval Cards and durable audit logs are future work and must not be assumed in the demo.
+This section is the normative DSL v1 contract. The current demo gateway evaluates checked-in packs and applies `allow`, `warn`, `mask_then_allow`, and `block`. In the demo environment, where `docker compose` injects `CONTROL_PLANE_URL` by default, `require_approval` holds on a real Control Plane approval: an operator decides (approve, approve-masked, or block), or it fails closed automatically after the timeout (120 seconds) with no response. Without `CONTROL_PLANE_URL` set, it fails closed immediately. Approval Cards now carry real risk tags and mask previews, but the console approval UI, Replay, and the hash chain are not yet wired to these approval events — see the [external-email approval demo](../external-email-approval-demo.en.md) for details. Durable audit logs are future work and must not be assumed in the demo.
 
 ## 5. Five severities
 
