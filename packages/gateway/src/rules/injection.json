@@ -20,16 +20,16 @@
     },
     {
       "subtype": "ROLE_OVERRIDE",
-      "description": "Role hijack (category 2); 'from now you are admin', developer/jailbreak mode, Korean and English",
-      "pattern": "(?:지금부터|이제부터)\\s*(?:너는|넌|당신은)[^\\n]{0,12}(?:관리자|개발자|루트|시스템\\s*관리자|제한\\s*없|무엇이든)|(?:you\\s+are\\s+now|now\\s+you\\s+are|act\\s+as|pretend\\s+to\\s+be)\\s+(?:a\\s+|an\\s+|the\\s+)?(?:admin(?:istrator)?|developer|root|dan|unrestricted|jailbroken|god\\s*mode)|(?:개발자|관리자|디버그|탈옥)\\s*모드|developer\\s+mode",
+      "description": "Role hijack (category 2); 'from now you are admin', developer/jailbreak mode, Korean and English. A bare Korean mode phrase needs an activation directive: 'QA 문서의 개발자 모드 진입 절차' names the mode, it does not demand it.",
+      "pattern": "(?:지금부터|이제부터)\\s*(?:너는|넌|당신은)[^\\n]{0,12}(?:관리자|개발자|루트|시스템\\s*관리자|제한\\s*없|무엇이든)|(?:지금부터|이제부터)[^\\n]{0,12}(?:개발자|관리자|디버그|탈옥)\\s*모드|(?:you\\s+are\\s+now|now\\s+you\\s+are|act\\s+as|pretend\\s+to\\s+be)\\s+(?:a\\s+|an\\s+|the\\s+)?(?:admin(?:istrator)?|developer|root|dan|unrestricted|jailbroken|god\\s*mode)|(?:개발자|관리자|디버그|탈옥)\\s*모드(?:로|를|으로)?\\s*(?:전환|진입|활성화|해제|변경)?\\s*(?:해|하라|해줘|켜|들어가)|developer\\s+mode",
       "flags": "gi",
       "maskedAs": "[INJECTION]",
       "confidence": 0.85
     },
     {
       "subtype": "SYSTEM_PROMPT_LEAK",
-      "description": "System-prompt exposure request (category 3); reveal/show your system prompt or instructions",
-      "pattern": "(?:reveal|show|print|display|repeat|expose|give\\s+me|tell\\s+me)\\s+(?:me\\s+)?(?:your|your\\s+system|the\\s+system|the\\s+initial|the\\s+original)\\s+(?:system\\s+)?(?:prompt|instructions?|system\\s*message|rules?|configuration)|(?:시스템\\s*프롬프트|시스템\\s*지시문|당신의\\s*지시문|너의\\s*지시문|초기\\s*프롬프트|원본\\s*프롬프트)(?:을|를)?\\s*(?:그대로\\s*)?(?:보여|알려|공개|출력|말해|보내)",
+      "description": "System-prompt exposure request (category 3); reveal/show your system prompt or instructions. Korean puts adverbs between the object and the verb, so any run of them is allowed rather than 그대로 alone.",
+      "pattern": "(?:reveal|show|print|display|repeat|expose|give\\s+me|tell\\s+me)\\s+(?:me\\s+)?(?:your|your\\s+system|the\\s+system|the\\s+initial|the\\s+original)\\s+(?:system\\s+)?(?:prompt|instructions?|system\\s*message|rules?|configuration)|(?:시스템\\s*프롬프트|시스템\\s*지시문|당신의\\s*지시문|너의\\s*지시문|초기\\s*프롬프트|원본\\s*프롬프트)(?:을|를)?\\s*(?:(?:그대로|전부|모두|싹|다시|다)\\s*)*(?:보여|알려|공개|출력|말해|보내)",
       "flags": "gi",
       "maskedAs": "[INJECTION]",
       "confidence": 0.85
@@ -44,16 +44,16 @@
     },
     {
       "subtype": "EXFILTRATION",
-      "description": "Outbound transfer of sensitive data (category 5); secret next to a send verb, or send to an external target",
-      "pattern": "(?:\\.env|id_rsa|id_ed25519|credentials|secret|token|api[_-]?key|password|비밀|토큰|자격\\s*증명|개인\\s*키).{0,80}(?:send|e-?mail|upload|exfiltrat|leak|post\\s+to|전송|메일|업로드|유출|빼돌|외부로\\s*보)|(?:send|e-?mail|upload|exfiltrate|전송|유출|보내|메일로\\s*보)[^\\n]{0,80}(?:attacker|외부\\s*서버|외부\\s*주소|@[a-z0-9.-]+\\.[a-z]{2,})",
+      "description": "Outbound transfer of sensitive data (category 5); secret next to a send verb, or send to an external target. Korean is verb-final, so the send verb also has to be reachable after the target ('토큰을 외부 서버로 보내'), and 'API 키' is spelled with a space and a Korean noun.",
+      "pattern": "(?:\\.env|id_rsa|id_ed25519|credentials|secret|token|api[_-]?key|api\\s*키|password|비밀|토큰|자격\\s*증명|개인\\s*키).{0,80}(?:send|e-?mail|upload|exfiltrat|leak|post\\s+to|전송|메일|업로드|유출|빼돌|외부로\\s*보|보내)|(?:send|e-?mail|upload|exfiltrate|전송|유출|보내|메일로\\s*보)[^\\n]{0,80}(?:attacker|외부\\s*서버|외부\\s*주소|@[a-z0-9.-]+\\.[a-z]{2,})",
       "flags": "gi",
       "maskedAs": "[INJECTION]",
       "confidence": 0.8
     },
     {
       "subtype": "CONCEALMENT",
-      "description": "Concealment or false justification (category 6); hide from the user or claim prior authorization",
-      "pattern": "(?:do\\s*n(?:o|')?t|don't|never)\\s+(?:tell|mention|inform|notify|alert|let)\\s+(?:the\\s+)?(?:user|human|them|him|her|anyone)|this\\s+(?:action\\s+)?is\\s+(?:authorized|approved|permitted|allowed|sanctioned|pre-?approved)|keep\\s+this\\s+(?:secret|hidden|confidential|quiet|between\\s+us)|사용자(?:에게|한테)?\\s*(?:는)?\\s*(?:말하지|알리지|언급하지|보고하지|들키지)\\s*(?:마|말|않)|(?:이건|이것은|이\\s*작업은|이\\s*요청은)\\s*(?:승인|허가)(?:된|받은|됨)|몰래\\s*(?:진행|수행|실행|처리)",
+      "description": "Concealment or false justification (category 6); hide from the user or claim prior authorization. A sentence that forbids concealing ('알리지 않고 배포하면 안 된다') states the opposite intent, so a nearby prohibition disarms the Korean branch; the authorization branch allows the adverbs Korean puts before 승인된.",
+      "pattern": "(?:do\\s*n(?:o|')?t|don't|never)\\s+(?:tell|mention|inform|notify|alert|let)\\s+(?:the\\s+)?(?:user|human|them|him|her|anyone)|this\\s+(?:action\\s+)?is\\s+(?:authorized|approved|permitted|allowed|sanctioned|pre-?approved)|keep\\s+this\\s+(?:secret|hidden|confidential|quiet|between\\s+us)|사용자(?:에게|한테)?\\s*(?:는)?\\s*(?:말하지|알리지|언급하지|보고하지|들키지)\\s*(?:마|말|않)(?![^\\n]{0,30}(?:안\\s*(?:된|됩|돼)|금지|위반))|(?:이건|이것은|이\\s*작업은|이\\s*요청은)\\s*(?:(?:이미|벌써|사전(?:에)?)\\s*)*(?:승인|허가)(?:된|받은|됨)|몰래\\s*(?:진행|수행|실행|처리)",
       "flags": "gi",
       "maskedAs": "[INJECTION]",
       "confidence": 0.75
