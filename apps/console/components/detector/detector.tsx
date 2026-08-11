@@ -1,11 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { previewDetection } from "@/lib/api/client";
 import type { DetectDirection, DetectionFinding, DetectionPreview } from "@/lib/api/types";
 import { DETECTOR_SAMPLES, type DetectorSample } from "@/lib/detector-samples";
-import { DetectorInput } from "./detector-input";
+import { DetectorInput, clampToBytes } from "./detector-input";
 import { DetectorResults } from "./detector-results";
 
 /**
@@ -15,6 +15,9 @@ import { DetectorResults } from "./detector-results";
  * `POST /detect/preview` is one of the few endpoints the control plane already serves, so this
  * screen talks to a real gateway when one is configured and to MSW otherwise.
  */
+/** Spec §5.4: how long typing has to settle before the screen runs the text by itself. */
+const DEBOUNCE_MS = 500;
+
 export function Detector() {
   const t = useTranslations("detector");
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -32,19 +35,55 @@ export function Detector() {
     setFailed(false);
   };
 
-  const run = async () => {
+  /**
+   * Which run is current. The button and the debounce both call `run`, so two can be in flight
+   * at once and the slower one must not win — nor may it clear the spinner the faster one still
+   * needs. Every run stamps itself and then only touches state while it is still the newest,
+   * which is also what keeps `running` from sticking: whichever run is last to be stamped is
+   * always the one that clears it, aborted or not.
+   */
+  const latest = useRef(0);
+
+  const run = useCallback(
+    async (value: string, side: DetectDirection, signal?: AbortSignal) => {
+      if (!value.trim()) return;
+      const id = ++latest.current;
+      setRunning(true);
+      setFailed(false);
+      try {
+        const result = await previewDetection(value, side, signal);
+        if (id !== latest.current) return;
+        setPreview(result);
+      } catch (error) {
+        if (id !== latest.current) return;
+        // An abort is this component replacing its own request, not a failure to report.
+        if ((error as Error)?.name === "AbortError") return;
+        setPreview(undefined);
+        setFailed(true);
+      } finally {
+        if (id === latest.current) setRunning(false);
+      }
+    },
+    []
+  );
+
+  /**
+   * Spec §5.4 asks for both: the screen keeps up on its own while typing, and the button is
+   * there for when it should go now. The pause is what makes the automatic half usable — a run
+   * per keystroke would be a request per keystroke, and the highlights would strobe.
+   */
+  useEffect(() => {
     if (!text.trim()) return;
-    setRunning(true);
-    setFailed(false);
-    try {
-      setPreview(await previewDetection(text, direction));
-    } catch {
-      setPreview(undefined);
-      setFailed(true);
-    } finally {
-      setRunning(false);
-    }
-  };
+    const controller = new AbortController();
+    // Both halves inspect the same clamped prefix, so the automatic run cannot post more than
+    // the button would. The findings then carry offsets into a prefix of what is on screen,
+    // which is why the highlights still land on their words without remapping.
+    const timer = setTimeout(() => void run(clampToBytes(text), direction, controller.signal), DEBOUNCE_MS);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [text, direction, run]);
 
   const sample = (kind: DetectorSample) => edit(DETECTOR_SAMPLES[kind]);
 
@@ -56,8 +95,15 @@ export function Detector() {
     input.setSelectionRange(finding.start, finding.end);
   };
 
+  // The two halves sit flush: the design gives the content area no gap and no outer padding, and
+  // each column carries its own 24/16 inset instead. That is what makes the 488px button row fit
+  // the 520px input column at 1280 without wrapping.
+  //
+  // The frames stop at 1024, where the results float over the input. Narrower than that the
+  // overlay would sit on top of the run button and half the samples, so the two stack instead —
+  // the design says nothing about that width, and covering the controls is not a reading of it.
   return (
-    <div data-scr="SCR-401" className="flex min-h-0 flex-1 gap-6 px-8 py-6">
+    <div data-scr="SCR-401" className="relative flex min-h-0 flex-1 flex-col lg:flex-row">
       <DetectorInput
         text={text}
         onTextChange={edit}
@@ -69,15 +115,18 @@ export function Detector() {
         }}
         findings={preview?.findings ?? []}
         running={running}
-        onRun={() => void run()}
+        onRun={() => void run(clampToBytes(text), direction)}
         onSample={sample}
         inputRef={inputRef}
       />
 
-      {/* 420px at 1280 and up, shrinking rather than crowding the input at 1024. The 1024 frame
-          draws this panel over the text, which reads as a composition artifact — the input is
-          clipped behind it — so the columns stay side by side here. Worth a designer's check. */}
-      <div className="flex min-h-0 w-105 max-w-[45%] min-w-80 flex-none flex-col gap-3">
+      {/*
+        An even split at 1280 (520/520) and 1920 (840/840). At 1024 the frame gives this panel no
+        column of its own — it floats over the input's right side, which SCR-302 does at the same
+        width, so it is the design's responsive rule rather than the composition artifact an
+        earlier reading here took it for.
+      */}
+      <div className="flex min-h-100 flex-col gap-4 overflow-y-auto px-4 pb-6 lg:absolute lg:inset-y-6 lg:right-4 lg:min-h-0 lg:w-86.75 lg:rounded-(--primitive-radius-rounded-2xl) lg:bg-grayscale-950 lg:p-4 lg:ring-1 lg:shadow-xl lg:shadow-black/40 lg:ring-grayscale-800 xl:static xl:inset-auto xl:w-auto xl:flex-1 xl:overflow-visible xl:rounded-none xl:bg-transparent xl:px-4 xl:py-6 xl:shadow-none xl:ring-0">
         {failed && (
           <p role="status" className="flex-none text-body-text-b3-md text-grayscale-400">
             {t("error")}

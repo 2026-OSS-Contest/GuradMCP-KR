@@ -4,6 +4,7 @@
 // screen can be demonstrated without a gateway.
 
 import type { DetectDirection, DetectionFinding, DetectionPreview, GuardAction } from "@/lib/api/types";
+import { subtypeOf } from "@/lib/detection-labels";
 
 interface Rule {
   /** Detector label the design tags a finding with. */
@@ -47,8 +48,7 @@ const RULES: Rule[] = [
     action: "block",
     severity: "high",
     confidence: 92,
-    pattern: /\b(?:sk-[A-Za-z0-9]{8,}|ghp_[A-Za-z0-9]{20,}|AKIA[A-Z0-9]{12,})\b/g,
-    label: "SECRET_OPENAI"
+    pattern: /\b(?:sk-[A-Za-z0-9]{8,}|ghp_[A-Za-z0-9]{20,}|AKIA[A-Z0-9]{12,})\b/g
   },
   {
     type: "PATH",
@@ -107,7 +107,12 @@ export function previewOf(text: string, direction: DetectDirection): DetectionPr
   let cursor = 0;
   for (const finding of ordered) {
     const rule = RULES.find((entry) => entry.policyId === finding.policyId);
-    maskedText += text.slice(cursor, finding.start) + `[${rule?.label ?? finding.type}]`;
+    // The design's stand-in for a secret names its issuer — `[SECRET_OPENAI]`. That is the
+    // subtype, so it is derived from the token that matched rather than fixed per rule; an AWS
+    // key used to come out labelled OpenAI.
+    const subtype = subtypeOf(finding);
+    const stand = rule?.label ?? (subtype ? `${finding.type}_${subtype}` : finding.type);
+    maskedText += text.slice(cursor, finding.start) + `[${stand}]`;
     cursor = finding.end;
   }
   maskedText += text.slice(cursor);

@@ -83,6 +83,7 @@ npm run bench
 | 국내 서비스 자격증명 탐지 | [열기](docs/korean-service-tokens.md) | [Open](docs/korean-service-tokens.en.md) |
 | 고엔트로피 자격증명 안전망 | [열기](docs/high-entropy-secrets.md) | [Open](docs/high-entropy-secrets.en.md) |
 | 한국어 개인정보 마스킹 데모 | [열기](docs/korean-pii-demo.md) | [Open](docs/korean-pii-demo.en.md) |
+| .env 유출 공격 데모 | [열기](docs/env-leak-demo.md) | [Open](docs/env-leak-demo.en.md) |
 | 벤치마크 게이트 | [열기](docs/benchmark-gate.md) | [Open](docs/benchmark-gate.en.md) |
 | 벤치마크 결과 정리 | [열기](docs/benchmark-results.md) | [Open](docs/benchmark-results.md) |
 | 공격 시나리오 카탈로그 | [열기](docs/attack-scenarios.md) | [Open](docs/attack-scenarios.en.md) |
