@@ -189,7 +189,10 @@ export function TimelineColumn() {
           onClick={() => setPlaying((previous) => !previous)}
           aria-label={playing ? t("pause") : t("play")}
           aria-pressed={playing}
-          className="flex size-10 flex-none items-center justify-center rounded-xl bg-blue-800 transition-colors hover:bg-blue-700"
+          // The primitive (12px), not Tailwind's `rounded-xl` (16px): PlayControlIcon paints its
+          // own 12px rounded rect over the whole button, so at 16px the focus ring traced a
+          // corner the eye never sees. Pause is a small glyph, which is why only play showed it.
+          className="flex size-10 flex-none items-center justify-center rounded-(--primitive-radius-rounded-xl) bg-blue-800 transition-colors hover:bg-blue-700"
         >
           {playing ? <Pause className="size-5 fill-current" aria-hidden /> : <PlayControlIcon className="size-10" aria-hidden />}
         </button>
@@ -197,7 +200,8 @@ export function TimelineColumn() {
           type="button"
           onClick={() => events[0] && selectEvent(events[0].id)}
           aria-label={t("toStart")}
-          className="flex size-10 flex-none items-center justify-center rounded-xl bg-(--primitive-opacity-white-alpha-25) transition-colors hover:bg-white/30"
+          // Same 12px primitive — RewindControlIcon paints its own rounded rect too.
+          className="flex size-10 flex-none items-center justify-center rounded-(--primitive-radius-rounded-xl) bg-(--primitive-opacity-white-alpha-25) transition-colors hover:bg-white/30"
         >
           <RewindControlIcon className="size-10" aria-hidden />
         </button>
