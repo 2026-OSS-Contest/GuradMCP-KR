@@ -11,6 +11,18 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
   }
+
+  /* Every keyboard-reachable control takes the same 2px 쪽색 ring (기획서 10.7, NFR-08). Declared
+     once here rather than per component, so a control cannot ship without one — 5 of the 59
+     components had their own and the rest had nothing.
+
+     `:where()` keeps this at zero specificity, so a component that wants a different ring (the
+     shadcn button's `ring-2`, the switch's own outline) still wins without `!important`. Focus is
+     never removed, only restyled — an invisible ring fails 2.4.7 the same as no ring. */
+  :where(a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
 }
 
 /* A newly streamed event lands with a brief highlight that fades out (spec §6.3, 1.5s).
