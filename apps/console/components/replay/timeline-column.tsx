@@ -33,7 +33,9 @@ const MARKER: Record<TimelineNodeType, ComponentType<SVGProps<SVGSVGElement>>> =
 
 const LABEL_TONE: Partial<Record<TimelineNodeType, string>> = {
   user: "text-(--primitive-opacity-white-alpha-75)",
-  agent: "text-blue-700"
+  // blue-600, not blue-700: on the timeline's `bg-grayscale-900` the darker step measured
+  // 3.64:1, under the 4.5:1 AA floor (NFR-08).
+  agent: "text-blue-600"
 };
 
 function hhmmss(iso: string): string {

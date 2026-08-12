@@ -86,7 +86,9 @@ export function ServerTable({ servers, onTrustChange, busy }: ServerTableProps) 
                     {/* A disconnected server reports nothing, so its snapshot state is unknown
                         rather than clean — the design greys it out instead of showing 정상. */}
                     {!server.connected ? (
-                      <Tag className="text-caption-text-c-md text-(--primitive-opacity-white-alpha-50)">
+                      // grayscale-400 rather than white-alpha-50: over the Tag's own
+                      // `bg-grayscale-800` the 50% white measured 4.49:1, a hair under AA.
+                      <Tag className="text-caption-text-c-md text-grayscale-400">
                         <TagOfflineIcon aria-hidden className="size-4" />
                         {t("servers.disconnected")}
                       </Tag>
