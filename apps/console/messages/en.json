@@ -61,7 +61,24 @@
       "riskLow": "low",
       "morePolicies": "+{count}",
       "noPolicies": "No policy applied",
-      "snapshotChanged": "Definition changed"
+      "snapshotChanged": "Definition changed",
+      "diffPopover": {
+        "title": "Definition changes",
+        "toolAdded": "A new tool appeared",
+        "toolRemoved": "The tool disappeared",
+        "descriptionChanged": "The description changed",
+        "schemaChanged": "The input schema changed",
+        "before": "Before",
+        "after": "After",
+        "none": "(none)",
+        "acknowledge": "Acknowledge",
+        "acknowledging": "Acknowledging…",
+        "acknowledged": "Acknowledged",
+        "loading": "Loading…",
+        "loadError": "Couldn't load the change history.",
+        "empty": "No unacknowledged changes.",
+        "close": "Close"
+      }
     },
     "events": {
       "title": "Recent security events",

@@ -2,10 +2,20 @@
 // diffed against the design. Values the screen cannot derive are literals straight from the
 // design; server and tool counts are derived from the fixture below.
 
-import type { McpServer, Overview, SecurityEvent } from "@/lib/api/types";
+import type { McpServer, Overview, SecurityEvent, SnapshotStatus } from "@/lib/api/types";
 import { pendingCount } from "./approvals";
 
 export const POLICY_PACKS = ["default", "korean-pii"];
+
+/** Every fixture tool but `write_file` has always matched its (never-shown) approved
+ *  baseline — FR-GW-03 §6.1's `in_sync` state. */
+const IN_SYNC: SnapshotStatus = {
+  state: "in_sync",
+  snapshotCapturedAt: "2026-07-01T00:00:00Z",
+  lastCheckedAt: "2026-08-02T03:00:00Z",
+  pendingDiffCount: 0,
+  latestDiffId: null,
+};
 
 export const SERVERS: McpServer[] = [
   {
@@ -23,19 +33,25 @@ export const SERVERS: McpServer[] = [
           "mask_secret_in_file",
           "audit_file_read",
         ],
-        snapshotChanged: false,
+        snapshotStatus: IN_SYNC,
       },
       {
         name: "write_file",
         risk: "medium",
         policies: ["deny_system_path_write"],
-        snapshotChanged: true,
+        snapshotStatus: {
+          state: "drift_detected",
+          snapshotCapturedAt: "2026-07-20T09:00:00Z",
+          lastCheckedAt: "2026-08-02T03:00:00Z",
+          pendingDiffCount: 1,
+          latestDiffId: "9f2b0000-0000-4000-8000-000000000001",
+        },
       },
       {
         name: "list_directory",
         risk: "low",
         policies: ["audit_directory_list"],
-        snapshotChanged: false,
+        snapshotStatus: IN_SYNC,
       },
     ],
   },
@@ -50,25 +66,25 @@ export const SERVERS: McpServer[] = [
         name: "send_email",
         risk: "high",
         policies: ["approve_external_email_with_secret", "mask_kr_pii"],
-        snapshotChanged: false,
+        snapshotStatus: IN_SYNC,
       },
       {
         name: "list_messages",
         risk: "low",
         policies: ["mask_kr_pii"],
-        snapshotChanged: false,
+        snapshotStatus: IN_SYNC,
       },
       {
         name: "read_message",
         risk: "medium",
         policies: ["mask_kr_pii"],
-        snapshotChanged: false,
+        snapshotStatus: IN_SYNC,
       },
       {
         name: "delete_message",
         risk: "medium",
         policies: [],
-        snapshotChanged: false,
+        snapshotStatus: IN_SYNC,
       },
     ],
   },
@@ -83,25 +99,25 @@ export const SERVERS: McpServer[] = [
         name: "db_query",
         risk: "high",
         policies: ["mask_kr_pii", "block_bulk_export"],
-        snapshotChanged: false,
+        snapshotStatus: IN_SYNC,
       },
       {
         name: "db_execute",
         risk: "high",
         policies: ["block_bulk_export"],
-        snapshotChanged: false,
+        snapshotStatus: IN_SYNC,
       },
       {
         name: "list_tables",
         risk: "low",
         policies: [],
-        snapshotChanged: false,
+        snapshotStatus: IN_SYNC,
       },
       {
         name: "describe_table",
         risk: "low",
         policies: [],
-        snapshotChanged: false,
+        snapshotStatus: IN_SYNC,
       },
     ],
   },

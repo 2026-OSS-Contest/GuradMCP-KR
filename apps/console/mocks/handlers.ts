@@ -15,6 +15,7 @@ import {
 } from "@/lib/api/types";
 import { allApprovals, decide, raiseApproval, resetApprovals, resolveRaised } from "./approvals";
 import { ATTACK_SCENARIOS, attackRun } from "./attack-lab";
+import { acknowledgeToolDiff, pendingDiffsOf } from "./tool-diffs";
 
 import { previewOf } from "./detect";
 import {
@@ -152,6 +153,39 @@ export const handlers = [
       connected: server.connected,
       trust: server.trust,
     });
+  }),
+
+  // SCR-101 snapshot diff popover (FR-GW-03 §6.2/§6.3). Mirrors ToolSnapshotController.kt.
+  http.get("*/api/v1/servers/:id/tools/:toolName/diffs", async ({ params }) => {
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    const toolName = String(params.toolName);
+    return HttpResponse.json({ toolName, diffs: pendingDiffsOf(String(params.id), toolName) });
+  }),
+
+  http.post("*/api/v1/servers/:id/tools/:toolName/diffs/:diffId/acknowledge", async ({ params }) => {
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    const serverId = String(params.id);
+    const toolName = String(params.toolName);
+    const diff = acknowledgeToolDiff(serverId, toolName, String(params.diffId));
+    if (!diff) return HttpResponse.json({ code: "tool_diff_not_found", message: "diff not found" }, { status: 404 });
+
+    // The real control plane derives `snapshotStatus` fresh from the diff table on every
+    // GET /servers (ServerController.kt's toolInventory); this fixture is static, so mirror
+    // that derivation here or the badge would keep showing after its last diff is acknowledged.
+    const server = SERVERS.find((candidate) => candidate.id === serverId);
+    const tool = server?.tools.find((candidate) => candidate.name === toolName);
+    if (tool) {
+      const remaining = pendingDiffsOf(serverId, toolName);
+      tool.snapshotStatus = {
+        ...tool.snapshotStatus,
+        state: remaining.length > 0 ? "drift_detected" : "in_sync",
+        pendingDiffCount: remaining.length,
+        latestDiffId: remaining[0]?.id ?? null,
+      };
+    }
+    return HttpResponse.json(diff);
   }),
 
   http.get("*/api/v1/events/recent", async () =>

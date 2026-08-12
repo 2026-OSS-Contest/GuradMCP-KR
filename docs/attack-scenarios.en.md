@@ -67,7 +67,7 @@ Benign scenarios carry the same weight as the block rate. A change that blocks a
 
 ## Why some scenarios stay manual
 
-A-09, A-11, and A-14 cannot yet be reproduced with a text probe. Tool-definition snapshots, per-server trust levels, and bulk-disclosure risk escalation arrive in GMCP-65, GMCP-64, and GMCP-70 respectively. Rather than counting unimplemented capability as covered, those scenarios declare `automation.mode: "manual"` with the ticket that unblocks them. The block-rate KPI denominator is the **sixteen** probe-backed scenarios.
+A-09, A-11, and A-14 cannot yet be reproduced with a single text probe. A-09's tool-definition snapshot/drift detection itself was implemented in GMCP-65 (`packages/gateway/src/tool-snapshot.ts`, `apps/demo-mcp-tools`'s `POST /tools/tamper` reproduction endpoint), but the scenario is an approve → tamper → re-list multi-step flow the runner's single-probe-vs-expected-result model can't express. A-11 and A-14 need per-server trust levels and bulk-disclosure risk escalation, arriving in GMCP-64 and GMCP-70 respectively. Rather than counting unimplemented capability as covered, those scenarios declare `automation.mode: "manual"` with the ticket that unblocks them. The block-rate KPI denominator is the **sixteen** probe-backed scenarios.
 
 ## Adding a scenario
 

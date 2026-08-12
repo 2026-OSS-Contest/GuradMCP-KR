@@ -39,6 +39,7 @@ import {
   type ToolMetadataInspection,
 } from "./pipeline/toolMetadata.js";
 import type {
+  Explanation,
   GuardBlockError,
   PolicyDecision,
   ServerTrust,
@@ -46,6 +47,18 @@ import type {
 import { scoreRisk } from "./risk.js";
 import { getServerTrust, startServerRegistrySync } from "./server-registry.js";
 import { startFailurePolicySync } from "./settings/failurePolicyCache.js";
+import {
+  getToolSnapshotBaseline,
+  reportToolObservation,
+  startToolSnapshotSync,
+} from "./tool-snapshot-registry.js";
+import {
+  computeFingerprint,
+  diffToolDefinitions,
+  extractToolDefinitions,
+  type ToolDefinitionDiff,
+  type ToolDiffType,
+} from "./tool-snapshot.js";
 import { runtimePolicyPacks } from "./policies.generated.js";
 
 const port = Number(process.env.PORT ?? 3001);
@@ -62,9 +75,22 @@ const EMAIL_FIELD_SEPARATOR = "\n";
 // The demo gateway routes to a single upstream (DEMO_MCP_TOOLS_URL); this is that upstream's
 // identity in the Control Plane's server registry (FR-GW-02 §3.1, §4.1).
 const gatewayServerId = process.env.GATEWAY_SERVER_ID ?? "demo-mcp-tools";
-startServerRegistrySync(process.env.CONTROL_PLANE_URL);
+
+const controlPlaneUrl = process.env.CONTROL_PLANE_URL;
+startServerRegistrySync(controlPlaneUrl);
 // NFR-03/GMCP-68 §4.3: cache starts cold (fail-closed) until the first snapshot arrives.
-startFailurePolicySync(process.env.CONTROL_PLANE_URL);
+startFailurePolicySync(controlPlaneUrl);
+// Operator-tunable (spec §11: "폴링 주기와 지연"), for the same reason the upstream tools/list
+// interval is configurable in spec §5.2 — a short interval speeds up a demo/attack-lab run at
+// the cost of more frequent Control Plane polling.
+const toolSnapshotSyncIntervalMs = Number(
+  process.env.TOOL_SNAPSHOT_SYNC_INTERVAL_MS ?? 60_000,
+);
+startToolSnapshotSync(
+  controlPlaneUrl,
+  gatewayServerId,
+  toolSnapshotSyncIntervalMs,
+);
 
 // With CONTROL_PLANE_URL set, a real Approval Console can resolve `require_approval` calls
 // (§5.1, GMCP-26); otherwise there is nothing to answer them, so fail-closed immediately
@@ -195,6 +221,13 @@ async function handleMcp(
       gatewayServerId,
       serverTrust,
     );
+    // Rug Pull drift detection (FR-GW-03, T-05): compares the sanitized tool list against
+    // the last-approved baseline. Runs on the already-quarantined payload — a quarantined
+    // tool is excluded from the comparison entirely (see detectAndReportDrift), not reported
+    // as `tool_removed`; it is still on the upstream server, just hidden from the Agent this
+    // round, and FR-GW-04's own `block` GuardEvent already covers it. Reporting it as removed
+    // too would be a second, misleading event for the same tool.
+    detectAndReportDrift(metadata, sessionId, gatewayServerId, serverTrust);
     const payload = JSON.stringify(metadata.sanitized);
     const decision = evaluatePayload(payload, {
       direction: "response",
@@ -458,7 +491,13 @@ function evaluatePayload(
     const stageError =
       error instanceof PipelineStageError
         ? error.stageError
-        : { stage: "policy_engine" as const, errorClass: error instanceof Error ? error.constructor.name : "UnknownError", message: "unexpected pipeline failure", timedOut: false };
+        : {
+            stage: "policy_engine" as const,
+            errorClass:
+              error instanceof Error ? error.constructor.name : "UnknownError",
+            message: "unexpected pipeline failure",
+            timedOut: false,
+          };
     return handlePipelineFailure(stageError);
   }
 }
@@ -591,6 +630,103 @@ function recordQuarantine(
     });
     return decision;
   });
+}
+
+const driftRiskScore = 55;
+
+const driftLabels: Record<ToolDiffType, { ko: string; en: string }> = {
+  tool_added: { ko: "새 Tool이 추가되었습니다", en: "a new tool appeared" },
+  tool_removed: {
+    ko: "기존 Tool이 사라졌습니다",
+    en: "an existing tool disappeared",
+  },
+  description_changed: {
+    ko: "Tool 설명이 변경되었습니다",
+    en: "the tool description changed",
+  },
+  schema_changed: {
+    ko: "Tool 입력 스키마가 변경되었습니다",
+    en: "the tool input schema changed",
+  },
+};
+
+/**
+ * Neutral, factual wording (FR-GW-03 §11 UX principle): this reports that a definition
+ * differs from what was approved, not that an attack occurred — a legitimate version
+ * upgrade looks identical to a Rug Pull at this layer, and only an operator reviewing the
+ * diff can tell them apart.
+ */
+function explainDrift(diff: ToolDefinitionDiff): Explanation {
+  const label = driftLabels[diff.diffType];
+  return {
+    reasonCode: "tool_definition_drift",
+    ko: `Tool '${diff.toolName}'의 정의가 승인 시점과 달라졌습니다 (${label.ko}).`,
+    en: `Tool '${diff.toolName}' differs from its approved definition (${label.en}).`,
+  };
+}
+
+/**
+ * Compares the sanitized `tools/list` response against the locally cached approved
+ * baseline (FR-GW-03 §5.2) and, for each drift found, emits a `require_approval`
+ * GuardEvent through the normal pipeline — matching `attack-lab/scenarios/catalog.json`
+ * A-09's `expectedControl.verdict`. A server with no approved baseline is skipped
+ * entirely (§5.1.3: "승인 전까지는 diff 비교 대상에서 제외"), so a server nobody has
+ * reviewed yet never generates drift noise.
+ *
+ * A tool FR-GW-04 quarantined this round is excluded from the comparison, not just from
+ * `metadata.sanitized`: `extractToolDefinitions` never sees it, so without this exclusion
+ * it would read as `tool_removed` against the baseline — a false drift signal for a tool
+ * that is still on the upstream server and already has its own `block` GuardEvent from
+ * `recordQuarantine`. Excluding it here means the baseline simply isn't compared against
+ * for that tool this round, rather than being told it disappeared.
+ *
+ * The tool list plus any diffs are also reported to the Control Plane so its
+ * `GET /servers` inventory and `lastCheckedAt` stay current — see
+ * `tool-snapshot-registry.ts`'s `reportToolObservation` for why that call is
+ * fire-and-forget rather than something this function awaits.
+ */
+function detectAndReportDrift(
+  metadata: ToolMetadataInspection,
+  sessionId: string,
+  serverId: string,
+  serverTrust: ServerTrust,
+): void {
+  const baseline = getToolSnapshotBaseline(serverId);
+  const currentTools = extractToolDefinitions(metadata.sanitized);
+  const observedTools = currentTools.map((tool) => ({
+    ...tool,
+    fingerprint: computeFingerprint(tool.description, tool.inputSchema),
+  }));
+  const quarantinedNames = new Set(
+    metadata.quarantined.map((tool) => tool.report.name),
+  );
+  const diffs = baseline.approved
+    ? diffToolDefinitions(baseline.entries, currentTools).filter(
+        (diff) =>
+          !(
+            diff.diffType === "tool_removed" &&
+            quarantinedNames.has(diff.toolName)
+          ),
+      )
+    : [];
+  for (const diff of diffs) {
+    emitGuardEvent({
+      eventId: randomUUID(),
+      sessionId,
+      ts: new Date().toISOString(),
+      direction: "response",
+      toolName: diff.toolName,
+      argsDigest: digest(JSON.stringify(diff)),
+      verdict: "require_approval",
+      riskScore: driftRiskScore,
+      matchedPolicyIds: [],
+      detections: [],
+      explanation: explainDrift(diff),
+      targetServerId: serverId,
+      targetServerTrust: serverTrust,
+    });
+  }
+  reportToolObservation(controlPlaneUrl, serverId, observedTools, diffs);
 }
 
 /**

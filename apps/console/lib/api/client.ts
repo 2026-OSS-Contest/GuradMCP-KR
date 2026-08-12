@@ -25,6 +25,8 @@ import type {
   SessionsResponse,
   SettingsUpdate,
   TimelineResponse,
+  ToolDefinitionDiff,
+  ToolDiffsResponse,
 } from "./types";
 import {
   toEventDetailFromLookup,
@@ -147,6 +149,26 @@ export const putServerTrust = (
   put<ServerTrustChangeResult>(
     `/servers/${encodeURIComponent(id)}/trust`,
     request,
+    signal,
+  );
+
+/** SCR-101 snapshot diff popover (FR-GW-03 §6.2). Unacknowledged diffs, most recent first. */
+export const getToolDiffs = (serverId: string, toolName: string, signal?: AbortSignal) =>
+  get<ToolDiffsResponse>(
+    `/servers/${encodeURIComponent(serverId)}/tools/${encodeURIComponent(toolName)}/diffs`,
+    signal,
+  );
+
+/** FR-GW-03 §6.3: marks a diff confirmed. Does not change the approved baseline. */
+export const acknowledgeToolDiff = (
+  serverId: string,
+  toolName: string,
+  diffId: string,
+  signal?: AbortSignal,
+) =>
+  postJson<ToolDefinitionDiff>(
+    `/servers/${encodeURIComponent(serverId)}/tools/${encodeURIComponent(toolName)}/diffs/${encodeURIComponent(diffId)}/acknowledge`,
+    {},
     signal,
   );
 

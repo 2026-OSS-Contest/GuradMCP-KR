@@ -4,6 +4,8 @@ import kr.guardmcp.controlplane.domain.AuditChain
 import kr.guardmcp.controlplane.domain.McpServer
 import kr.guardmcp.controlplane.domain.ServerRegistryStore
 import kr.guardmcp.controlplane.domain.ServerSummary
+import kr.guardmcp.controlplane.domain.ToolSnapshotStore
+import kr.guardmcp.controlplane.domain.ToolSummary
 import kr.guardmcp.controlplane.domain.TrustLevel
 import kr.guardmcp.controlplane.domain.TrustLevelChangeEvent
 import kr.guardmcp.controlplane.domain.toSummary
@@ -27,10 +29,17 @@ data class TrustChangeRequest(val trustLevel: String, val confirmed: Boolean = f
 class ServerController(
     private val registryStore: ServerRegistryStore,
     private val auditChain: AuditChain,
+    private val toolSnapshotStore: ToolSnapshotStore,
 ) {
-    /** Lean list shape shared by the console home-page inventory and the gateway registry sync (§4.1, §6). */
+    /** Lean list shape shared by the console home-page inventory and the gateway registry sync
+     *  (§4.1, §6). Per-tool `snapshotStatus` (FR-GW-03 §6.1) is real here even though the SSE
+     *  push in [ServerRegistryStore] still sends an empty `tools` list — see that file's note. */
     @GetMapping("/servers")
-    fun servers(): ServersResponse = ServersResponse(registryStore.list().map(::toSummary))
+    fun servers(): ServersResponse = ServersResponse(registryStore.list().map { toSummary(it, toolInventory(it.id)) })
+
+    private fun toolInventory(serverId: UUID): List<ToolSummary> =
+        toolSnapshotStore.statusView(serverId).map { (name, status) -> ToolSummary(name = name, snapshotStatus = status) }
+            .sortedBy { it.name }
 
     /** Full entity — endpoint, connection/tool-snapshot state, and trust-change provenance (§3.1). */
     @GetMapping("/servers/{id}")
