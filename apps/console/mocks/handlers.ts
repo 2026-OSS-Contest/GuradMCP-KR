@@ -42,6 +42,7 @@ import {
   revealOf,
   timelineOf,
 } from "./replay";
+import { currentSettings, patchSettings } from "./settings";
 import { readScenario } from "./scenario";
 
 // Long enough that a slow render is visible, short enough that the 500ms skeleton rule
@@ -76,8 +77,25 @@ export const handlers = [
   }),
 
   http.get("*/api/v1/servers", async () =>
+    // The trust handler below writes back into `SERVERS`, so the inventory has to read from the
+    // same array — a second mutable copy would let the table and the change disagree.
     respond({ servers: readScenario() === "empty" ? [] : SERVERS }),
   ),
+
+  // SCR-501 Settings (spec §5.7). No control plane serves `/settings` — it is GMCP-80's — so the
+  // mock is the whole server for these two.
+  http.get("*/api/v1/settings", async () => {
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    return HttpResponse.json(currentSettings());
+  }),
+
+  http.put("*/api/v1/settings", async ({ request }) => {
+    const update = (await request.json()) as Record<string, unknown>;
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    return HttpResponse.json(patchSettings(update));
+  }),
 
   // FR-GW-02 §5.1: downgrade applies immediately; an upgrade needs a follow-up confirmed:true
   // request or 409s with an impact summary. Mirrors services/control-plane's ServerController.

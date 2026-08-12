@@ -37,6 +37,8 @@ export interface McpServer {
   connected: boolean;
   trust: TrustLevel;
   tools: ToolEntry[];
+  /** Where the gateway reaches it — the SCR-501 server table's second column. */
+  endpoint?: string;
 }
 
 export interface SecurityEvent {
@@ -491,6 +493,33 @@ export interface TimelineResponse {
   /** Full detail for each event id the panel can select. */
   details: Record<string, EventDetail>;
 }
+
+// ── SCR-501 Settings (spec §5.7, GMCP-88) ───────────────────────────────────
+// Server trust is real: FR-GW-02 shipped `PUT /servers/{id}/trust`, and this screen calls it
+// through `putServerTrust` rather than the shape an earlier reading here invented.
+//
+// `GET`/`PUT /settings` is not. It belongs to GMCP-80, whose `PolicyController` counterpart has
+// no settings sibling yet, so the three sections below — failure policy, raw-log opt-in and the
+// general preferences — are mock-only today. The path and verb are the ones that ticket names,
+// so wiring the real backend needs no UI change.
+
+/** What the gateway does when it cannot reach its own guard (GMCP-68). */
+export type FailMode = "fail_closed" | "fail_open";
+
+export interface GatewaySettings {
+  failMode: FailMode;
+  /**
+   * Whether the audit log keeps the raw text beside the masked form. Off by default: turning it
+   * on means the console starts storing exactly what it exists to redact, so the screen asks.
+   */
+  storeRawOptIn: boolean;
+  locale: "ko" | "en";
+  /** Seconds a held call waits before the gateway fails it closed. The design's default is 120. */
+  approvalTimeoutSeconds: number;
+}
+
+/** `PUT /settings` — every field independent, so one control never resends another's value. */
+export type SettingsUpdate = Partial<GatewaySettings>;
 
 // ── SCR-302 Policy Builder (spec §5.5, FR-POL-02/04) ────────────────────────
 // `GET /policy-packs`, `GET /policies`, `PUT /policy-packs/{packId}` and `PUT /policies/{policyId}`
