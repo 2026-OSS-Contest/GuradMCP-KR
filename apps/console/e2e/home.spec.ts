@@ -37,7 +37,8 @@ test("SCR-101 inventory accordion reveals a server's tools", async ({ page }) =>
 
 test("SCR-101 recent events grow from the mocked SSE stream", async ({ page }) => {
   await page.goto("/");
-  const rows = page.locator('[data-scr] ul[role="log"] > li');
+  // `role="log"` sits on the wrapper so the `<ul>` keeps its list semantics (GMCP-90).
+  const rows = page.locator('[data-scr] [role="log"] ul > li');
   const seeded = await rows.count();
   // The mock pushes a guard.event every few seconds; the list should outgrow its seed.
   await expect(async () => expect(await rows.count()).toBeGreaterThan(seeded)).toPass({ timeout: 12_000 });

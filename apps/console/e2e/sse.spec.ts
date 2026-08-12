@@ -13,7 +13,7 @@ import { expect, test } from "@playwright/test";
 test("GMCP-21 a streamed guard.event's own payload renders, not a stale placeholder", async ({ page }) => {
   await page.goto("/");
   const events = page.locator('[data-scr] section', { hasText: "최근 보안 이벤트" });
-  const rows = events.locator('ul[role="log"] > li');
+  const rows = events.locator('[role="log"] ul > li');
   const seeded = await rows.count();
 
   await expect(async () => expect(await rows.count()).toBeGreaterThan(seeded)).toPass({ timeout: 12_000 });
@@ -29,7 +29,7 @@ test("GMCP-21 a streamed guard.event's own payload renders, not a stale placehol
 test("GMCP-21 a freshly streamed event gets the insert-tint, which clears within its own window", async ({ page }) => {
   await page.goto("/");
   // The tint class lands on the row's own link, not the `<li>` wrapper (components/gateway/recent-events.tsx).
-  const rows = page.locator('[data-scr] ul[role="log"] > li > a');
+  const rows = page.locator('[data-scr] [role="log"] ul > li > a');
   const seeded = await rows.count();
 
   await expect(async () => expect(await rows.count()).toBeGreaterThan(seeded)).toPass({ timeout: 12_000 });

@@ -240,25 +240,28 @@ export function TimelineColumn() {
           {t("empty")}
         </div>
       ) : (
-        <ol
+        // See recent-events: `role="log"` on the list itself would strip its list semantics.
+        <div
           role="log"
           aria-live={live ? "polite" : "off"}
-          className="flex flex-1 flex-col gap-3 overflow-y-auto rounded-lg bg-grayscale-900 p-2"
+          className="flex flex-1 flex-col overflow-y-auto rounded-lg bg-grayscale-900 p-2"
         >
-          {events.map((event) => (
-            <li key={event.id}>
-              <NodeRow
-                event={event}
-                selected={event.id === selectedEventId}
-                onSelect={() => selectEvent(event.id)}
-                register={(el) => {
-                  if (el) rowRefs.current.set(event.id, el);
-                  else rowRefs.current.delete(event.id);
-                }}
-              />
-            </li>
-          ))}
-        </ol>
+          <ol className="flex flex-1 flex-col gap-3">
+            {events.map((event) => (
+              <li key={event.id}>
+                <NodeRow
+                  event={event}
+                  selected={event.id === selectedEventId}
+                  onSelect={() => selectEvent(event.id)}
+                  register={(el) => {
+                    if (el) rowRefs.current.set(event.id, el);
+                    else rowRefs.current.delete(event.id);
+                  }}
+                />
+              </li>
+            ))}
+          </ol>
+        </div>
       )}
     </section>
   );

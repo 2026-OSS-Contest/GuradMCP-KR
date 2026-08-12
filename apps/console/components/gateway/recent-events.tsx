@@ -93,11 +93,17 @@ export function RecentEvents({ demoDisabled }: { demoDisabled: boolean }) {
         ) : events.length === 0 ? (
           <p className="text-body-text-b3-md text-grayscale-400">{t("empty")}</p>
         ) : (
-          <ul role="log" aria-live="polite" className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-            {events.map((event) => (
-              <EventRow key={event.id} event={event} isNew={fresh.has(event.id)} />
-            ))}
-          </ul>
+          // `role="log"` belongs on the wrapper, not the list: an explicit role replaces the
+          // element's implicit one, so a `<ul role="log">` stops being a list and orphans every
+          // `<li>` inside it. The spec asks for both (§4.5), so they take one node each.
+          // `p-1 -m-1`: see session-list — without it the scroll container clips the focus ring.
+          <div role="log" aria-live="polite" className="-m-1 flex min-h-0 flex-1 flex-col overflow-y-auto p-1">
+            <ul className="flex flex-col gap-4">
+              {events.map((event) => (
+                <EventRow key={event.id} event={event} isNew={fresh.has(event.id)} />
+              ))}
+            </ul>
+          </div>
         )}
       </section>
 
