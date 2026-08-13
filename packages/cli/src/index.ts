@@ -5,6 +5,7 @@
 // scope decisions made against the GMCP-97 design doc.
 import { benchCompare, benchRun } from "./commands/bench.js";
 import { demoList, demoRun } from "./commands/demo.js";
+import { policyLint } from "./commands/policy-lint.js";
 import { UsageError } from "./lib/argv.js";
 
 const USAGE = `guardmcp <command> [options]
@@ -14,6 +15,8 @@ Commands:
   guardmcp demo run <scenarioId|threatId|all> [--target guarded|vulnerable] [--seed <n>] [--record <path>]
   guardmcp bench run [--format json|md] [--output <path>]
   guardmcp bench compare <baseline.json> <current.json>
+  guardmcp policy lint <path-or-glob>
+  guardmcp policy lint --pack <packName>
 
 See docs/cli/README.md for details and scope notes.
 `;
@@ -36,6 +39,11 @@ async function main(): Promise<void> {
     if (subcommand === "run") return benchRun(rest);
     if (subcommand === "compare") return benchCompare(rest);
     throw new UsageError(`unknown bench subcommand: ${subcommand ?? "(none)"}\n\n${USAGE}`);
+  }
+
+  if (group === "policy") {
+    if (subcommand === "lint") return policyLint(rest);
+    throw new UsageError(`unknown policy subcommand: ${subcommand ?? "(none)"}\n\n${USAGE}`);
   }
 
   throw new UsageError(`unknown command: ${group}\n\n${USAGE}`);
