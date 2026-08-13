@@ -286,11 +286,34 @@ class ControlPlaneApiTest : ApiTestSupport() {
         assertEquals("file-server", fileServer["name"])
         assertEquals(true, fileServer["connected"])
         assertEquals("limited", fileServer["trust"])
-        // apps/console/lib/api/types.ts's McpServer requires `tools`; this satisfies that wire
-        // contract exactly (FR-GW-03 per-server tool data is not sourced from here yet) so the
-        // console's server-inventory component never dereferences a missing field against the
-        // real backend.
-        assertEquals(emptyList<Any>(), fileServer["tools"])
+        assertNotNull(fileServer["endpoint"])
+        // apps/console/lib/api/types.ts's `ToolEntry`: name/risk/policies/snapshotChanged
+        // (GMCP-80 §3.1). file-server's read_file tool is high-risk and gated by a policy.
+        val fileTools = fileServer["tools"] as List<*>
+        val readFile = fileTools.map { it as Map<*, *> }.single { it["name"] == "read_file" }
+        assertEquals("high", readFile["risk"])
+        assertEquals(listOf("block_env_file_read"), readFile["policies"])
+        assertEquals(false, readFile["snapshotChanged"])
+    }
+
+    @Test
+    fun `a tool whose description changed since approval reports the Rug Pull diff`() {
+        val response = get("/api/v1/servers")
+
+        val servers = parseMap(response.body())["servers"] as List<*>
+        val mailServer = servers.map { it as Map<*, *> }.single { it["id"] == DemoSeed.SERVER_MAIL_ID.toString() }
+        val sendEmail = (mailServer["tools"] as List<*>).map { it as Map<*, *> }.single { it["name"] == "send_email" }
+
+        assertEquals(true, sendEmail["snapshotChanged"])
+        val diff = sendEmail["snapshotDiff"] as Map<*, *>
+        assertNotNull(diff["before"])
+        assertNotNull(diff["after"])
+    }
+
+    @Test
+    fun `an empty server registry would serialize to an empty array, not a missing field`() {
+        val body = objectMapper.writeValueAsString(ServersResponse(emptyList()))
+        assertEquals("""{"servers":[]}""", body)
     }
 
     @Test

@@ -31,6 +31,17 @@ enum class ConnectionStatus(@get:JsonValue val wire: String) {
     }
 }
 
+/** Wire vocabulary matches `apps/console/lib/api/types.ts`'s `RiskLevel`. */
+enum class ToolRisk(@get:JsonValue val wire: String) {
+    HIGH("high"),
+    MEDIUM("medium"),
+    LOW("low");
+
+    companion object {
+        fun fromWire(value: String): ToolRisk? = entries.firstOrNull { it.wire == value }
+    }
+}
+
 data class McpServer(
     val id: UUID,
     val name: String,
@@ -45,27 +56,31 @@ data class McpServer(
 )
 
 /**
- * Per-tool inventory entry (FR-GW-03 §6.1). `risk`/`policies` have no real backend source
- * yet — tool-level risk scoring and policy-to-tool binding are a gap this ticket does not
- * close (`apps/console/lib/api/types.ts` flags the same gap on the console side) — so they
- * carry placeholder defaults rather than fabricated-looking real data. `snapshotStatus` is
+ * Per-tool inventory entry (FR-GW-03 §6.1, GMCP-80 §3.1). `risk`/`policies` come from
+ * [kr.guardmcp.controlplane.api.ServerController]'s static demo seed — tool-level risk
+ * scoring and policy-to-tool binding have no real backend source yet (`apps/console/lib/api
+ * /types.ts` flags the same gap on the console side), so a tool absent from that seed reads
+ * as the placeholder `LOW`/empty rather than fabricated-looking real data. `snapshotStatus` is
  * FR-GW-03's actual deliverable and is always real, sourced from [ToolSnapshotStore.statusView].
  */
 data class ToolSummary(
     val name: String,
-    val risk: String = "low",
+    val risk: ToolRisk = ToolRisk.LOW,
     val policies: List<String> = emptyList(),
     val snapshotStatus: ToolSnapshotStatusView,
 )
 
 /**
  * Lean projection served by the list endpoint and the sync stream — the shape the gateway
- * registry cache and the console home-page inventory both consume (§4.1, §6). The richer
- * [McpServer] entity (endpoint, timestamps, tool snapshot) is reserved for the detail endpoint.
- * `tools` is populated only by [kr.guardmcp.controlplane.api.ServerController.servers] (the
- * REST list endpoint, FR-GW-03 §6.1) — the trust-change SSE broadcast in this file still calls
+ * registry cache and the console home-page inventory both consume (§4.1, §6, GMCP-80 spec
+ * §3.1). The richer [McpServer] entity (timestamps, trust provenance) is reserved for the
+ * detail endpoint. `tools` matches `apps/console/lib/api/types.ts`'s `ToolEntry[]` and is
+ * populated only by [kr.guardmcp.controlplane.api.ServerController.servers] (the REST list
+ * endpoint, FR-GW-03 §6.1) — the trust-change SSE broadcast in this file still calls
  * [toSummary] with the default empty list, since neither the gateway's trust-registry sync nor
  * the console (which reads tool inventory over REST, not SSE) needs per-tool data on that push.
+ * `endpoint` is optional on the console's `ToolEntry` (SCR-501's server table second column) and
+ * always present here since the detail endpoint already exposes it.
  */
 data class ServerSummary(
     val id: String,
@@ -73,6 +88,7 @@ data class ServerSummary(
     val connected: Boolean,
     val trust: String,
     val tools: List<ToolSummary> = emptyList(),
+    val endpoint: String,
 )
 
 class ServerNotFoundException(val id: String) : RuntimeException("server $id not found")
@@ -199,4 +215,11 @@ class ServerRegistryStore(private val clock: Clock, private val policyStore: Pol
 }
 
 fun toSummary(server: McpServer, tools: List<ToolSummary> = emptyList()): ServerSummary =
-    ServerSummary(id = server.id.toString(), name = server.name, connected = server.connectionStatus == ConnectionStatus.CONNECTED, trust = server.trustLevel.wire, tools = tools)
+    ServerSummary(
+        id = server.id.toString(),
+        name = server.name,
+        connected = server.connectionStatus == ConnectionStatus.CONNECTED,
+        trust = server.trustLevel.wire,
+        tools = tools,
+        endpoint = server.endpoint,
+    )

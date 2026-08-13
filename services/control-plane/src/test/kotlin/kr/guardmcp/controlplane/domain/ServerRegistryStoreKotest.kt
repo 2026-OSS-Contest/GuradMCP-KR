@@ -3,6 +3,7 @@ package kr.guardmcp.controlplane.domain
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -61,5 +62,25 @@ class ServerRegistryStoreKotest : StringSpec({
         shouldThrow<ServerNotFoundException> {
             storeAt(now).changeTrust(java.util.UUID.randomUUID(), TrustLevel.TRUSTED, confirmed = true)
         }
+    }
+
+    "an unknown server's tool inventory is empty, not an error" {
+        storeAt(now).toolsFor(java.util.UUID.randomUUID()) shouldBe emptyList()
+    }
+
+    "a tool whose description changed since approval carries its Rug Pull diff (FR-GW-03)" {
+        val tools = storeAt(now).toolsFor(DemoSeed.SERVER_MAIL_ID)
+        val sendEmail = tools.single { it.name == "send_email" }
+
+        sendEmail.snapshotChanged shouldBe true
+        sendEmail.snapshotDiff shouldNotBe null
+    }
+
+    "a tool unchanged since approval carries no diff" {
+        val tools = storeAt(now).toolsFor(DemoSeed.SERVER_FILE_ID)
+        val readFile = tools.single { it.name == "read_file" }
+
+        readFile.snapshotChanged shouldBe false
+        readFile.snapshotDiff shouldBe null
     }
 })

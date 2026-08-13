@@ -440,7 +440,11 @@ paths:
         of applying; the same request with `confirmed: true` then applies it.
         A request for the server's current grade is a no-op. Every actual
         change is recorded as a TrustLevelChangeEvent in the audit hash chain
-        and pushed to /api/v1/servers/stream subscribers immediately.
+        and pushed to /api/v1/servers/stream subscribers immediately. This is
+        the endpoint GMCP-80 §3.8.1's `PUT /servers/{id}` describes — the
+        console (lib/api/client.ts) deliberately calls this trust
+        sub-resource rather than a bare PUT /servers/{id}, so no separate
+        endpoint was added.
       operationId: changeServerTrust
       parameters:
         - name: id
@@ -983,9 +987,42 @@ components:
     ConnectionStatus:
       type: string
       enum: [connected, disconnected]
+    ToolRisk:
+      type: string
+      enum: [high, medium, low]
+    SnapshotDiff:
+      type: object
+      required: [before, after]
+      description: Rug Pull evidence (FR-GW-03) — the tool description at first approval vs its current one.
+      properties:
+        before:
+          type: string
+        after:
+          type: string
+    ToolSummary:
+      type: object
+      required: [name, risk, policies, snapshotChanged]
+      description: >-
+        GMCP-80 §3.1. Field names match apps/console/lib/api/types.ts's ToolEntry
+        (risk, policies) rather than the spec doc's illustrative riskLevel/policyIds.
+      properties:
+        name:
+          type: string
+        risk:
+          $ref: "#/components/schemas/ToolRisk"
+        policies:
+          type: array
+          items:
+            type: string
+        snapshotChanged:
+          type: boolean
+        snapshotDiff:
+          oneOf:
+            - $ref: "#/components/schemas/SnapshotDiff"
+            - type: "null"
     ServerSummary:
       type: object
-      required: [id, name, connected, trust, tools]
+      required: [id, name, connected, trust, tools, endpoint]
       properties:
         id:
           type: string
@@ -997,9 +1034,11 @@ components:
         trust:
           $ref: "#/components/schemas/TrustLevel"
         tools:
-          description: Always empty today — FR-GW-03 per-server tool inventory is not sourced from the registry yet.
           type: array
-          items: {}
+          items:
+            $ref: "#/components/schemas/ToolSummary"
+        endpoint:
+          type: string
     ServersResponse:
       type: object
       required: [servers]
