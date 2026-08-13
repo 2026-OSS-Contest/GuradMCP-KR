@@ -59,7 +59,7 @@ export function ServerTable({ servers, onTrustChange, busy }: ServerTableProps) 
           </thead>
           <tbody>
             {servers.map((server) => {
-              const changed = server.tools.filter((tool) => tool.snapshotChanged).length;
+              const changed = server.tools.filter((tool) => tool.snapshotStatus.state === "drift_detected").length;
               return (
                 <tr key={server.id} className="border-b border-grayscale-800 last:border-0">
                   <td className="text-body-mono-b2-rg px-4 py-4 break-all text-grayscale-white">{server.name}</td>
