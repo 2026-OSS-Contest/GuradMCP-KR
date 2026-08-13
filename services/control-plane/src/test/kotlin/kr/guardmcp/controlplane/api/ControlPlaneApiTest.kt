@@ -142,6 +142,9 @@ class ControlPlaneApiTest : ApiTestSupport() {
         val items = (all["items"] as List<*>).map { it as Map<*, *> }
         val startedAts = items.map { Instant.parse(it["startedAt"] as String) }
         assertEquals(startedAts.sortedDescending(), startedAts)
+        // `total` is the match count, not the page size — distinct once a `size`/`limit` narrower
+        // than the full result set is introduced (GMCP-80 §3.2).
+        assertEquals(items.size, all["total"])
 
         val live = parseMap(get("/api/v1/sessions?status=live").body())
         val liveItems = (live["items"] as List<*>).map { it as Map<*, *> }
@@ -163,6 +166,10 @@ class ControlPlaneApiTest : ApiTestSupport() {
 
         val invalidStatus = get("/api/v1/sessions?status=bogus")
         assertEquals(400, invalidStatus.statusCode())
+
+        val firstPage = parseMap(get("/api/v1/sessions?limit=1").body())
+        assertEquals(1, (firstPage["items"] as List<*>).size)
+        assertEquals(all["total"], firstPage["total"])
 
         val injectionSession = items.single { it["sessionId"] == DemoSeed.SESSION_INJECTION_ID.toString() }
         val verdictSummary = injectionSession["verdictSummary"] as Map<*, *>

@@ -26,7 +26,8 @@ data class SessionSummaryResponse(
     val verdictSummary: Map<String, Int>,
 )
 
-data class SessionsResponse(val items: List<SessionSummaryResponse>, val nextCursor: String?)
+/** `total` (GMCP-80 §3.2) is the count matching `q`/`status`, not `items.size` — the page size. */
+data class SessionsResponse(val items: List<SessionSummaryResponse>, val nextCursor: String?, val total: Int)
 
 data class SessionTimelineResponse(
     val sessionId: UUID,
@@ -78,6 +79,7 @@ class ReplayController(private val replayStore: ReplayTimelines) {
                 )
             },
             nextCursor = page.nextCursor,
+            total = matched.size,
         )
     }
 

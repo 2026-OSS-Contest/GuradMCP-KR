@@ -810,7 +810,7 @@ components:
             type: integer
     SessionsResponse:
       type: object
-      required: [items, nextCursor]
+      required: [items, nextCursor, total]
       properties:
         items:
           type: array
@@ -818,6 +818,9 @@ components:
             $ref: "#/components/schemas/SessionSummary"
         nextCursor:
           type: [string, "null"]
+        total:
+          type: integer
+          description: Count matching q/status — not items.length, the page size (GMCP-80 §3.2).
     SessionTimelineResponse:
       type: object
       required: [sessionId, agentLabel, startedAt, isLive, chainStatus, nodes, nextCursor]
