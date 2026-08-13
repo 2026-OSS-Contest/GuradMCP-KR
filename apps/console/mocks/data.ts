@@ -173,7 +173,7 @@ export function recentEvents(): SecurityEvent[] {
       sessionId: "s-0712",
       verdict: "warn",
       tool: "fetch_url",
-      target: "외부 URL",
+      target: "docs.example.com",
     },
     {
       id: "evt-6009",
