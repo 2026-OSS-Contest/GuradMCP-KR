@@ -236,10 +236,15 @@ paths:
       tags: [sessions]
       summary: Reveal the unmasked original payload (NFR-04, GMCP-80 §3.6)
       description: >-
-        Operator-only. Every call — granted or denied — writes an append-only
-        RevealAuditLog entry. 409 when this event's raw payload was never
-        stored (audit.store-raw-payload / settings.storeRawOptIn was off at
-        ingest time), not 404. Does not match apps/console/lib/api/types.ts's
+        Operator-only, and requires a valid X-Operator-Token (server-side
+        secret, configured out of band via REVEAL_OPERATOR_TOKEN — unset by
+        default, which disables this endpoint entirely). X-Actor-Role alone
+        is a forgeable header with no session/auth system behind it anywhere
+        in this service, so it is attribution only, not access control. Every
+        call — granted or denied — writes an append-only RevealAuditLog
+        entry. 409 when this event's raw payload was never stored
+        (audit.store-raw-payload / settings.storeRawOptIn was off at ingest
+        time), not 404. Does not match apps/console/lib/api/types.ts's
         RevealContent (masked-line reconstruction is out of scope here); this
         is the spec's own response shape.
       operationId: revealEvent
@@ -261,6 +266,14 @@ paths:
           description: Must be "operator" or the call is rejected with 403.
           schema:
             type: string
+        - name: X-Operator-Token
+          in: header
+          required: true
+          description: >-
+            Must match the server's configured REVEAL_OPERATOR_TOKEN or the
+            call is rejected with 403, regardless of X-Actor-Role.
+          schema:
+            type: string
       requestBody:
         required: false
         content:
@@ -275,7 +288,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/RevealResponse"
         "403":
-          description: Actor is not an operator (the attempt is still logged as REVEAL_DENIED)
+          description: >-
+            X-Operator-Token is missing, invalid, or unconfigured server-side
+            (reveal_unauthorized), or the actor is not an operator
+            (reveal_forbidden). Either way the attempt is still logged as
+            REVEAL_DENIED.
           content:
             application/json:
               schema:
@@ -706,7 +723,7 @@ paths:
   /api/v1/settings:
     get:
       tags: [settings]
-      summary: Current gateway settings (GMCP-68)
+      summary: Current gateway settings (GMCP-68, GMCP-80 §3.8.2)
       operationId: getSettings
       responses:
         "200":
@@ -719,15 +736,31 @@ paths:
       tags: [settings]
       summary: Update gateway settings
       description: >-
-        Every field is independent, so a caller sends only what it changed.
-        Setting failMode to fail_open requires riskAcknowledged: true in the
-        same request, regardless of the previous value — otherwise the
-        request is rejected with 400 and nothing is changed. Reverting
-        failMode to fail_closed never requires it. A failMode change is
-        recorded as a SETTINGS_FAILURE_POLICY_CHANGED audit-log entry
-        (severity=high for fail_open, info for fail_closed) and pushed to
-        /api/v1/settings/stream subscribers immediately.
+        Operator-only (403 otherwise). Every field is independent, so a
+        caller sends only what it changed. Setting failMode to fail_open
+        requires riskAcknowledged: true in the same request, regardless of
+        the previous value — otherwise the request is rejected with 400 and
+        nothing is changed. Reverting failMode to fail_closed never requires
+        it. A failMode change is recorded as a SETTINGS_FAILURE_POLICY_CHANGED
+        audit-log entry (severity=high for fail_open, info for fail_closed)
+        and pushed to /api/v1/settings/stream subscribers immediately;
+        storeRawOptIn flipping to true is recorded as
+        SETTINGS_RAW_PAYLOAD_OPT_IN_CHANGED (severity=high) and also gates
+        AuditEventController's ingest raw-payload write directly, so that
+        change takes effect on the very next event without a restart.
       operationId: updateSettings
+      parameters:
+        - name: X-Actor-Id
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: X-Actor-Role
+          in: header
+          required: false
+          description: Must be "operator" or the call is rejected with 403.
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -743,8 +776,15 @@ paths:
                 $ref: "#/components/schemas/GuardSettings"
         "400":
           description: >-
-            Malformed failMode, or failMode=fail_open without
+            Malformed failMode, an out-of-range approvalTimeoutSeconds or
+            unsupported locale, or failMode=fail_open without
             riskAcknowledged=true.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Actor is not an operator
           content:
             application/json:
               schema:
@@ -818,14 +858,17 @@ components:
             last time failMode became fail_open.
         storeRawOptIn:
           type: boolean
+          description: NFR-04. Off by default; also gates AuditEventController's raw-payload write directly.
         locale:
           type: string
           enum: [ko, en]
         approvalTimeoutSeconds:
           type: integer
+          minimum: 1
+          maximum: 3600
     SettingsUpdateRequest:
       type: object
-      description: Every field optional; unset fields are left unchanged.
+      description: Partial<GatewaySettings> — every field independent, unset fields are left unchanged.
       properties:
         failMode:
           $ref: "#/components/schemas/FailMode"
@@ -838,6 +881,8 @@ components:
           enum: [ko, en]
         approvalTimeoutSeconds:
           type: integer
+          minimum: 1
+          maximum: 3600
     ApiError:
       type: object
       required: [code, message]
@@ -1185,21 +1230,36 @@ components:
     ToolRisk:
       type: string
       enum: [high, medium, low]
-    SnapshotDiff:
+    ToolSnapshotStatusView:
       type: object
-      required: [before, after]
-      description: Rug Pull evidence (FR-GW-03) — the tool description at first approval vs its current one.
+      required: [state, pendingDiffCount]
+      description: >-
+        FR-GW-03 §6.1. Postgres-backed drift state, unlike ToolSummary's risk/policies which
+        are still a static demo seed (see ToolSummary's own description).
       properties:
-        before:
+        state:
           type: string
-        after:
-          type: string
+          enum: [unapproved, in_sync, drift_detected, drift_acknowledged]
+        snapshotCapturedAt:
+          type: [string, "null"]
+          format: date-time
+        lastCheckedAt:
+          type: [string, "null"]
+          format: date-time
+        pendingDiffCount:
+          type: integer
+        latestDiffId:
+          type: [string, "null"]
+          format: uuid
     ToolSummary:
       type: object
-      required: [name, risk, policies, snapshotChanged]
+      required: [name, risk, policies, snapshotStatus]
       description: >-
         GMCP-80 §3.1. Field names match apps/console/lib/api/types.ts's ToolEntry
         (risk, policies) rather than the spec doc's illustrative riskLevel/policyIds.
+        risk/policies are a fixed demo seed (no real per-tool risk scoring or
+        policy binding exists yet); snapshotStatus is FR-GW-03's real, Postgres-backed
+        drift state.
       properties:
         name:
           type: string
@@ -1209,12 +1269,8 @@ components:
           type: array
           items:
             type: string
-        snapshotChanged:
-          type: boolean
-        snapshotDiff:
-          oneOf:
-            - $ref: "#/components/schemas/SnapshotDiff"
-            - type: "null"
+        snapshotStatus:
+          $ref: "#/components/schemas/ToolSnapshotStatusView"
     ServerSummary:
       type: object
       required: [id, name, connected, trust, tools, endpoint]

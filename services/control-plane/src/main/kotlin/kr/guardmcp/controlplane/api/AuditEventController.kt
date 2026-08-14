@@ -5,6 +5,7 @@ import kr.guardmcp.controlplane.domain.AuditStructuredLogger
 import kr.guardmcp.controlplane.domain.GuardAction
 import kr.guardmcp.controlplane.domain.GuardEventRecord
 import kr.guardmcp.controlplane.domain.GuardEventRepository
+import kr.guardmcp.controlplane.domain.GuardSettingsStore
 import kr.guardmcp.controlplane.domain.RevealAuditAction
 import kr.guardmcp.controlplane.domain.RevealAuditLog
 import org.springframework.beans.factory.annotation.Value
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import java.math.BigDecimal
+import java.security.MessageDigest
 import java.time.Instant
 import java.time.format.DateTimeParseException
 import java.util.UUID
@@ -89,7 +91,12 @@ class AuditEventController(
     private val repository: GuardEventRepository,
     private val auditLog: AuditStructuredLogger,
     private val revealAuditLog: RevealAuditLog,
-    @param:Value("\${audit.store-raw-payload:false}") private val storeRawPayload: Boolean,
+    private val settingsStore: GuardSettingsStore,
+    // NFR-04: deny-by-default. X-Actor-Role alone is a forgeable header with no session/auth
+    // system backing it anywhere in this codebase (see Actor's doc comment); an unconfigured
+    // (blank) token means reveal is disabled entirely rather than falling back to that header
+    // alone, matching this product's fail-closed default (NFR-03) rather than fail-open.
+    @Value("\${security.reveal-token:}") private val revealToken: String,
 ) {
     @PostMapping("/events")
     @ResponseStatus(HttpStatus.CREATED)
@@ -123,7 +130,7 @@ class AuditEventController(
             maskDiffRef = request.maskDiffRef,
             // NFR-04: persisted only when THIS service has opted in, regardless of what the
             // gateway sent — defense in depth against a misconfigured or compromised emitter.
-            rawPayload = request.rawPayload?.takeIf { storeRawPayload },
+            rawPayload = request.rawPayload?.takeIf { settingsStore.current().storeRawOptIn },
         )
         val stored = repository.insert(record)
         auditLog.logIngested(record)
@@ -153,6 +160,11 @@ class AuditEventController(
      * GMCP-80 §3.6 (NFR-04): unmasked original payload for an event, operator-only. Every call —
      * granted or denied — writes to [RevealAuditLog]; the doc's own completion criterion
      * recommends recording a denied attempt, not just a successful reveal.
+     *
+     * Gated by two independent checks, neither of which alone is trustworthy: [Actor.ROLE_HEADER]
+     * is attribution only (who's asking, for the audit trail), while [OPERATOR_TOKEN_HEADER] is
+     * the actual access control — a server-side secret ([revealToken]) that must be configured
+     * out of band, since a client-supplied header on its own can always be forged.
      */
     @PostMapping("/events/{eventId}/reveal")
     fun reveal(
@@ -160,6 +172,7 @@ class AuditEventController(
         @RequestBody(required = false) request: RevealRequest?,
         @RequestHeader(value = Actor.ID_HEADER, required = false) actorId: String?,
         @RequestHeader(value = Actor.ROLE_HEADER, required = false) actorRole: String?,
+        @RequestHeader(value = OPERATOR_TOKEN_HEADER, required = false) operatorToken: String?,
     ): RevealResponse {
         val id = runCatching { UUID.fromString(eventId) }.getOrNull()
             ?: throw ApiException(HttpStatus.NOT_FOUND, "event_not_found", "event $eventId not found")
@@ -168,6 +181,10 @@ class AuditEventController(
         val actor = Actor.from(actorId, actorRole)
         val reason = request?.reason
 
+        if (!hasValidOperatorToken(operatorToken)) {
+            revealAuditLog.record(id, actor.id, RevealAuditAction.REVEAL_DENIED, reason)
+            throw ApiException(HttpStatus.FORBIDDEN, "reveal_unauthorized", "reveal requires a valid operator token")
+        }
         if (!actor.isOperator) {
             revealAuditLog.record(id, actor.id, RevealAuditAction.REVEAL_DENIED, reason)
             throw ApiException(HttpStatus.FORBIDDEN, "reveal_forbidden", "reveal requires the operator role")
@@ -203,6 +220,13 @@ class AuditEventController(
         return asInstant to MIN_UUID
     }
 
+    /** Constant-time comparison, and a blank [revealToken] (unconfigured) always denies —
+     *  there is no default that leaves this endpoint reachable out of the box. */
+    private fun hasValidOperatorToken(operatorToken: String?): Boolean {
+        if (revealToken.isBlank() || operatorToken.isNullOrBlank()) return false
+        return MessageDigest.isEqual(revealToken.toByteArray(), operatorToken.toByteArray())
+    }
+
     private fun toSecurityEvent(record: GuardEventRecord): SecurityEvent =
         SecurityEvent(
             id = record.eventId,
@@ -218,5 +242,6 @@ class AuditEventController(
         private val VALID_DIRECTIONS = setOf("request", "response")
         private const val MAX_RECENT_LIMIT = 100
         private val MIN_UUID = UUID(0L, 0L)
+        private const val OPERATOR_TOKEN_HEADER = "X-Operator-Token"
     }
 }
