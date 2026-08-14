@@ -42,12 +42,12 @@ guardmcp demo run <scenarioId|threatId|all> [--target guarded|vulnerable] [--see
 Computes recall/FPR/precision/p95-latency KPIs across all of `policy-packs/`, `attack-lab/datasets/`, and `attack-lab/policy-fixtures/`.
 
 ```
-guardmcp bench run [--format json|md] [--output <path>]
+guardmcp bench run [--format json|md|html] [--output <path>]
 guardmcp bench compare <baseline.json> <current.json>
 ```
 
-* `--format`: controls stdout only — `json` (default, full report) or `md` (a compact KPI table). `html` is not implemented yet — see "Scope decisions" below.
-* `--output`: where to write the report. Defaults to `reports/benchmark.json` or the `GUARDMCP_BENCHMARK_REPORT` env var. **Always writes the full JSON report regardless of `--format`** — `bench compare` needs JSON, so `--output` gets JSON even when `--format md` is set.
+* `--format`: controls stdout only — `json` (default, full report), `md` (a compact KPI table), or `html` (a single, self-contained HTML file styled with the same design tokens as the console, no external requests). `html` inlines `packages/design-tokens`'s color/spacing/radius tokens as-is, but not its typography classes' "SUIT"/"JetBrains Mono" fonts — this CLI doesn't ship those, so the report defines its own system font stack instead (it has to render correctly offline). See "Scope decisions" below for the reasoning.
+* `--output <path>`: when given, saves exactly what `--format` produced at that path (HTML for `--format html`, markdown for `md`). Omit it and no rendered file is written at all — only stdout gets it. Regardless of `--format`, the JSON report `bench compare` reads is always separately guaranteed at `reports/benchmark.json` (or the `GUARDMCP_BENCHMARK_REPORT` env var) — unless `--output` points at that exact path with `--format json`, in which case there's only the one file.
 * `bench compare` diffs two report JSON files. It fails if `current` doesn't meet its own fixed KPI thresholds (recall ≥ 90%, FPR ≤ 5%, p95 ≤ 50ms, etc.) **or** if it regressed past a tolerance against `baseline` (recall −1pt, FPR +1pt, p95 +5ms). Either condition alone is enough to fail — the baseline comparison does not replace the KPI gate.
 * Exit code: `bench run` is non-zero if the report's `passed` is false. `bench compare` is non-zero if either condition above is hit.
 
@@ -72,7 +72,7 @@ Decisions made where the implementation diverges from the design doc (including 
 
 * **No `--endpoint` on `demo`**: the design doc describes `demo` as driving real MCP traffic against the gateway, but `attack-lab/runner/runner.ts` states outright that "the gateway's HTTP surface is deliberately not involved: a scenario has to be reproducible in CI with nothing running," and names the `guardmcp` CLI (GMCP-97) as one of the two callers of `runCatalog()`. This CLI follows the contract of the code that already exists.
 * **No `--dataset`/`--policy-pack` on `bench run`**: `runBenchmark()` always evaluates the entire `policy-packs/` tree against a fixed dataset bundle and has no subsetting hook. Rather than accept flags that would be silently ignored, they are not exposed.
-* **`bench run --format html` not implemented**: whether it should share console design tokens (`packages/design-tokens`) is explicitly unresolved in the design doc's §7; building HTML output ahead of that decision would just get rebuilt.
+* **`bench run --format html` shares `packages/design-tokens`'s colors/spacing, not its fonts**: the design doc's §7 open question was resolved by GMCP-116 (splitting `packages/design-tokens` out of the console). This CLI inlines only the `:root` primitive-variable block from that package's `tokens.css`. The same file's typography classes (`.text-*`) assume the "SUIT"/"JetBrains Mono" web fonts, which this CLI neither ships nor fetches over the network, so those classes are left out entirely and the report's own CSS declares a system font stack (`ui-sans-serif, system-ui, ...` / `ui-monospace, ...`) instead.
 * **No `policy lint --strict`**: the design doc describes `--strict` as promoting warnings to errors, but the current loader (`packages/policy-engine/src/loader`) only emits two levels, `error` and `critical` — there is no separate "warning" tier. Rather than accept a flag that can never change behavior, it isn't implemented.
 * **`bench compare` regression policy (design doc §7 open question)**: chose absolute tolerances (recall/FPR ±1 percentage point, p95 +5ms) over a relative-change-rate policy, and added a re-assertion of `current`'s own fixed KPI thresholds on top — so a bad baseline can never become the new passing bar.
 

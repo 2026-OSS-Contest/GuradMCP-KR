@@ -18,6 +18,7 @@ function minimalReport(overrides: MinimalReportOverrides = {}): string {
 describe("guardmcp bench", () => {
   let dir: string;
   let output: string[];
+  let previousReportEnv: string | undefined;
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "guardmcp-bench-"));
@@ -27,17 +28,43 @@ describe("guardmcp bench", () => {
       return true;
     });
     process.exitCode = undefined;
+    // benchRun always guarantees a JSON report at this path (or an explicit
+    // --output). Point it into the temp dir so these tests never write to
+    // the repo's real reports/benchmark.json.
+    previousReportEnv = process.env.GUARDMCP_BENCHMARK_REPORT;
+    process.env.GUARDMCP_BENCHMARK_REPORT = join(dir, "default-report.json");
   });
 
   afterEach(async () => {
     vi.restoreAllMocks();
     process.exitCode = undefined;
+    if (previousReportEnv === undefined) delete process.env.GUARDMCP_BENCHMARK_REPORT;
+    else process.env.GUARDMCP_BENCHMARK_REPORT = previousReportEnv;
     await rm(dir, { recursive: true, force: true });
   });
 
-  it("bench run rejects --format html without running the benchmark (deferred per design doc §7)", async () => {
-    await expect(benchRun(["--format", "html"])).rejects.toThrow(/not implemented yet/);
+  it("bench run rejects an unsupported --format without running the benchmark", async () => {
+    await expect(benchRun(["--format", "pdf"])).rejects.toThrow(/--format must be json, md, or html/);
   });
+
+  it("bench run --format html --output saves the rendered HTML there, and still guarantees JSON for bench compare", async () => {
+    const outputPath = join(dir, "report.html");
+    await benchRun(["--format", "html", "--output", outputPath]);
+    expect(process.exitCode).toBeUndefined();
+    const html = await readFile(outputPath, "utf8");
+    expect(html).toContain("<!doctype html>");
+    expect(html).toContain("--primitive-verdict-allow");
+    expect(html).toContain("badge-pass");
+    // packages/design-tokens ships "SUIT"/"JetBrains Mono" font-family rules
+    // on its typography classes; the report must not carry those, since it
+    // has to render correctly offline without fetching those fonts.
+    expect(html).not.toMatch(/font-family:\s*"(SUIT|JetBrains Mono)"/);
+    expect(output.join("")).toBe(html);
+    // bench compare reads JSON, not the .html file, so a copy must still
+    // land at the default (env-directed) path even though --output was html.
+    const jsonAtDefault = JSON.parse(await readFile(process.env.GUARDMCP_BENCHMARK_REPORT as string, "utf8"));
+    expect(jsonAtDefault.passed).toBe(true);
+  }, 20000);
 
   it("bench run writes the report and exits clean when the shipped policies pass", async () => {
     const outputPath = join(dir, "report.json");
@@ -48,13 +75,29 @@ describe("guardmcp bench", () => {
     expect(written.metrics.recall).toBeGreaterThanOrEqual(0.9);
   }, 20000);
 
-  it("bench run --format md still writes full JSON to --output, since bench compare needs JSON", async () => {
+  it("bench run --format json --output does not also write the default JSON path a second time", async () => {
+    const outputPath = join(dir, "report.json");
+    await benchRun(["--format", "json", "--output", outputPath]);
+    expect(process.exitCode).toBeUndefined();
+    await expect(readFile(process.env.GUARDMCP_BENCHMARK_REPORT as string, "utf8")).rejects.toThrow();
+  }, 20000);
+
+  it("bench run --format md --output saves markdown there, not JSON, and still guarantees JSON for bench compare", async () => {
     const outputPath = join(dir, "report.md");
     await benchRun(["--format", "md", "--output", outputPath]);
     expect(process.exitCode).toBeUndefined();
-    expect(output.join("")).toContain("| Metric | Actual | Required | Result |");
-    const written = JSON.parse(await readFile(outputPath, "utf8"));
-    expect(written.passed).toBe(true);
+    const markdown = await readFile(outputPath, "utf8");
+    expect(markdown).toContain("| Metric | Actual | Required | Result |");
+    const jsonAtDefault = JSON.parse(await readFile(process.env.GUARDMCP_BENCHMARK_REPORT as string, "utf8"));
+    expect(jsonAtDefault.passed).toBe(true);
+  }, 20000);
+
+  it("bench run --format html without --output only prints to stdout, but still guarantees JSON at the default path", async () => {
+    await benchRun(["--format", "html"]);
+    expect(process.exitCode).toBeUndefined();
+    expect(output.join("")).toContain("<!doctype html>");
+    const jsonAtDefault = JSON.parse(await readFile(process.env.GUARDMCP_BENCHMARK_REPORT as string, "utf8"));
+    expect(jsonAtDefault.passed).toBe(true);
   }, 20000);
 
   it("bench compare passes when current matches baseline", async () => {
