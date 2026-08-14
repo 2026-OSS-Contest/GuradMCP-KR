@@ -248,7 +248,13 @@ export interface SessionsResponse {
 
 export type ApiTimelineNodeType = "USER_INPUT" | "AGENT_STEP" | "TOOL_CALL" | "VERDICT" | "RESULT";
 export type ApiToolCallDirection = "req" | "res";
-export type ApiChainStatus = "valid" | "broken";
+/**
+ * `"unknown"` means the session has no stored hash to verify against, so neither
+ * "verified" nor "failed" can be claimed — sessions projected from ingested audit
+ * events report it until GMCP-83 persists the chain. Treating it as verified is the
+ * fabricated-badge failure `toEventDetailFromLookup` already guards against.
+ */
+export type ApiChainStatus = "valid" | "broken" | "unknown";
 
 export interface ApiSpan {
   start: number;

@@ -1,5 +1,6 @@
 package kr.guardmcp.controlplane.domain
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
@@ -72,7 +73,7 @@ class LiveReplaySourceKotest : StringSpec({
         nodes[0].argsDigest shouldBe "324de04ab4c80caf"
     }
 
-    "the hash chain over projected nodes validates" {
+    "a projected chain is reported as unknown, never as verified" {
         val source = LiveReplaySource(
             FakeRepository(
                 listOf(
@@ -82,7 +83,10 @@ class LiveReplaySourceKotest : StringSpec({
             ),
         )
         val sessionId = LiveReplaySource.sessionUuid("s-demo")
-        source.chainResult(sessionId).shouldNotBeNull().status shouldBe ChainStatus.VALID
+        // Nothing stored a hash for these records, so there is nothing to verify against.
+        // Recomputing the hashes this projection just derived would compare them to
+        // themselves and answer VALID for any content at all.
+        source.chainResult(sessionId).shouldNotBeNull().status shouldBe ChainStatus.UNKNOWN
         source.eventCount(sessionId) shouldBe 2
     }
 
@@ -122,6 +126,39 @@ class LiveReplaySourceKotest : StringSpec({
         detections[0].subtype shouldBe "GITHUB_TOKEN"
         detections[0].span shouldBe Span(4, 44)
         detections[0].maskedAs shouldBe "[GITHUB_TOKEN]"
+    }
+
+    "a maskedAs that is not a mask tag is dropped rather than rendered" {
+        // NFR-04. The ingest endpoint stores `detections` as raw jsonb, so the only thing
+        // standing between a misconfigured emitter and raw text on the audit screen is this.
+        val source = LiveReplaySource(
+            FakeRepository(
+                listOf(
+                    record(
+                        detections = listOf(
+                            mapOf(
+                                "type" to "PII", "subtype" to "RRN_LIKE",
+                                "span" to mapOf("start" to 0, "end" to 14),
+                                "confidence" to 0.9, "maskedAs" to "881124-2300149",
+                            ),
+                            mapOf(
+                                "type" to "PII", "subtype" to "PHONE",
+                                "span" to mapOf("start" to 20, "end" to 33),
+                                "confidence" to 0.9, "maskedAs" to "[PHONE]",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val detections = source.timeline(LiveReplaySource.sessionUuid("s-demo"))
+            .shouldNotBeNull()[0].detail.shouldNotBeNull().detections
+        detections.map { it.maskedAs } shouldContainExactly listOf("", "[PHONE]")
+    }
+
+    "an unrecognized stored verdict fails loudly instead of reading as allow" {
+        val source = LiveReplaySource(FakeRepository(listOf(record(verdict = "quarantine"))))
+        shouldThrow<IllegalStateException> { source.timeline(LiveReplaySource.sessionUuid("s-demo")) }
     }
 
     "the session id is derived deterministically from the gateway's opaque id" {

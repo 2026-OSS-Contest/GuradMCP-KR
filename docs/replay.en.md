@@ -81,7 +81,19 @@ The gateway sometimes puts `normalizedPath` (which path matched `path_regex`) on
 
 ## The hash chain
 
-A session's VERDICT nodes bind their own `hash` to the previous verdict's `hash`. Reads **recompute** the chain and compare it against the stored value, so a single altered event surfaces as `chainStatus: "broken"` with a `brokenAt`.
+A session's VERDICT nodes bind their own `hash` to the previous verdict's `hash`. `chainStatus` has three values.
+
+| Value | Meaning |
+| --- | --- |
+| `valid` | The stored hash and the recomputed one agree |
+| `broken` | They disagree; `brokenAt` names the first event that failed |
+| `unknown` | **No stored hash to check against — no verification is claimed** |
+
+**Projected sessions report `unknown`.** A verification needs a hash written when the event was recorded, and `guard_event.hash`/`prev_hash` are schema-only — always null until GMCP-83 fills them in. Deriving a hash at read time and comparing it to a value derived in the same breath proves only that the function is deterministic; it would answer `valid` over a tampered row just as readily. So it does not do that.
+
+The console omits the chain pill entirely when the status is `unknown`. A green "verified" badge on a session nothing has verified is worse than showing nothing — the rule `replay-adapter.ts` already applied to deep-linked event lookups.
+
+Seeded sessions do report `valid` and `broken`. Their hashes are built at startup and held on the nodes, and one fixture stores a **deliberately wrong** hash, so the mismatch is genuinely detected.
 
 Seeds and projections compute it with the **same code** (`ReplayChain`). Duplicating it lets the two drift, and the first symptom of that drift is **reporting a sound chain as BROKEN**.
 

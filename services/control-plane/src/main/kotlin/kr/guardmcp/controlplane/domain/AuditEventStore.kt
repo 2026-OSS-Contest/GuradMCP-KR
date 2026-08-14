@@ -80,9 +80,13 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
         jdbcTemplate.query(SELECT_SQL, rowMapper, eventId).firstOrNull()
 
     /**
-     * Session ids present in the log, newest activity first (GMCP-114). Replay lists
-     * sessions before it knows which one a reader wants, so this stays a projection
-     * over ids rather than loading every event.
+     * Session ids present in the log (GMCP-114). Replay lists sessions before it knows
+     * which one a reader wants, so this stays a projection over ids rather than loading
+     * every event.
+     *
+     * Ordered by most recent activity, but that is only a deterministic base: sessions
+     * are re-sorted by `startedAt` once seeded and projected sessions are merged, so
+     * callers must not treat this order as the one the API answers with.
      */
     override fun findSessionIds(): List<String> =
         // session_id is NOT NULL in the schema, but queryForList types the column as

@@ -5,6 +5,7 @@ import kr.guardmcp.controlplane.domain.LiveReplaySource
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.springframework.boot.test.context.SpringBootTest
 import java.time.Instant
@@ -87,7 +88,8 @@ class ReplayLiveEventsApiTest : ApiTestSupport() {
 
         val uuid = LiveReplaySource.sessionUuid(sessionId)
         val timeline = parseMap(get("/api/v1/sessions/$uuid/timeline").body())
-        assertEquals("valid", timeline["chainStatus"])
+        // Nothing stored a hash for these events, so no verification is claimed either way.
+        assertEquals("unknown", timeline["chainStatus"])
 
         @Suppress("UNCHECKED_CAST")
         val nodes = timeline["nodes"] as List<Map<String, Any?>>
@@ -130,7 +132,8 @@ class ReplayLiveEventsApiTest : ApiTestSupport() {
 
         val uuid = LiveReplaySource.sessionUuid(sessionId)
         val timeline = parseMap(get("/api/v1/sessions/$uuid/timeline").body())
-        assertEquals("valid", timeline["chainStatus"])
+        // Nothing stored a hash for these events, so no verification is claimed either way.
+        assertEquals("unknown", timeline["chainStatus"])
         @Suppress("UNCHECKED_CAST")
         val nodes = timeline["nodes"] as List<Map<String, Any?>>
         assertEquals(listOf("warn", "block"), nodes.map { it["verdict"] })
@@ -152,6 +155,29 @@ class ReplayLiveEventsApiTest : ApiTestSupport() {
         val labels = (sessions["items"] as List<Map<String, Any?>>).map { it["sessionId"] }
         assertTrue(labels.contains(DemoSeed.SESSION_BROKEN_CHAIN_ID.toString()), "seeded session disappeared")
         assertTrue(labels.contains(LiveReplaySource.sessionUuid(sessionId).toString()), "projected session missing")
+    }
+
+    /**
+     * The reason projected sessions report `unknown` rather than `valid`. Two events with
+     * different content produce different hashes, and a recompute-then-self-compare check
+     * calls both chains VALID — so a VALID here would say nothing about whether the rows
+     * are the ones the gateway wrote. Until GMCP-83 stores a hash to check against, no
+     * ingested content may produce a verification claim.
+     */
+    @Test
+    fun `no ingested content can make a projected session claim a verified chain`() {
+        val untampered = "s-live-${UUID.randomUUID()}"
+        ingest(untampered, verdict = "block", riskScore = 38)
+
+        val altered = "s-live-${UUID.randomUUID()}"
+        ingest(altered, verdict = "allow", riskScore = 3, policyIds = emptyList())
+
+        for (sessionId in listOf(untampered, altered)) {
+            val uuid = LiveReplaySource.sessionUuid(sessionId)
+            val timeline = parseMap(get("/api/v1/sessions/$uuid/timeline").body())
+            assertEquals("unknown", timeline["chainStatus"], "projected session $sessionId claimed a chain verdict")
+            assertNull(timeline["brokenAt"])
+        }
     }
 
     @Test

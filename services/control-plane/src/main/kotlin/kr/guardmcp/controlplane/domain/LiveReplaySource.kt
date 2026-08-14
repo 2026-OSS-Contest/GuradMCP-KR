@@ -68,7 +68,13 @@ class LiveReplaySource(private val repository: AuditEventQueries) {
             endedAt = records.last().ts,
             isLive = false,
         )
-        return Projection(session, nodes, ReplayChain.validate(nodes), sessionId)
+        // Deliberately not ReplayChain.validate(nodes). The hashes on these nodes were just
+        // derived from the records a few lines above, so validating them would compare a
+        // value against itself and answer VALID every time — including for a tampered
+        // `guard_event` row, which would simply produce a different self-consistent chain.
+        // The audit table's hash/prev_hash columns are schema-only until GMCP-83 writes
+        // them; until there is a stored hash to check against, this reports UNKNOWN.
+        return Projection(session, nodes, ChainResult(ChainStatus.UNKNOWN, null), sessionId)
     }
 
     private fun toVerdictNode(record: GuardEventRecord, chain: ChainBuilder): TimelineNode {
@@ -95,8 +101,15 @@ class LiveReplaySource(private val repository: AuditEventQueries) {
      * already documents (see [Verdict]) — because the reader needs to know the call
      * was altered, and Replay has no fifth badge to say so.
      */
-    private fun toVerdict(wire: String): Verdict =
-        Verdict.fromWire(wire) ?: if (wire == "mask_then_allow") Verdict.WARN else Verdict.ALLOW
+    private fun toVerdict(wire: String): Verdict = when (wire) {
+        "mask_then_allow" -> Verdict.WARN
+        // No catch-all. The ingest endpoint rejects an unknown verdict with 400, so a value
+        // that reaches here is a stored row this build cannot interpret — and on an audit
+        // screen the cost of guessing is asymmetric: falling back to ALLOW would render an
+        // uninterpretable decision as the most reassuring one on offer.
+        else -> Verdict.fromWire(wire)
+            ?: error("guard_event $wire is not a verdict this build recognizes")
+    }
 
     private fun summaryOf(verdict: Verdict, toolName: String): String = when (verdict) {
         Verdict.BLOCK -> "차단 · $toolName"
@@ -121,8 +134,13 @@ class LiveReplaySource(private val repository: AuditEventQueries) {
             subtype = subtype,
             span = Span(start, end),
             confidence = (raw["confidence"] as? Number)?.toDouble() ?: 0.0,
-            // NFR-04: the gateway only ever sends the mask tag here, never raw text.
-            maskedAs = raw["maskedAs"] as? String ?: "",
+            // NFR-04. The gateway is supposed to send only a mask tag here, but the ingest
+            // endpoint stores `detections` as raw jsonb without inspecting it, so that is an
+            // assumption about the emitter rather than a boundary — and this field is the one
+            // part of a detection that renders as text on the Replay screen. Anything that is
+            // not a mask tag is dropped instead of forwarded: a misconfigured or compromised
+            // emitter should not be able to paint raw sensitive text onto the audit view.
+            maskedAs = (raw["maskedAs"] as? String)?.takeIf(MASK_TAG::matches) ?: "",
         )
     }
 
@@ -147,6 +165,12 @@ class LiveReplaySource(private val repository: AuditEventQueries) {
          */
         fun sessionUuid(sessionId: String): UUID =
             UUID.nameUUIDFromBytes("guardmcp-session:$sessionId".toByteArray(Charsets.UTF_8))
+
+        /**
+         * The mask tag shape the detectors emit (`[RRN]`, `[GITHUB_TOKEN]`). Used to tell a
+         * tag apart from whatever else a `maskedAs` field might arrive carrying.
+         */
+        private val MASK_TAG = Regex("""\[[A-Z][A-Z0-9_]*]""")
 
         fun verdictCounts(nodes: List<TimelineNode>): Map<String, Int> {
             val counts = nodes.mapNotNull { it.verdict }.groupingBy { it.wire }.eachCount()
