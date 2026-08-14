@@ -1,0 +1,10 @@
+{
+  "name": "@guardmcp/design-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Figma-generated design primitives shared by the console, docs and reports (기획서 10.7).",
+  "exports": {
+    "./tokens.css": "./tokens.css"
+  },
+  "files": ["tokens.css"]
+}
