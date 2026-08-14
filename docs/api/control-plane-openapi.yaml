@@ -131,6 +131,46 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/events/recent:
+    get:
+      tags: [sessions]
+      summary: Recent security events (GMCP-80 §3.3)
+      description: >-
+        Backs the SCR-101 "최근 보안 이벤트" widget and doubles as the SSE
+        reconnect gap-fill (4.2 "복구 시 끊긴 구간은 폴링으로 보충").
+        `since` accepts either an eventId (resume strictly after it) or an
+        ISO-8601 instant (resume from that moment onward); results are
+        newest-first. Backed by the real guard_event table (GMCP-24), not the
+        Replay demo fixtures.
+      operationId: listRecentEvents
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: sessionId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: since
+          in: query
+          required: false
+          description: An eventId (uuid) or an ISO-8601 instant
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Recent events, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecentEventsResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /api/v1/events/{eventId}:
     get:
       tags: [sessions]
@@ -1126,3 +1166,34 @@ components:
           type: string
         hash:
           type: string
+    SecurityEvent:
+      type: object
+      required: [id, sessionId, verdict, tool, at]
+      description: >-
+        apps/console/lib/api/types.ts's SecurityEvent — the SCR-101 widget's
+        lean shape, not the full GuardEvent. mask_then_allow collapses into
+        warn, matching Verdict's existing 4-value vocabulary.
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        tool:
+          type: string
+        target:
+          description: No reliable source yet (only argsDigest is stored); always omitted.
+          type: string
+        at:
+          type: string
+          format: date-time
+    RecentEventsResponse:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecurityEvent"

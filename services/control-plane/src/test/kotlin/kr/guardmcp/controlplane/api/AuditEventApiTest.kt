@@ -117,16 +117,85 @@ class AuditEventApiTest : ApiTestSupport() {
         assertNotNull(repository.findById(eventId))
     }
 
+    @Test
+    fun `recent events without since returns the newest N, most recent first`() {
+        val sessionId = UUID.randomUUID().toString()
+        val base = Instant.parse("2026-03-01T00:00:00Z")
+        val ids = (1..3).map { UUID.randomUUID() }
+        ids.forEachIndexed { i, id ->
+            send("POST", "/api/v1/events", ingestPayload(id, sessionId = sessionId, ts = base.plusSeconds(i.toLong())))
+        }
+
+        val response = get("/api/v1/events/recent?sessionId=$sessionId&limit=2")
+
+        assertEquals(200, response.statusCode())
+        val events = (parseMap(response.body())["events"] as List<*>).map { it as Map<*, *> }
+        assertEquals(2, events.size)
+        assertEquals(listOf(ids[2].toString(), ids[1].toString()), events.map { it["id"] })
+    }
+
+    @Test
+    fun `since as an eventId returns only strictly newer events, gap-fill style`() {
+        val sessionId = UUID.randomUUID().toString()
+        val base = Instant.parse("2026-03-02T00:00:00Z")
+        val ids = (1..4).map { UUID.randomUUID() }
+        ids.forEachIndexed { i, id ->
+            send("POST", "/api/v1/events", ingestPayload(id, sessionId = sessionId, ts = base.plusSeconds(i.toLong())))
+        }
+
+        val response = get("/api/v1/events/recent?sessionId=$sessionId&since=${ids[1]}")
+
+        val events = (parseMap(response.body())["events"] as List<*>).map { it as Map<*, *> }
+        assertEquals(listOf(ids[3].toString(), ids[2].toString()), events.map { it["id"] })
+    }
+
+    @Test
+    fun `since as an ISO-8601 instant resumes from that moment, inclusive`() {
+        val sessionId = UUID.randomUUID().toString()
+        val base = Instant.parse("2026-03-03T00:00:00Z")
+        val early = UUID.randomUUID()
+        val atCutoff = UUID.randomUUID()
+        val late = UUID.randomUUID()
+        send("POST", "/api/v1/events", ingestPayload(early, sessionId = sessionId, ts = base))
+        send("POST", "/api/v1/events", ingestPayload(atCutoff, sessionId = sessionId, ts = base.plusSeconds(1)))
+        send("POST", "/api/v1/events", ingestPayload(late, sessionId = sessionId, ts = base.plusSeconds(2)))
+
+        val response = get("/api/v1/events/recent?sessionId=$sessionId&since=${base.plusSeconds(1)}")
+
+        val events = (parseMap(response.body())["events"] as List<*>).map { it as Map<*, *> }
+        assertEquals(listOf(late.toString(), atCutoff.toString()), events.map { it["id"] })
+    }
+
+    @Test
+    fun `mask_then_allow collapses into the console's warn verdict`() {
+        val sessionId = UUID.randomUUID().toString()
+        val eventId = UUID.randomUUID()
+        send("POST", "/api/v1/events", ingestPayload(eventId, sessionId = sessionId, verdict = "mask_then_allow"))
+
+        val response = get("/api/v1/events/recent?sessionId=$sessionId")
+
+        val event = (parseMap(response.body())["events"] as List<*>).map { it as Map<*, *> }.single()
+        assertEquals("warn", event["verdict"])
+    }
+
+    @Test
+    fun `since pointing at an unknown eventId is a 400`() {
+        val response = get("/api/v1/events/recent?since=${UUID.randomUUID()}")
+        assertEquals(400, response.statusCode())
+        assertEquals("since_event_not_found", parseMap(response.body())["code"])
+    }
+
     private fun ingestPayload(
         eventId: UUID,
         sessionId: String = UUID.randomUUID().toString(),
         verdict: String = "block",
         direction: String = "response",
         rawPayload: String? = null,
+        ts: Instant = Instant.now(),
     ) = mapOf(
         "eventId" to eventId.toString(),
         "sessionId" to sessionId,
-        "ts" to Instant.now().toString(),
+        "ts" to ts.toString(),
         "direction" to direction,
         "toolName" to "read_file",
         "argsDigest" to "sha256:abc123",

@@ -1,18 +1,22 @@
 package kr.guardmcp.controlplane.api
 
+import com.fasterxml.jackson.annotation.JsonInclude
 import kr.guardmcp.controlplane.domain.AuditStructuredLogger
 import kr.guardmcp.controlplane.domain.GuardAction
 import kr.guardmcp.controlplane.domain.GuardEventRecord
 import kr.guardmcp.controlplane.domain.GuardEventRepository
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import java.math.BigDecimal
 import java.time.Instant
+import java.time.format.DateTimeParseException
 import java.util.UUID
 
 /**
@@ -37,6 +41,23 @@ data class GuardEventIngestRequest(
 )
 
 data class GuardEventIngestResponse(val eventId: UUID, val stored: Boolean)
+
+/**
+ * `apps/console/lib/api/types.ts`'s `SecurityEvent` — the SCR-101 "최근 보안 이벤트" widget's lean
+ * shape, not the full `GuardEvent` (policies/detections stay in the Replay timeline detail,
+ * `GET /events/{id}`, which already serves them). `target` has no reliable source yet (only an
+ * `argsDigest` is stored, never raw arguments) so it is always omitted rather than sent null.
+ */
+data class SecurityEvent(
+    val id: UUID,
+    val sessionId: String,
+    val verdict: String,
+    val tool: String,
+    @get:JsonInclude(JsonInclude.Include.NON_NULL) val target: String? = null,
+    val at: Instant,
+)
+
+data class RecentEventsResponse(val events: List<SecurityEvent>)
 
 /** Pipeline stage ⑧ (Audit Logger) ingest endpoint. Fed by the gateway's Event Emitter (§5). */
 @RestController
@@ -85,7 +106,57 @@ class AuditEventController(
         return GuardEventIngestResponse(record.eventId, stored)
     }
 
+    /**
+     * GMCP-80 §3.3: the SCR-101 "최근 보안 이벤트" widget, and the gap-fill an SSE client polls
+     * once it reconnects (4.2: "복구 시 끊긴 구간은 폴링으로 보충"). `since` accepts either an
+     * eventId (resume strictly after that event) or an ISO-8601 instant (resume from that
+     * moment onward) — see [GuardEventRepository.findRecent] for why the boundary comparison
+     * needs both `ts` and `eventId`.
+     */
+    @GetMapping("/events/recent")
+    fun recent(
+        @RequestParam(required = false, defaultValue = "20") limit: Int,
+        @RequestParam(required = false) sessionId: String?,
+        @RequestParam(required = false) since: String?,
+    ): RecentEventsResponse {
+        val clampedLimit = limit.coerceIn(1, MAX_RECENT_LIMIT)
+        val (sinceTs, sinceEventId) = resolveSince(since)
+        val records = repository.findRecent(clampedLimit, sessionId?.takeIf(String::isNotBlank), sinceTs, sinceEventId)
+        return RecentEventsResponse(records.map(::toSecurityEvent))
+    }
+
+    private fun resolveSince(raw: String?): Pair<Instant?, UUID?> {
+        if (raw == null) return null to null
+        val asEventId = runCatching { UUID.fromString(raw) }.getOrNull()
+        if (asEventId != null) {
+            val anchor = repository.findById(asEventId)
+                ?: throw ApiException(HttpStatus.BAD_REQUEST, "since_event_not_found", "since event $raw not found")
+            return anchor.ts to anchor.eventId
+        }
+        val asInstant = try {
+            Instant.parse(raw)
+        } catch (e: DateTimeParseException) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "invalid_since", "since must be an eventId or an ISO-8601 instant")
+        }
+        // No specific event to exclude at this instant, so anchor the tie-break at the lowest
+        // possible UUID: every real event at exactly `asInstant` still sorts after it and is included.
+        return asInstant to MIN_UUID
+    }
+
+    private fun toSecurityEvent(record: GuardEventRecord): SecurityEvent =
+        SecurityEvent(
+            id = record.eventId,
+            sessionId = record.sessionId,
+            // The console's Verdict is 4-valued; mask_then_allow collapses into warn, matching
+            // ReplayModels.Verdict's existing GuardAction -> Verdict convention.
+            verdict = if (record.verdict == "mask_then_allow") "warn" else record.verdict,
+            tool = record.toolName,
+            at = record.ts,
+        )
+
     companion object {
         private val VALID_DIRECTIONS = setOf("request", "response")
+        private const val MAX_RECENT_LIMIT = 100
+        private val MIN_UUID = UUID(0L, 0L)
     }
 }
