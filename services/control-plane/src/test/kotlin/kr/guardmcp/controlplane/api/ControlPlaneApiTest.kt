@@ -430,4 +430,23 @@ class ControlPlaneApiTest : ApiTestSupport() {
         assertEquals(404, rejected.statusCode())
         assertEquals("scenario_not_found", parseMap(rejected.body())["code"])
     }
+
+    @Test
+    fun `attack lab scenarios list all eight threats, not implemented ones as unavailable`() {
+        val response = get("/api/v1/attacklab/scenarios")
+
+        assertEquals(200, response.statusCode())
+        val scenarios = (parseMap(response.body())["scenarios"] as List<*>).map { it as Map<*, *> }
+        assertEquals((1..8).map { "T-%02d".format(it) }.toSet(), scenarios.map { it["id"] }.toSet())
+
+        val t06 = scenarios.single { it["id"] == "T-06" }
+        assertEquals(false, t06["available"])
+        assertEquals(emptyList<Any>(), t06["modes"])
+
+        val t01 = scenarios.single { it["id"] == "T-01" }
+        assertEquals(true, t01["available"])
+        assertEquals(listOf("vulnerable", "guarded"), t01["modes"])
+        assertNotNull(t01["title"])
+        assertNotNull(t01["description"])
+    }
 }

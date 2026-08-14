@@ -407,6 +407,25 @@ paths:
                 $ref: "#/components/schemas/DetectionPreview"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /api/v1/attacklab/scenarios:
+    get:
+      tags: [attack-lab]
+      summary: Attack Lab scenario catalog (GMCP-80 §3.4)
+      description: >-
+        Derived from attack-lab/scenarios/catalog.json (the same file the
+        GMCP-55 runner executes against) at build time, not hand-maintained —
+        a threat is available only once every one of its attack-kind
+        scenarios has automation.mode=probe. Scoped to PROJECT.md 3.2's
+        T-01..T-08; the catalog has since grown a T-09 this endpoint does
+        not cover.
+      operationId: listAttackLabScenarios
+      responses:
+        "200":
+          description: All eight threats, available/modes reflecting real automation state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttackScenariosResponse"
   /api/v1/attacklab/run/{scenarioId}:
     post:
       tags: [attack-lab]
@@ -1197,3 +1216,30 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SecurityEvent"
+    AttackScenarioSummary:
+      type: object
+      required: [id, title, description, available, modes]
+      properties:
+        id:
+          type: string
+          description: T-01..T-08
+        title:
+          type: string
+        description:
+          type: string
+        available:
+          type: boolean
+          description: apps/console's AttackScenario.available — not runnable yet lists as 준비 중.
+        modes:
+          type: array
+          items:
+            type: string
+            enum: [vulnerable, guarded]
+    AttackScenariosResponse:
+      type: object
+      required: [scenarios]
+      properties:
+        scenarios:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttackScenarioSummary"
