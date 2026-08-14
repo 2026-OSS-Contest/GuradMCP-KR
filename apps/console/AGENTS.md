@@ -12,11 +12,18 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Design tokens
 
-- `app/tokens.css` is **generated from Figma — never edit it by hand.** Regenerate with the
+- The primitives are **generated from Figma — never edit them by hand.** Regenerate with the
   Figma plugin plus `npm run figma:bridge` (see `tools/figma-tokens/`).
 - `app/theme.css` maps those primitives onto Tailwind v4 `@theme` utilities and shadcn/ui
   semantic variables. Change the mapping there, not the generated primitives.
-- Tokens live **inside the app** (`app/`), not in a separate workspace package.
+- Tokens live in the **`@guardmcp/design-tokens` workspace package**, not in the app
+  (기획서 10.7 — docs, reports and the console share one palette). `app/globals.css` imports
+  `@guardmcp/design-tokens/tokens.css` before `theme.css`.
+  Two consequences worth knowing: Tailwind never resolves the primitives — `@theme` stores
+  `var(--primitive-…)` as the value and the browser resolves the chain, which is why the package
+  can live outside the app at all. And the Dockerfile has to copy the package's **source**, not
+  just its `package.json`: `npm ci` succeeds either way and leaves a dangling symlink that only
+  fails later, during the build.
 - Style with token utilities (`bg-grayscale-900`, `text-verdict-block`) instead of hardcoded
   colors. To reference a raw primitive use the Tailwind v4 form: `bg-(--primitive-...)`.
 - **The radius names do not line up.** `theme.css` derives Tailwind's radius scale from shadcn's

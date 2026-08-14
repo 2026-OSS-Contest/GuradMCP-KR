@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "./tokens.css";
+@import "@guardmcp/design-tokens/tokens.css";
 @import "./theme.css";
 @import "./fonts.css";
 
