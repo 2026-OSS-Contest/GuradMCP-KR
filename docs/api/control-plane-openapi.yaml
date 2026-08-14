@@ -196,6 +196,63 @@ paths:
                 $ref: "#/components/schemas/EventLookupResponse"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/events/{eventId}/reveal:
+    post:
+      tags: [sessions]
+      summary: Reveal the unmasked original payload (NFR-04, GMCP-80 §3.6)
+      description: >-
+        Operator-only. Every call — granted or denied — writes an append-only
+        RevealAuditLog entry. 409 when this event's raw payload was never
+        stored (audit.store-raw-payload / settings.storeRawOptIn was off at
+        ingest time), not 404. Does not match apps/console/lib/api/types.ts's
+        RevealContent (masked-line reconstruction is out of scope here); this
+        is the spec's own response shape.
+      operationId: revealEvent
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-Actor-Id
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: X-Actor-Role
+          in: header
+          required: false
+          description: Must be "operator" or the call is rejected with 403.
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RevealRequest"
+      responses:
+        "200":
+          description: Unmasked payload plus the audit log entry it created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevealResponse"
+        "403":
+          description: Actor is not an operator (the attempt is still logged as REVEAL_DENIED)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: No raw payload was stored for this event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/policy-packs:
     get:
       tags: [policies]
@@ -1243,3 +1300,26 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AttackScenarioSummary"
+    RevealRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Optional; recorded in the audit log entry regardless.
+    RevealResponse:
+      type: object
+      required: [eventId, originalPayload, revealedBy, revealedAt, auditLogId]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        originalPayload:
+          type: string
+        revealedBy:
+          type: string
+        revealedAt:
+          type: string
+          format: date-time
+        auditLogId:
+          type: string
+          format: uuid

@@ -5,11 +5,15 @@ import kr.guardmcp.controlplane.domain.AuditStructuredLogger
 import kr.guardmcp.controlplane.domain.GuardAction
 import kr.guardmcp.controlplane.domain.GuardEventRecord
 import kr.guardmcp.controlplane.domain.GuardEventRepository
+import kr.guardmcp.controlplane.domain.RevealAuditAction
+import kr.guardmcp.controlplane.domain.RevealAuditLog
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
@@ -59,12 +63,32 @@ data class SecurityEvent(
 
 data class RecentEventsResponse(val events: List<SecurityEvent>)
 
+data class RevealRequest(val reason: String? = null)
+
+/**
+ * GMCP-80 §3.6. Deliberately does **not** match `apps/console/lib/api/types.ts`'s
+ * `RevealContent{source,caseId,raw,masked:ContentLine[]}` — that shape needs structured
+ * masked-line reconstruction that exists nowhere in this codebase yet (the same gap
+ * `ApiVerdictDetail.maskDiffRef`'s comment calls "out of scope: GET /events/{id}/mask-diff").
+ * This is the spec's own response shape, implementable today straight from
+ * [GuardEventRecord.rawPayload]; wiring the console's richer reveal modal to it is follow-up
+ * work once mask-line reconstruction exists.
+ */
+data class RevealResponse(
+    val eventId: UUID,
+    val originalPayload: String,
+    val revealedBy: String,
+    val revealedAt: Instant,
+    val auditLogId: UUID,
+)
+
 /** Pipeline stage ⑧ (Audit Logger) ingest endpoint. Fed by the gateway's Event Emitter (§5). */
 @RestController
 @RequestMapping("/api/v1")
 class AuditEventController(
     private val repository: GuardEventRepository,
     private val auditLog: AuditStructuredLogger,
+    private val revealAuditLog: RevealAuditLog,
     @param:Value("\${audit.store-raw-payload:false}") private val storeRawPayload: Boolean,
 ) {
     @PostMapping("/events")
@@ -123,6 +147,42 @@ class AuditEventController(
         val (sinceTs, sinceEventId) = resolveSince(since)
         val records = repository.findRecent(clampedLimit, sessionId?.takeIf(String::isNotBlank), sinceTs, sinceEventId)
         return RecentEventsResponse(records.map(::toSecurityEvent))
+    }
+
+    /**
+     * GMCP-80 §3.6 (NFR-04): unmasked original payload for an event, operator-only. Every call —
+     * granted or denied — writes to [RevealAuditLog]; the doc's own completion criterion
+     * recommends recording a denied attempt, not just a successful reveal.
+     */
+    @PostMapping("/events/{eventId}/reveal")
+    fun reveal(
+        @PathVariable eventId: String,
+        @RequestBody(required = false) request: RevealRequest?,
+        @RequestHeader(value = Actor.ID_HEADER, required = false) actorId: String?,
+        @RequestHeader(value = Actor.ROLE_HEADER, required = false) actorRole: String?,
+    ): RevealResponse {
+        val id = runCatching { UUID.fromString(eventId) }.getOrNull()
+            ?: throw ApiException(HttpStatus.NOT_FOUND, "event_not_found", "event $eventId not found")
+        val record = repository.findById(id)
+            ?: throw ApiException(HttpStatus.NOT_FOUND, "event_not_found", "event $eventId not found")
+        val actor = Actor.from(actorId, actorRole)
+        val reason = request?.reason
+
+        if (!actor.isOperator) {
+            revealAuditLog.record(id, actor.id, RevealAuditAction.REVEAL_DENIED, reason)
+            throw ApiException(HttpStatus.FORBIDDEN, "reveal_forbidden", "reveal requires the operator role")
+        }
+        val rawPayload = record.rawPayload
+            ?: throw ApiException(HttpStatus.CONFLICT, "raw_payload_not_stored", "original payload was not stored for event $eventId")
+
+        val entry = revealAuditLog.record(id, actor.id, RevealAuditAction.REVEAL, reason)
+        return RevealResponse(
+            eventId = id,
+            originalPayload = rawPayload,
+            revealedBy = actor.id,
+            revealedAt = entry.timestamp,
+            auditLogId = entry.auditLogId,
+        )
     }
 
     private fun resolveSince(raw: String?): Pair<Instant?, UUID?> {

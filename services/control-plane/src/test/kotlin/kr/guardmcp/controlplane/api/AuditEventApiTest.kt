@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import java.math.BigDecimal
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.time.Instant
 import java.util.UUID
 
@@ -184,6 +186,58 @@ class AuditEventApiTest : ApiTestSupport() {
         assertEquals(400, response.statusCode())
         assertEquals("since_event_not_found", parseMap(response.body())["code"])
     }
+
+    @Test
+    fun `reveal without the operator role is forbidden`() {
+        val eventId = UUID.randomUUID()
+        send("POST", "/api/v1/events", ingestPayload(eventId))
+
+        val response = client.send(
+            HttpRequest.newBuilder(uri("/api/v1/events/$eventId/reveal"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+
+        assertEquals(403, response.statusCode())
+        assertEquals("reveal_forbidden", parseMap(response.body())["code"])
+    }
+
+    @Test
+    fun `reveal by an operator when no raw payload was stored is a 409, not a 404`() {
+        // This context's audit.store-raw-payload defaults to false, so rawPayload is never
+        // persisted regardless of what the caller sends (NFR-04) — see the sibling opt-in test.
+        val eventId = UUID.randomUUID()
+        send("POST", "/api/v1/events", ingestPayload(eventId, rawPayload = "010-1234-5678 unmasked"))
+
+        val response = revealAsOperator(eventId)
+
+        assertEquals(409, response.statusCode())
+        assertEquals("raw_payload_not_stored", parseMap(response.body())["code"])
+    }
+
+    @Test
+    fun `reveal of an unknown or malformed eventId is a 404`() {
+        val unknown = revealAsOperator(UUID.randomUUID())
+        assertEquals(404, unknown.statusCode())
+        assertEquals("event_not_found", parseMap(unknown.body())["code"])
+
+        val malformed = revealAsOperator(null, rawPath = "/api/v1/events/not-a-uuid/reveal")
+        assertEquals(404, malformed.statusCode())
+        assertEquals("event_not_found", parseMap(malformed.body())["code"])
+    }
+
+    private fun revealAsOperator(eventId: UUID?, rawPath: String? = null): HttpResponse<String> =
+        client.send(
+            HttpRequest.newBuilder(uri(rawPath ?: "/api/v1/events/$eventId/reveal"))
+                .header("Content-Type", "application/json")
+                .header(Actor.ID_HEADER, "operator@company.co.kr")
+                .header(Actor.ROLE_HEADER, "operator")
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
 
     private fun ingestPayload(
         eventId: UUID,
