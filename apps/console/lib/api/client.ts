@@ -152,10 +152,17 @@ export const putServerTrust = (
     signal,
   );
 
-/** SCR-101 snapshot diff popover (FR-GW-03 §6.2). Unacknowledged diffs, most recent first. */
-export const getToolDiffs = (serverId: string, toolName: string, signal?: AbortSignal) =>
+/** SCR-101 snapshot diff popover (FR-GW-03 §6.2). Unacknowledged diffs, most recent first,
+ *  unless `includeAcknowledged` — the `drift_acknowledged` state has no unacknowledged rows
+ *  left to show, so the popover needs the full history to explain what was dismissed. */
+export const getToolDiffs = (
+  serverId: string,
+  toolName: string,
+  signal?: AbortSignal,
+  includeAcknowledged = false,
+) =>
   get<ToolDiffsResponse>(
-    `/servers/${encodeURIComponent(serverId)}/tools/${encodeURIComponent(toolName)}/diffs`,
+    `/servers/${encodeURIComponent(serverId)}/tools/${encodeURIComponent(toolName)}/diffs${includeAcknowledged ? "?includeAcknowledged=true" : ""}`,
     signal,
   );
 
@@ -168,6 +175,21 @@ export const acknowledgeToolDiff = (
 ) =>
   postJson<ToolDefinitionDiff>(
     `/servers/${encodeURIComponent(serverId)}/tools/${encodeURIComponent(toolName)}/diffs/${encodeURIComponent(diffId)}/acknowledge`,
+    {},
+    signal,
+  );
+
+/** FR-GW-03 §5.1.4 false-positive path: re-approves one tool from its latest reported
+ *  observation, replacing `acknowledgeToolDiff`'s "dismiss the notice" with "make the
+ *  current definition the approved one" — the only way `snapshotStatus.state` actually
+ *  returns to `in_sync` after a real (non-false-positive) change. */
+export const reapproveTool = (
+  serverId: string,
+  toolName: string,
+  signal?: AbortSignal,
+) =>
+  postJson<{ approved: boolean; tools: Array<{ toolName: string; description: string }> }>(
+    `/servers/${encodeURIComponent(serverId)}/tools/${encodeURIComponent(toolName)}/reapprove`,
     {},
     signal,
   );

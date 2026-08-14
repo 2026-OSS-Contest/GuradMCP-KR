@@ -48,6 +48,8 @@ data class ToolDiffsResponse(val toolName: String, val diffs: List<ToolDiffView>
 
 data class AcknowledgeRequest(val acknowledgedBy: String? = null)
 
+data class ReapproveRequest(val capturedBy: String? = null)
+
 data class ObservedToolInput(val name: String, val description: String, val inputSchema: Any?, val fingerprint: String)
 data class ReportedDiffInput(val toolName: String, val diffType: String, val before: Any?, val after: Any?)
 data class ToolObservationReportRequest(
@@ -65,6 +67,10 @@ data class ToolObservationReportResponse(val toolsStored: Int, val diffsRecorded
  *    feeds `GET /servers`'s `snapshotStatus` (spec §5.2 step 3, §6.1). Internal; not a
  *    console-facing endpoint.
  *  - `GET .../diffs` and `POST .../diffs/{id}/acknowledge` are exactly spec §6.2/§6.3.
+ *  - `POST .../tools/{toolName}/reapprove` is the console's false-positive path: re-approves
+ *    one tool from its latest reported observation, so an operator who has reviewed a diff
+ *    and judged it benign doesn't have to hand-type the definition back through `/approve`
+ *    (which also still works for bulk/initial approval).
  */
 @RestController
 @RequestMapping("/api/v1")
@@ -88,6 +94,18 @@ class ToolSnapshotController(private val store: ToolSnapshotStore, private val c
         }
         val approved = store.approve(parseId(id), capturedBy, inputs)
         return ToolSnapshotBaselineResponse(approved = true, tools = approved.map(::toBaselineEntry))
+    }
+
+    @PostMapping("/servers/{id}/tools/{toolName}/reapprove")
+    fun reapprove(
+        @PathVariable id: String,
+        @PathVariable toolName: String,
+        @RequestBody(required = false) request: ReapproveRequest?,
+    ): ToolSnapshotBaselineResponse {
+        val capturedBy = request?.capturedBy?.takeIf { it.isNotBlank() } ?: "console"
+        val snapshot = store.reapprove(parseId(id), toolName, capturedBy)
+            ?: throw ApiException(HttpStatus.NOT_FOUND, "tool_not_observed", "no observation for $toolName on server $id")
+        return ToolSnapshotBaselineResponse(approved = true, tools = listOf(toBaselineEntry(snapshot)))
     }
 
     /** `includeAcknowledged=true` is spec §9 AC-4's only way to observe that an acknowledged

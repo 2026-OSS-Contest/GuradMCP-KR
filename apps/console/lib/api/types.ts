@@ -24,8 +24,12 @@ export interface Overview {
   pendingApprovals: number;
 }
 
-/** FR-GW-03 §6.1. `unapproved`: no tool ever had its definition approved as a baseline. */
-export type SnapshotState = "in_sync" | "drift_detected" | "unapproved";
+/** FR-GW-03 §6.1. `unapproved`: no tool ever had its definition approved as a baseline.
+ *  `drift_acknowledged`: every pending diff for this tool was dismissed via `/acknowledge`,
+ *  but the approved snapshot itself was never updated (spec §6.3 keeps those two operations
+ *  separate) — the tool is still running on a definition the baseline doesn't cover, so this
+ *  is deliberately distinct from `in_sync`, not folded into it. */
+export type SnapshotState = "in_sync" | "drift_detected" | "drift_acknowledged" | "unapproved";
 
 /** FR-GW-03 §6.1 `snapshotStatus`. `GET /servers` (GMCP-65) reports this for real now —
  *  see `services/control-plane/.../api/ServerController.kt`'s `toolInventory`. */

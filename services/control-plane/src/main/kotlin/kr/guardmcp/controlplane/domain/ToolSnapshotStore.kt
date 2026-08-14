@@ -130,6 +130,24 @@ class ToolSnapshotStore(private val jdbcTemplate: JdbcTemplate, private val cloc
         }
     }
 
+    /**
+     * Re-approves one tool using its most recently reported observation as the new baseline
+     * (spec §5.1.4, console false-positive path): the operator has reviewed a diff and wants
+     * the *currently observed* definition to become the approved one. The fingerprint comes
+     * from [ToolObservation.fingerprint] — the gateway's own computation, upserted on every
+     * `tools/list` — rather than anything supplied by the console client, since only the
+     * module that produces a fingerprint is ever supposed to (see `tool-snapshot.ts`'s
+     * `ToolSnapshotBaselineEntry` doc comment). Returns `null` when no observation exists yet
+     * for this tool, rather than approving an empty/placeholder definition.
+     */
+    fun reapprove(serverId: UUID, toolName: String, capturedBy: String): ToolSnapshot? {
+        val observed = observation(serverId, toolName) ?: return null
+        return approve(
+            serverId, capturedBy,
+            listOf(ApprovedToolInput(name = toolName, description = observed.description, inputSchema = observed.inputSchema, fingerprint = observed.fingerprint)),
+        ).first()
+    }
+
     private fun insertSnapshot(snapshot: ToolSnapshot) {
         jdbcTemplate.update({ connection ->
             val statement: PreparedStatement = connection.prepareStatement(INSERT_SNAPSHOT_SQL)
@@ -164,6 +182,16 @@ class ToolSnapshotStore(private val jdbcTemplate: JdbcTemplate, private val cloc
      * (serverId, toolName, diffType) among *unacknowledged* rows: a still-open finding for the
      * same tool and change kind isn't reported again until it's acknowledged or the tool is
      * re-approved (which clears it by making the description the new baseline).
+     *
+     * Dedup only skips a re-report whose `before`/`after` content actually matches the pending
+     * row — compared structurally (`ObjectMapper.readTree`), not as raw JSON text, since
+     * Postgres `jsonb` re-serializes on storage (key order, whitespace) and a byte comparison
+     * would treat every repeat as "changed." A same-tool/same-diffType report that differs in
+     * content (the tool drifted again, to something else, before the first drift was
+     * acknowledged) updates the pending row's `before`/`after`/`detectedAt` in place rather than
+     * being swallowed — otherwise the popover would keep showing the operator a diff they've
+     * never actually seen resolved, while `upsertObservation` already moved on to the newer
+     * content.
      */
     fun recordDiffs(serverId: UUID, diffs: List<ReportedDiff>): List<ToolDefinitionDiff> {
         val now = clock.instant()
@@ -171,7 +199,13 @@ class ToolSnapshotStore(private val jdbcTemplate: JdbcTemplate, private val cloc
         for (reported in diffs) {
             val pending = pendingDiffs(serverId, reported.toolName).firstOrNull { it.diffType == reported.diffType }
             if (pending != null) {
-                result += pending
+                if (sameJson(pending.before, reported.before) && sameJson(pending.after, reported.after)) {
+                    result += pending
+                    continue
+                }
+                val updated = pending.copy(before = reported.before, after = reported.after, detectedAt = now)
+                updateDiffContent(updated)
+                result += updated
                 continue
             }
             val snapshot = activeSnapshot(serverId, reported.toolName)
@@ -185,6 +219,23 @@ class ToolSnapshotStore(private val jdbcTemplate: JdbcTemplate, private val cloc
             result += diff
         }
         return result
+    }
+
+    /** Structural JSON equality — `jsonb` storage does not preserve the original text. */
+    private fun sameJson(a: String?, b: String?): Boolean {
+        if (a == null || b == null) return a == b
+        return objectMapper.readTree(a) == objectMapper.readTree(b)
+    }
+
+    private fun updateDiffContent(diff: ToolDefinitionDiff) {
+        jdbcTemplate.update({ connection ->
+            val statement: PreparedStatement = connection.prepareStatement(UPDATE_DIFF_CONTENT_SQL)
+            statement.setObject(1, diff.before?.let(::jsonb))
+            statement.setObject(2, diff.after?.let(::jsonb))
+            statement.setTimestamp(3, Timestamp.from(diff.detectedAt))
+            statement.setObject(4, diff.id)
+            statement
+        })
     }
 
     private fun insertDiff(diff: ToolDefinitionDiff) {
@@ -255,16 +306,43 @@ class ToolSnapshotStore(private val jdbcTemplate: JdbcTemplate, private val cloc
     fun observations(serverId: UUID): List<ToolObservation> =
         jdbcTemplate.query(SELECT_OBSERVATIONS_SQL, observationRowMapper, serverId)
 
+    fun observation(serverId: UUID, toolName: String): ToolObservation? =
+        jdbcTemplate.query(SELECT_OBSERVATION_SQL, observationRowMapper, serverId, toolName).firstOrNull()
+
+    /** Per-tool set of snapshot ids that have at least one *acknowledged* diff raised against
+     *  them — used by [statusView] to tell "acknowledged and the baseline was since
+     *  re-approved" (truly resolved) apart from "acknowledged but the baseline the diff was
+     *  raised against is still the active one" (dismissed from the popover, not actually
+     *  reconciled). Bulk per server, matching [pendingDiffSummary]'s shape, so `statusView`
+     *  stays O(1) queries per server rather than per tool. */
+    fun acknowledgedDiffSnapshotIds(serverId: UUID): Map<String, Set<UUID>> {
+        val rows = jdbcTemplate.query(SELECT_ACKNOWLEDGED_SNAPSHOT_IDS_SQL, { rs, _ ->
+            rs.getString("tool_name") to rs.getObject("snapshot_id", UUID::class.java)
+        }, serverId)
+        return rows.groupBy({ it.first }, { it.second }).mapValues { it.value.toSet() }
+    }
+
     /**
      * Combines the active snapshot, latest observation, and pending-diff summary for one
      * server into the per-tool `snapshotStatus` view the console reads (spec §6.1, §9.2).
      * Tool identity is the union of "ever observed" and "has an approved snapshot," so a
      * removed tool that still has an unacknowledged `tool_removed` diff keeps showing up.
+     *
+     * `in_sync` means the approved baseline and the last observation actually agree — not
+     * merely "no *pending* diff." Acknowledging a diff (spec §6.3) deliberately never touches
+     * the snapshot, so a tool whose only diff was acknowledged — but never re-approved — is
+     * still running on a definition the baseline doesn't cover; reporting that as `in_sync`
+     * would let a dismissed drift look resolved to every downstream reader of `GET /servers`
+     * (the SCR-501 drift count included). `drift_acknowledged` names that state explicitly:
+     * the operator has seen the change and chosen not to act (yet), as distinct from not
+     * having seen it (`drift_detected`) or the change having been folded into a new approved
+     * baseline via reapprove/approve (`in_sync`).
      */
     fun statusView(serverId: UUID): Map<String, ToolSnapshotStatusView> {
         val snapshots = activeSnapshots(serverId).associateBy { it.toolName }
         val observed = observations(serverId).associateBy { it.toolName }
         val pending = pendingDiffSummary(serverId)
+        val acknowledgedAgainst = acknowledgedDiffSnapshotIds(serverId)
         val toolNames = snapshots.keys + observed.keys
         return toolNames.associateWith { toolName ->
             val snapshot = snapshots[toolName]
@@ -272,6 +350,7 @@ class ToolSnapshotStore(private val jdbcTemplate: JdbcTemplate, private val cloc
             val state = when {
                 snapshot == null -> "unapproved"
                 count > 0 -> "drift_detected"
+                acknowledgedAgainst[toolName]?.contains(snapshot.id) == true -> "drift_acknowledged"
                 else -> "in_sync"
             }
             ToolSnapshotStatusView(
@@ -356,6 +435,10 @@ class ToolSnapshotStore(private val jdbcTemplate: JdbcTemplate, private val cloc
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
+        private const val UPDATE_DIFF_CONTENT_SQL = """
+            UPDATE tool_definition_diff SET before = ?, after = ?, detected_at = ? WHERE id = ?
+        """
+
         private const val SELECT_PENDING_DIFFS_SQL = """
             SELECT id, server_id, tool_name, snapshot_id, diff_type, before, after, detected_at, acknowledged, acknowledged_by, acknowledged_at
             FROM tool_definition_diff WHERE server_id = ? AND tool_name = ? AND acknowledged = false ORDER BY detected_at DESC
@@ -380,6 +463,11 @@ class ToolSnapshotStore(private val jdbcTemplate: JdbcTemplate, private val cloc
             FROM tool_definition_diff WHERE server_id = ? AND acknowledged = false GROUP BY tool_name
         """
 
+        private const val SELECT_ACKNOWLEDGED_SNAPSHOT_IDS_SQL = """
+            SELECT DISTINCT tool_name, snapshot_id
+            FROM tool_definition_diff WHERE server_id = ? AND acknowledged = true AND snapshot_id IS NOT NULL
+        """
+
         private const val UPSERT_OBSERVATION_SQL = """
             INSERT INTO tool_observation (server_id, tool_name, description, input_schema, fingerprint, observed_at)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -391,6 +479,11 @@ class ToolSnapshotStore(private val jdbcTemplate: JdbcTemplate, private val cloc
         private const val SELECT_OBSERVATIONS_SQL = """
             SELECT server_id, tool_name, description, input_schema, fingerprint, observed_at
             FROM tool_observation WHERE server_id = ?
+        """
+
+        private const val SELECT_OBSERVATION_SQL = """
+            SELECT server_id, tool_name, description, input_schema, fingerprint, observed_at
+            FROM tool_observation WHERE server_id = ? AND tool_name = ?
         """
     }
 }

@@ -732,6 +732,49 @@ describe("tool-definition drift detection (FR-GW-03, T-05)", () => {
     );
   });
 
+  it("folds drift into the tools/list response's _guardmcp summary (not just the audit trail)", async () => {
+    // Regression for the gap where detectAndReportDrift's diffs never reached the response:
+    // the drifted tool list was still returned as-is, with no signal in _guardmcp for the
+    // Agent (or console) to react to — the GuardEvent alone landed in the audit trail only.
+    seedBaseline([fixedTool()]);
+    const upstream = createServer((_request, response) => {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ result: { tools: [fixedTool({ description: "완전히 다른 설명입니다" })] } }));
+    });
+    process.env.DEMO_MCP_TOOLS_URL = await listen(upstream);
+    const url = await listen(createServer(handler));
+    const response = await fetch(`${url}/mcp`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 23, method: "tools/list" }),
+    });
+    const body = (await response.json()) as {
+      _guardmcp: { verdict: string; riskScore: number; driftedTools: Array<{ name: string; diffType: string }> };
+    };
+    expect(body._guardmcp.verdict).toBe("require_approval");
+    expect(body._guardmcp.riskScore).toBeGreaterThan(0);
+    expect(body._guardmcp.driftedTools).toEqual([{ name: "read_file", diffType: "description_changed" }]);
+    // Never the raw before/after text (NFR-04) — just enough to alert, not a second copy
+    // of the diff content the audit trail already carries.
+    expect(JSON.stringify(body._guardmcp.driftedTools)).not.toContain("완전히 다른 설명입니다");
+  });
+
+  it("leaves the _guardmcp summary undrifted when no baseline diverges", async () => {
+    seedBaseline([fixedTool()]);
+    const upstream = createServer((_request, response) => {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ result: { tools: [fixedTool()] } }));
+    });
+    process.env.DEMO_MCP_TOOLS_URL = await listen(upstream);
+    const url = await listen(createServer(handler));
+    const response = await fetch(`${url}/mcp`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 24, method: "tools/list" }),
+    });
+    const body = (await response.json()) as { _guardmcp: { verdict: string; driftedTools: unknown[] } };
+    expect(body._guardmcp.verdict).toBe("allow");
+    expect(body._guardmcp.driftedTools).toEqual([]);
+  });
+
   it("does not treat an upstream tools/list failure as drift (§5.3 fail-safe)", async () => {
     seedBaseline([fixedTool()]);
     const upstream = createServer((_request, response) => {

@@ -227,7 +227,12 @@ async function handleMcp(
     // as `tool_removed`; it is still on the upstream server, just hidden from the Agent this
     // round, and FR-GW-04's own `block` GuardEvent already covers it. Reporting it as removed
     // too would be a second, misleading event for the same tool.
-    detectAndReportDrift(metadata, sessionId, gatewayServerId, serverTrust);
+    const driftDiffs = detectAndReportDrift(
+      metadata,
+      sessionId,
+      gatewayServerId,
+      serverTrust,
+    );
     const payload = JSON.stringify(metadata.sanitized);
     const decision = evaluatePayload(payload, {
       direction: "response",
@@ -239,6 +244,7 @@ async function handleMcp(
       decision,
       quarantineDecisions,
       metadata,
+      driftDiffs,
     );
     const routed = await routeByVerdict(
       {
@@ -253,8 +259,9 @@ async function handleMcp(
       routerDeps,
     );
     if (routed.verdict === "block") {
-      // Keep the quarantine visible even when the sanitized payload blocks for its own
-      // reasons; otherwise the Agent loses the record of which tools were removed.
+      // Keep the quarantine and any drift visible even when the sanitized payload blocks
+      // for its own reasons; otherwise the Agent loses the record of which tools were
+      // removed or changed.
       send(response, 200, {
         jsonrpc: "2.0",
         id,
@@ -263,6 +270,7 @@ async function handleMcp(
           data: {
             ...routed.error.data,
             quarantinedTools: summary.quarantinedTools,
+            driftedTools: summary.driftedTools,
           },
         },
       });
@@ -684,13 +692,18 @@ function explainDrift(diff: ToolDefinitionDiff): Explanation {
  * `GET /servers` inventory and `lastCheckedAt` stay current — see
  * `tool-snapshot-registry.ts`'s `reportToolObservation` for why that call is
  * fire-and-forget rather than something this function awaits.
+ *
+ * Returns the diffs found so the caller can fold them into the `tools/list` response's
+ * `_guardmcp` summary (see `summarizeWithQuarantine`) — emitting the GuardEvent alone left
+ * the drift recorded in the audit trail but invisible in the response actually handed back
+ * to the Agent, which is indistinguishable from A-09's fail condition ("조용히 반영된다").
  */
 function detectAndReportDrift(
   metadata: ToolMetadataInspection,
   sessionId: string,
   serverId: string,
   serverTrust: ServerTrust,
-): void {
+): ToolDefinitionDiff[] {
   const baseline = getToolSnapshotBaseline(serverId);
   const currentTools = extractToolDefinitions(metadata.sanitized);
   const observedTools = currentTools.map((tool) => ({
@@ -727,34 +740,60 @@ function detectAndReportDrift(
     });
   }
   reportToolObservation(controlPlaneUrl, serverId, observedTools, diffs);
+  return diffs;
+}
+
+/** One drifted tool as surfaced in the `tools/list` response summary — name and diff kind
+ *  only, never `before`/`after` text (NFR-04, same rule `quarantinedTools` follows: the
+ *  audit trail carries the content, the response summary carries just enough to alert). */
+export interface DriftedToolReport {
+  name: string;
+  diffType: ToolDiffType;
 }
 
 /**
- * Folds the quarantine into the summary the Agent reads. Without this a request that
- * silently lost tools still reported `allow` with an empty policy list, and a client
- * that switches on `verdict` — as the demo agent does — could not tell that anything
- * had happened. A quarantine raises the summary to at least `warn`.
+ * Folds the quarantine and any Rug Pull drift into the summary the Agent reads. Without
+ * this a request that silently lost tools, or whose tool definitions silently changed,
+ * still reported `allow` with an empty policy list, and a client that switches on
+ * `verdict` — as the demo agent does — could not tell that anything had happened.
+ *
+ * A quarantine raises the summary to at least `warn`; drift raises it to at least
+ * `require_approval` (the same verdict already recorded on each drift's own GuardEvent —
+ * see `detectAndReportDrift` — and the verdict A-09's `expectedControl` names), since a
+ * changed tool definition is the thing the Agent is about to act on, not a byproduct of
+ * this response like a masked span.
  */
 function summarizeWithQuarantine(
   decision: PolicyDecision,
   quarantineDecisions: PolicyDecision[],
   metadata: ToolMetadataInspection,
+  driftDiffs: ToolDefinitionDiff[],
 ): ReturnType<typeof legacySummary> & {
   quarantinedTools: QuarantinedToolReport[];
+  driftedTools: DriftedToolReport[];
 } {
   const summary = legacySummary(decision);
   const quarantinedTools = metadata.quarantined.map(({ report }) => report);
-  if (quarantinedTools.length === 0) return { ...summary, quarantinedTools };
+  const driftedTools = driftDiffs.map(({ toolName, diffType }) => ({
+    name: toolName,
+    diffType,
+  }));
+  if (quarantinedTools.length === 0 && driftedTools.length === 0) {
+    return { ...summary, quarantinedTools, driftedTools };
+  }
+  const floor: Action =
+    driftedTools.length > 0 ? "require_approval" : "warn";
   const verdict =
-    actionWeight[summary.verdict] > actionWeight.warn
+    actionWeight[summary.verdict] > actionWeight[floor]
       ? summary.verdict
-      : "warn";
+      : floor;
   return {
     ...summary,
     verdict,
     riskScore: Math.max(
       summary.riskScore,
       ...quarantineDecisions.map(({ riskScore }) => riskScore),
+      ...(driftedTools.length > 0 ? [driftRiskScore] : []),
     ),
     policyIds: [
       ...new Set([
@@ -765,6 +804,7 @@ function summarizeWithQuarantine(
       ]),
     ],
     quarantinedTools,
+    driftedTools,
   };
 }
 

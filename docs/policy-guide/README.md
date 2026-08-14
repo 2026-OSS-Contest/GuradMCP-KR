@@ -171,6 +171,8 @@ risk_score:
 
 이 절은 DSL v1의 규범 계약입니다. 현재 데모 Gateway는 체크인된 팩을 평가해 `allow`/`warn`/`mask_then_allow`/`block`을 적용합니다. `docker compose`가 `CONTROL_PLANE_URL`을 기본으로 주입하는 데모 환경에서는 `require_approval`이 실제 Control Plane 승인으로 이어져, 운영자가 결정하거나(승인/마스킹 후 승인/거부) timeout(120초) 동안 무응답이면 자동으로 fail-closed 차단됩니다. `CONTROL_PLANE_URL`이 없으면 즉시 fail-closed로 거부합니다. 승인 카드는 이제 실제로 위험 태그와 마스킹 미리보기를 담아 게시되지만, 콘솔 승인 UI·Replay·해시 체인은 아직 이 승인 이벤트와 연동되지 않았습니다 — 자세한 내용은 [외부 이메일 승인 데모](../external-email-approval-demo.md)를 참고하세요. 영구 감사 로그는 구현 예정이며 데모에서 제공된다고 가정하면 안 됩니다.
 
+예외가 하나 있습니다: FR-GW-03 Rug Pull 정의 드리프트 탐지는 이미 upstream을 호출해 응답을 받은 `tools/list` 자체를 비교 대상으로 삼으므로, 위 fail-closed 경로(호출 자체를 보류)가 적용되지 않습니다. 대신 드리프트가 발견된 각 tool마다 `require_approval` GuardEvent를 감사 로그에 남기고, `tools/list` 응답의 `_guardmcp` 요약(`verdict`를 최소 `require_approval`로 올리고 `driftedTools`에 어떤 tool·어떤 diff인지 나열)에도 신호를 접어 넣습니다 — Agent/콘솔이 `verdict`만 보고도 "조용히 반영"되지 않았음을 알 수 있게 하기 위해서입니다. Approval Card로 이어지는 승인 대기는 아직 없으며, 재승인은 콘솔의 `/tools/{toolName}/reapprove`를 통한 별도 조작입니다.
+
 ## 5. severity 다섯 단계
 
 | severity | 사용 기준 | 예 |

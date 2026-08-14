@@ -84,7 +84,16 @@ export const SERVERS: McpServer[] = [
         name: "delete_message",
         risk: "medium",
         policies: [],
-        snapshotStatus: IN_SYNC,
+        // FR-GW-03 §6.1/§6.3: the operator acknowledged (dismissed) the one diff below, but
+        // never re-approved — the baseline still doesn't cover the current definition, so
+        // this is deliberately not `in_sync`. See `mocks/tool-diffs.ts`'s matching seed.
+        snapshotStatus: {
+          state: "drift_acknowledged",
+          snapshotCapturedAt: "2026-07-15T00:00:00Z",
+          lastCheckedAt: "2026-08-02T03:00:00Z",
+          pendingDiffCount: 0,
+          latestDiffId: null,
+        },
       },
     ],
   },

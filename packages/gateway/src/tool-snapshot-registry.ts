@@ -88,7 +88,13 @@ export function startToolSnapshotSync(
   serverId: string,
   intervalMs = defaultIntervalMs,
 ): ToolSnapshotSync {
-  if (!baseUrl) return { stop() {} };
+  if (!baseUrl) {
+    // A security control silently off is worse than one silently misconfigured: without
+    // this line, a missing CONTROL_PLANE_URL and a genuinely unapproved server look
+    // identical from the logs — both just never produce drift GuardEvents.
+    process.stdout.write(`${JSON.stringify({ level: "warn", service: "gateway", message: "CONTROL_PLANE_URL unset; tool-snapshot drift detection disabled" })}\n`);
+    return { stop() {} };
+  }
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -110,7 +116,9 @@ export function startToolSnapshotSync(
     while (!stopped) {
       await fetchOnce();
       if (stopped) return;
-      await delay(intervalMs);
+      await delay(intervalMs, (handle) => {
+        timer = handle;
+      });
     }
   };
 
@@ -123,8 +131,10 @@ export function startToolSnapshotSync(
   };
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function delay(ms: number, onSchedule: (handle: ReturnType<typeof setTimeout>) => void): Promise<void> {
+  return new Promise((resolve) => {
+    onSchedule(setTimeout(resolve, ms));
+  });
 }
 
 /**

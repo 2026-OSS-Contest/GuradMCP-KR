@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { acknowledgeToolDiff, getToolDiffs } from "@/lib/api/client";
+import { acknowledgeToolDiff, getToolDiffs, reapproveTool } from "@/lib/api/client";
 import { RESOURCE_REFRESH_EVENT } from "@/lib/api/use-resource";
-import type { ToolDefinitionDiff, ToolDiffSide, ToolDiffType } from "@/lib/api/types";
+import type { SnapshotState, ToolDefinitionDiff, ToolDiffSide, ToolDiffType } from "@/lib/api/types";
 import { SnapshotChangedIcon } from "@/components/icons";
 import { Tag } from "@/components/ui/tag";
 import { cn } from "@/lib/utils";
@@ -39,6 +39,9 @@ function DiffSide({ side, none }: { side: ToolDiffSide | null; none: string }) {
  * highlighted content is the changed `description`/`inputSchema` fields, not a masking span
  * (spec §7: "강조 대상은 마스킹 span이 아니라 변경된 description/inputSchema 필드로 대체").
  */
+/** `onAcknowledge` is omitted for an already-acknowledged diff (the `drift_acknowledged`
+ *  popover view): there is nothing left to confirm per-row there, only the tool-wide
+ *  re-approve action the popover itself renders below the list. */
 function DiffCard({
   diff,
   pending,
@@ -46,7 +49,7 @@ function DiffCard({
 }: {
   diff: ToolDefinitionDiff;
   pending: boolean;
-  onAcknowledge: () => void;
+  onAcknowledge?: () => void;
 }) {
   const t = useTranslations("gateway.inventory.diffPopover");
   return (
@@ -73,43 +76,67 @@ function DiffCard({
         </div>
       </div>
       <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={onAcknowledge}
-          disabled={pending}
-          className="flex h-8 items-center rounded-lg bg-(--primitive-opacity-white-alpha-6) px-3 text-caption-text-c-md transition-colors hover:bg-white/10 disabled:opacity-50"
-        >
-          {pending ? t("acknowledging") : t("acknowledge")}
-        </button>
+        {onAcknowledge ? (
+          <button
+            type="button"
+            onClick={onAcknowledge}
+            disabled={pending}
+            className="flex h-8 items-center rounded-lg bg-(--primitive-opacity-white-alpha-6) px-3 text-caption-text-c-md transition-colors hover:bg-white/10 disabled:opacity-50"
+          >
+            {pending ? t("acknowledging") : t("acknowledge")}
+          </button>
+        ) : (
+          <span className="text-caption-text-c-md text-(--primitive-opacity-white-alpha-50)">{t("acknowledged")}</span>
+        )}
       </div>
     </div>
   );
 }
 
 /**
- * SCR-101 "정의 변경 감지" badge + diff popover (FR-GW-03 §7). Shown only when
- * `snapshotStatus.state === "drift_detected"` (checked by the caller). Clicking fetches
- * `GET /servers/{serverId}/tools/{toolName}/diffs` (§6.2); "확인" resolves one diff via §6.3
- * without touching the approved baseline.
+ * SCR-101 "정의 변경 감지" badge + diff popover (FR-GW-03 §7). Shown for both
+ * `drift_detected` and `drift_acknowledged` (checked by the caller). Clicking fetches
+ * `GET /servers/{serverId}/tools/{toolName}/diffs` (§6.2).
+ *
+ * `drift_detected` (unacknowledged diffs exist): "확인" resolves one diff via §6.3 without
+ * touching the approved baseline — the operator has not decided anything yet.
+ *
+ * `drift_acknowledged` (every diff was dismissed, but the baseline never moved): the popover
+ * instead fetches the full history (`includeAcknowledged=true`, read-only per row) and offers
+ * one tool-wide "재승인" action — the only thing that actually clears this state, since
+ * dismissing a notice and approving a definition are deliberately separate operations
+ * (spec §6.3). `tool_removed` has no re-approve target (the tool is gone upstream, so there
+ * is nothing current to bake into a snapshot), so the action is withheld for it.
  */
-export function ToolSnapshotBadge({ serverId, toolName }: { serverId: string; toolName: string }) {
+export function ToolSnapshotBadge({
+  serverId,
+  toolName,
+  state,
+}: {
+  serverId: string;
+  toolName: string;
+  state: Extract<SnapshotState, "drift_detected" | "drift_acknowledged">;
+}) {
   const t = useTranslations("gateway.inventory");
   const tp = useTranslations("gateway.inventory.diffPopover");
   const [open, setOpen] = useState(false);
   const [diffs, setDiffs] = useState<ToolDefinitionDiff[] | null>(null);
   const [error, setError] = useState(false);
   const [acknowledging, setAcknowledging] = useState<string | null>(null);
+  const [reapproving, setReapproving] = useState(false);
+  const [reapproveError, setReapproveError] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
     setError(false);
-    getToolDiffs(serverId, toolName, controller.signal)
+    setReapproveError(false);
+    getToolDiffs(serverId, toolName, controller.signal, state === "drift_acknowledged")
       .then((response) => setDiffs(response.diffs))
       .catch(() => setError(true));
     return () => controller.abort();
-  }, [open, serverId, toolName]);
+  }, [open, serverId, toolName, state]);
 
   useEffect(() => {
     if (!open) return;
@@ -141,6 +168,22 @@ export function ToolSnapshotBadge({ serverId, toolName }: { serverId: string; to
       setAcknowledging(null);
     }
   };
+
+  const reapprove = async () => {
+    setReapproving(true);
+    setReapproveError(false);
+    try {
+      await reapproveTool(serverId, toolName);
+      setOpen(false);
+      window.dispatchEvent(new Event(RESOURCE_REFRESH_EVENT));
+    } catch {
+      setReapproveError(true);
+    } finally {
+      setReapproving(false);
+    }
+  };
+
+  const canReapprove = diffs !== null && diffs.every((diff) => diff.diffType !== "tool_removed");
 
   return (
     <div className="relative" ref={containerRef}>
@@ -185,9 +228,29 @@ export function ToolSnapshotBadge({ serverId, toolName }: { serverId: string; to
                   key={diff.id}
                   diff={diff}
                   pending={acknowledging === diff.id}
-                  onAcknowledge={() => void acknowledge(diff.id)}
+                  onAcknowledge={state === "drift_detected" ? () => void acknowledge(diff.id) : undefined}
                 />
               ))}
+              {state === "drift_acknowledged" && (
+                <div className="flex flex-col gap-2 border-t border-(--primitive-opacity-white-alpha-10) pt-3">
+                  {canReapprove ? (
+                    <>
+                      <p className="text-caption-text-c-rg text-(--primitive-opacity-white-alpha-75)">{tp("reapproveHint")}</p>
+                      <button
+                        type="button"
+                        onClick={() => void reapprove()}
+                        disabled={reapproving}
+                        className="flex h-8 items-center justify-center rounded-lg bg-(--primitive-opacity-white-alpha-6) px-3 text-caption-text-c-md transition-colors hover:bg-white/10 disabled:opacity-50"
+                      >
+                        {reapproving ? tp("reapproving") : tp("reapprove")}
+                      </button>
+                      {reapproveError && <p className="text-caption-text-c-rg text-verdict-block">{tp("reapproveError")}</p>}
+                    </>
+                  ) : (
+                    <p className="text-caption-text-c-rg text-(--primitive-opacity-white-alpha-50)">{tp("reapproveUnavailable")}</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

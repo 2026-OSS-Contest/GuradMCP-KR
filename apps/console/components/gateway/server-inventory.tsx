@@ -72,10 +72,11 @@ function ToolRow({ serverId, tool }: { serverId: string; tool: ToolEntry }) {
           </span>
         )}
 
-        {tool.snapshotStatus.state === "drift_detected" && (
-          // FR-GW-03 §7 — the definition drifted from the one approved at first sight.
-          // Click opens the before/after diff popover (§6.2/§6.3).
-          <ToolSnapshotBadge serverId={serverId} toolName={tool.name} />
+        {(tool.snapshotStatus.state === "drift_detected" || tool.snapshotStatus.state === "drift_acknowledged") && (
+          // FR-GW-03 §7 — the definition drifted from the one approved at first sight, and
+          // (drift_acknowledged) dismissing the notice never moved the baseline, so it's
+          // still true. Click opens the before/after diff popover (§6.2/§6.3).
+          <ToolSnapshotBadge serverId={serverId} toolName={tool.name} state={tool.snapshotStatus.state} />
         )}
       </div>
     </div>

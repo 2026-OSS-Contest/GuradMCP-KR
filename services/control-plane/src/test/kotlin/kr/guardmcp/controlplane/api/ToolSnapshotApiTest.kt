@@ -208,9 +208,12 @@ class ToolSnapshotApiTest : ApiTestSupport() {
         assertEquals(true, allDiffsAgain[0]["acknowledged"])
 
         // Re-querying reflects the acknowledged state staying put — it isn't re-flagged pending
-        // on a later, unrelated read (§9 AC-4).
+        // on a later, unrelated read (§9 AC-4). It also must not read as `in_sync`: the baseline
+        // itself was never touched (see the assertion below), so the tool is still running on a
+        // definition the approved snapshot doesn't cover — `drift_acknowledged` names that
+        // explicitly rather than letting a dismissed diff look resolved.
         val snapshotStatus = toolEntry(serverId, toolName)["snapshotStatus"] as Map<String, Any?>
-        assertEquals("in_sync", snapshotStatus["state"])
+        assertEquals("drift_acknowledged", snapshotStatus["state"])
 
         // The baseline itself is untouched by acknowledgement — still the original description,
         // not the drifted one (§9 AC-4: "diff 확인 후에도 스냅샷 자체는 변경되지 않아야 하며").
@@ -228,7 +231,7 @@ class ToolSnapshotApiTest : ApiTestSupport() {
     }
 
     @Test
-    fun `reporting the same drift twice does not duplicate the pending diff`() {
+    fun `reporting the same drift twice does not duplicate the pending diff, nor bump its detectedAt`() {
         // The gateway has no persistent upstream connection, so it detects drift on every
         // tools/list call that passes through it — an Agent calling tools/list repeatedly
         // while a tool sits drifted-but-unacknowledged must not inflate pendingDiffCount.
@@ -241,14 +244,96 @@ class ToolSnapshotApiTest : ApiTestSupport() {
         )
         val tampered = readFileTool(name = toolName, description = "new")
         reportObservation(serverId, listOf(tampered), listOf(diffPayload))
+        val diffs = parseMap(get("/api/v1/servers/$serverId/tools/$toolName/diffs").body())["diffs"] as List<Map<String, Any?>>
+        assertEquals(1, diffs.size)
+        val firstDetectedAt = diffs[0]["detectedAt"]
+        val firstId = diffs[0]["id"]
+
         reportObservation(serverId, listOf(tampered), listOf(diffPayload))
         reportObservation(serverId, listOf(tampered), listOf(diffPayload))
 
-        val diffs = parseMap(get("/api/v1/servers/$serverId/tools/$toolName/diffs").body())["diffs"] as List<Map<String, Any?>>
-        assertEquals(1, diffs.size)
+        val diffsAfter = parseMap(get("/api/v1/servers/$serverId/tools/$toolName/diffs").body())["diffs"] as List<Map<String, Any?>>
+        assertEquals(1, diffsAfter.size)
+        // Not a new row and not merely coincidentally-equal timestamps: a string- or
+        // reference-based dedup could pass `diffs.size == 1` while still silently updating
+        // the row on every repeat. Pinning `id` and `detectedAt` to the first report's values
+        // is what actually distinguishes "deduped" from "updated-in-place-every-time."
+        assertEquals(firstId, diffsAfter[0]["id"])
+        assertEquals(firstDetectedAt, diffsAfter[0]["detectedAt"])
 
         val snapshotStatus = toolEntry(serverId, toolName)["snapshotStatus"] as Map<String, Any?>
         assertEquals(1, (snapshotStatus["pendingDiffCount"] as Number).toInt())
+    }
+
+    @Test
+    fun `reporting a second, different drift for the same tool+diffType updates the pending diff in place`() {
+        // A tool that drifts to X (unacknowledged), then drifts again to Y before anyone
+        // reviews X, must not leave the popover stuck showing X while upsertObservation has
+        // already moved the tool_observation row on to Y.
+        val serverId = DemoSeed.SERVER_FILE_ID
+        val toolName = "read_file_redrift"
+        approve(serverId, listOf(readFileTool(name = toolName)))
+
+        val firstReport = reportObservation(
+            serverId, listOf(readFileTool(name = toolName, description = "X로 변경됨")),
+            listOf(mapOf("toolName" to toolName, "diffType" to "description_changed", "before" to mapOf("description" to "old"), "after" to mapOf("description" to "X로 변경됨"))),
+        )
+        assertEquals(1, (parseMap(firstReport.body())["diffsRecorded"] as Number).toInt())
+        val firstDiffs = parseMap(get("/api/v1/servers/$serverId/tools/$toolName/diffs").body())["diffs"] as List<Map<String, Any?>>
+        assertEquals(1, firstDiffs.size)
+        val diffId = firstDiffs[0]["id"]
+        assertEquals(mapOf("description" to "X로 변경됨"), firstDiffs[0]["after"])
+
+        val secondReport = reportObservation(
+            serverId, listOf(readFileTool(name = toolName, description = "Y로 재변경됨")),
+            listOf(mapOf("toolName" to toolName, "diffType" to "description_changed", "before" to mapOf("description" to "old"), "after" to mapOf("description" to "Y로 재변경됨"))),
+        )
+        assertEquals(1, (parseMap(secondReport.body())["diffsRecorded"] as Number).toInt())
+
+        val diffsAfter = parseMap(get("/api/v1/servers/$serverId/tools/$toolName/diffs").body())["diffs"] as List<Map<String, Any?>>
+        assertEquals(1, diffsAfter.size)
+        // Same row (updated in place), not a second row — the operator sees exactly one
+        // pending finding, and it reflects the latest content, not the first.
+        assertEquals(diffId, diffsAfter[0]["id"])
+        assertEquals(mapOf("description" to "Y로 재변경됨"), diffsAfter[0]["after"])
+
+        val snapshotStatus = toolEntry(serverId, toolName)["snapshotStatus"] as Map<String, Any?>
+        assertEquals(1, (snapshotStatus["pendingDiffCount"] as Number).toInt())
+    }
+
+    @Test
+    fun `reapproving a tool bakes its latest observation into a new baseline and clears drift_acknowledged`() {
+        val serverId = DemoSeed.SERVER_FILE_ID
+        val toolName = "read_file_reapprove"
+        approve(serverId, listOf(readFileTool(name = toolName)))
+        val observed = readFileTool(name = toolName, description = "재승인으로 확정될 설명")
+        reportObservation(
+            serverId, listOf(observed),
+            listOf(mapOf("toolName" to toolName, "diffType" to "description_changed", "before" to mapOf("description" to "old"), "after" to mapOf("description" to "재승인으로 확정될 설명"))),
+        )
+        val diffId = (parseMap(get("/api/v1/servers/$serverId/tools/$toolName/diffs").body())["diffs"] as List<Map<String, Any?>>).first()["id"]
+        send("POST", "/api/v1/servers/$serverId/tools/$toolName/diffs/$diffId/acknowledge", mapOf("acknowledgedBy" to "operator-1"))
+
+        val reapproveResponse = send("POST", "/api/v1/servers/$serverId/tools/$toolName/reapprove", mapOf("capturedBy" to "operator-1"))
+        assertEquals(200, reapproveResponse.statusCode())
+        val body = parseMap(reapproveResponse.body())
+        assertEquals(true, body["approved"])
+        val tools = body["tools"] as List<Map<String, Any?>>
+        assertEquals("재승인으로 확정될 설명", tools[0]["description"])
+
+        val baseline = parseMap(get("/api/v1/servers/$serverId/tool-snapshot").body())["tools"] as List<Map<String, Any?>>
+        assertEquals("재승인으로 확정될 설명", baseline.first { it["toolName"] == toolName }["description"])
+
+        val snapshotStatus = toolEntry(serverId, toolName)["snapshotStatus"] as Map<String, Any?>
+        assertEquals("in_sync", snapshotStatus["state"])
+    }
+
+    @Test
+    fun `reapproving a tool with no reported observation is rejected as not found`() {
+        val serverId = UUID.randomUUID()
+        val response = send("POST", "/api/v1/servers/$serverId/tools/never_observed/reapprove", mapOf<String, Any?>())
+        assertEquals(404, response.statusCode())
+        assertEquals("tool_not_observed", parseMap(response.body())["code"])
     }
 
     @Test
