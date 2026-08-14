@@ -44,6 +44,14 @@ import { runtimePolicyPacks } from "./policies.generated.js";
 const port = Number(process.env.PORT ?? 3001);
 const maxBodyBytes = 1024 * 1024;
 
+// send_email's subject and body are joined with this before inspection/masking (see
+// `tools/call` handling below) so detect()/the policy engine see one text and one risk
+// score for the whole message. Reconstructing subject/body afterward (`resolveEmailFields`)
+// never searches the joined text for this separator — a masked span can consume it, and a
+// multi-line subject would spoof it — so its exact value only matters as an offset (its
+// `.length`) into the joined text, not as content anyone parses back out.
+const EMAIL_FIELD_SEPARATOR = "\n";
+
 // The demo gateway routes to a single upstream (DEMO_MCP_TOOLS_URL); this is that upstream's
 // identity in the Control Plane's server registry (FR-GW-02 §3.1, §4.1).
 const gatewayServerId = process.env.GATEWAY_SERVER_ID ?? "demo-mcp-tools";
@@ -235,25 +243,44 @@ async function handleMcp(
     }
     const argumentsValue = params.arguments ?? {};
     // `to` is itself detected as PII.EMAIL (§5.1 GMCP-26): inspecting/masking the whole args
-    // JSON would corrupt the recipient address on a masked approval, so send_email's body is
-    // the only text under inspection here — `to`/`subject` pass through untouched either way.
+    // JSON would corrupt the recipient address on a masked approval, so `to` is excluded from
+    // the inspected text and passes through untouched either way. `subject` is not excluded —
+    // a secret or PII value placed in `subject` instead of `body` is exactly as real, and a
+    // detector that only ever looked at `body` let it through unmasked and unscored. So
+    // `subject` and `body` are joined into one inspected text and split back apart afterward.
     const emailBody =
       tool === "send_email" &&
       isRecord(argumentsValue) &&
       typeof argumentsValue.body === "string"
         ? argumentsValue.body
         : undefined;
-    const requestPayload = emailBody ?? JSON.stringify(argumentsValue);
-    // The Approval Card's `arguments` (NFR-04) is deliberately narrower than the inspected
-    // payload: `body` is exactly the text `maskPreview` already carries and whose raw form is
-    // cleared once the approval resolves (Control Plane's `decide()`/`sweepExpired()`) — sending
-    // it a second time as a plain arg would leave a copy that nothing ever clears. `to`/`subject`
-    // are the non-sensitive summary the card actually needs to show. Every other tool gets no
+    const emailSubject =
+      tool === "send_email" &&
+      isRecord(argumentsValue) &&
+      typeof argumentsValue.subject === "string"
+        ? argumentsValue.subject
+        : undefined;
+    const requestPayload =
+      emailBody !== undefined
+        ? `${emailSubject ?? ""}${EMAIL_FIELD_SEPARATOR}${emailBody}`
+        : JSON.stringify(argumentsValue);
+    // The Approval Card's `arguments` (NFR-04) is an allowlist, not an exclude filter: only
+    // `to`/`subject` — plain strings the card needs for its summary — are ever forwarded to
+    // Control Plane. `body` is withheld on purpose (it's exactly the text `maskPreview` already
+    // carries and whose raw form Control Plane clears on `decide()`/`sweepExpired()`; sending it
+    // again as a plain arg would leave a copy nothing ever clears). Any other argument (cc,
+    // reply_to, attachments, ...) is dropped rather than passed through, both because the card
+    // has no use for it and because a non-string value would fail to bind against Control
+    // Plane's `Map<String, String>` and take the whole approval down with it — `submit()` would
+    // see a non-2xx response and fail closed to an unreachable id, so the Agent would see
+    // APPROVAL_TIMEOUT_BLOCKED even with Control Plane fully up. Every other tool gets no
     // `arguments` at all, since there is no such split to fall back on for an arbitrary payload.
     const cardArguments =
       emailBody !== undefined && isRecord(argumentsValue)
         ? Object.fromEntries(
-            Object.entries(argumentsValue).filter(([key]) => key !== "body"),
+            (["to", "subject"] as const)
+              .filter((key) => typeof argumentsValue[key] === "string")
+              .map((key) => [key, argumentsValue[key] as string]),
           )
         : undefined;
     const requestDecision = evaluatePayload(requestPayload, {
@@ -282,11 +309,21 @@ async function handleMcp(
       send(response, 200, rpcBlockError(id, requestRouted.error));
       return;
     }
-    // Splice the (possibly masked) body back into the untouched `to`/`subject` rather than
-    // sending `requestRouted.payload` verbatim, which for send_email is body-only text.
+    // Reconstruct subject/body onto the untouched `to` rather than sending
+    // `requestRouted.payload` verbatim, which for send_email is the joined subject+body text —
+    // see `resolveEmailFields` for why this is offset arithmetic against the *originals*, not a
+    // re-parse of the (possibly masked) joined text.
     const upstreamRequestBody =
       emailBody !== undefined
-        ? JSON.stringify({ ...argumentsValue, body: requestRouted.payload })
+        ? JSON.stringify({
+            ...argumentsValue,
+            ...resolveEmailFields(
+              requestRouted.verdict,
+              emailSubject,
+              emailBody,
+              requestDecision.detections,
+            ),
+          })
         : requestRouted.payload;
     const upstream = await upstreamJson(
       `/tools/call/${encodeURIComponent(tool)}`,
@@ -675,6 +712,59 @@ function rpcBlockError(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Reconstructs send_email's `subject`/`body` for the upstream call from the decision made
+ * against their joined inspection text. Every verdict but `mask_then_allow` left both fields
+ * untouched, so the originals pass straight through unexamined. For `mask_then_allow`,
+ * `detections` (offsets into the joined `${subject}${EMAIL_FIELD_SEPARATOR}${body}` text) are
+ * partitioned back onto `subject`/`body` by that same arithmetic and each field is masked
+ * independently via `mask()`'s own offset splicing — never by searching the (already-masked)
+ * joined text for the separator, which a masked span can consume outright and a multi-line
+ * `subject` would spoof even when nothing was detected in it at all.
+ *
+ * A detection whose span crosses the join boundary (e.g. an injection phrase the rules match
+ * across a real newline — GMCP-26 review) is clipped into up to two: `maskedAs` lands on
+ * whichever part fell in each field, so neither field ever carries the other's raw text and
+ * neither silently drops its half of the match.
+ */
+function resolveEmailFields(
+  verdict: Action,
+  subject: string | undefined,
+  body: string,
+  detections: Detection[],
+): { subject?: string; body: string } {
+  if (verdict !== "mask_then_allow")
+    return subject !== undefined ? { subject, body } : { body };
+  const subjectLen = subject?.length ?? 0;
+  const bodyOffset = subjectLen + EMAIL_FIELD_SEPARATOR.length;
+  const subjectDetections: Detection[] = [];
+  const bodyDetections: Detection[] = [];
+  for (const detection of detections) {
+    if (detection.end <= subjectLen) {
+      subjectDetections.push(detection);
+    } else if (detection.start >= bodyOffset) {
+      bodyDetections.push({
+        ...detection,
+        start: detection.start - bodyOffset,
+        end: detection.end - bodyOffset,
+      });
+    } else {
+      if (detection.start < subjectLen)
+        subjectDetections.push({ ...detection, end: subjectLen });
+      if (detection.end > bodyOffset)
+        bodyDetections.push({
+          ...detection,
+          start: Math.max(0, detection.start - bodyOffset),
+          end: detection.end - bodyOffset,
+        });
+    }
+  }
+  const maskedBody = mask(body, bodyDetections);
+  return subject !== undefined
+    ? { subject: mask(subject, subjectDetections), body: maskedBody }
+    : { body: maskedBody };
 }
 
 async function checkTcpDependencies(): Promise<

@@ -27,8 +27,16 @@ function listen(server: Server): Promise<string> {
 }
 
 /** Answers `POST /approvals` with a pending id, then resolves it `approve_masked` from the
- *  second poll onward — just enough of Control Plane's contract for one end-to-end call. */
-function fakeControlPlane(decidedBy: string): Server {
+ *  second poll onward — just enough of Control Plane's contract for one end-to-end call.
+ *  `onCreate`, when given, sees the parsed body of every `POST /api/v1/approvals` — this is
+ *  how tests inspect what the gateway actually submitted as the Approval Card's `arguments`,
+ *  mirroring the real Control Plane's `arguments: Map<String, String>?` deserialization: it
+ *  rejects (400s) a request whose `arguments` carries a non-string value, exactly as
+ *  `ApprovalController.kt` would. */
+function fakeControlPlane(
+  decidedBy: string,
+  onCreate?: (body: Record<string, unknown>) => void,
+): Server {
   let createdId: string | undefined;
   let polls = 0;
   return createServer((request, response) => {
@@ -37,6 +45,19 @@ function fakeControlPlane(decidedBy: string): Server {
     request.on("end", () => {
       response.setHeader("content-type", "application/json");
       if (request.method === "POST" && request.url === "/api/v1/approvals") {
+        const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+        const args = parsed.arguments;
+        const nonScalar =
+          args !== null &&
+          typeof args === "object" &&
+          Object.values(args as Record<string, unknown>).some((value) => typeof value !== "string");
+        if (nonScalar) {
+          // What Spring would do trying to bind a non-string value into Map<String, String>.
+          response.statusCode = 400;
+          response.end(JSON.stringify({ error: "invalid arguments" }));
+          return;
+        }
+        onCreate?.(parsed);
         createdId = "apr-live-1";
         response.statusCode = 201;
         response.end(JSON.stringify({ id: createdId, status: "pending" }));
@@ -62,7 +83,10 @@ function fakeControlPlane(decidedBy: string): Server {
 
 describe("gateway end-to-end with a live Control Plane approval backend (GMCP-26)", () => {
   it("delivers only the masked body upstream, with the recipient untouched, on approve_masked", async () => {
-    process.env.CONTROL_PLANE_URL = await listen(fakeControlPlane("reviewer"));
+    const createdApprovals: Array<Record<string, unknown>> = [];
+    process.env.CONTROL_PLANE_URL = await listen(
+      fakeControlPlane("reviewer", (body) => createdApprovals.push(body)),
+    );
     // Dynamic, so this runs after CONTROL_PLANE_URL is set — server.ts's routerDeps
     // (a module-level singleton) reads the env var exactly once, at this import.
     const { handler } = await import("../server.js");
@@ -88,12 +112,30 @@ describe("gateway end-to-end with a live Control Plane approval backend (GMCP-26
         jsonrpc: "2.0",
         id: 1,
         method: "tools/call",
-        params: { name: "send_email", arguments: { to: "outside@example.net", subject: "Q3 report", body: "key sk-ant-demo0000000000000000demo" } }
+        params: {
+          name: "send_email",
+          arguments: {
+            to: "outside@example.net",
+            subject: "Q3 report",
+            body: "key sk-ant-demo0000000000000000demo",
+            // Neither belongs on the Approval Card: `cc` is outside the to/subject allowlist,
+            // and `attachment` is not even a string — if the gateway forwarded it as-is, the
+            // fake Control Plane above would 400 it exactly as the real `Map<String, String>`
+            // binding would, and this whole approval would fail closed to APPROVAL_TIMEOUT_BLOCKED.
+            cc: ["someone@example.net"],
+            attachment: { filename: "report.pdf" },
+          },
+        },
       })
     });
 
     const result = (await response.json()) as { error?: unknown };
     expect(result.error).toBeUndefined();
+
+    // The card only ever saw an allowlisted, all-string `arguments` (GMCP-26 review) — proof
+    // the approval was actually created (not silently rejected) with `cc`/`attachment` dropped.
+    expect(createdApprovals).toHaveLength(1);
+    expect(createdApprovals[0]?.arguments).toEqual({ to: "outside@example.net", subject: "Q3 report" });
 
     const upstreamArgs = JSON.parse(receivedBody) as { to: string; subject: string; body: string };
     expect(upstreamArgs.to).toBe("outside@example.net");
