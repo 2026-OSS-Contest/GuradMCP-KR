@@ -347,6 +347,47 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/policies/{policyId}/stats:
+    get:
+      tags: [policies]
+      summary: Policy trigger stats (GMCP-80 §3.5)
+      description: >-
+        A policy with no trigger history answers firedLast30d=0, not 404 —
+        only an unknown policyId is a 404. dryRun=true always answers
+        firedLast30d=0: no policy in this system is ever marked dry-run yet
+        (GMCP-77 is unbuilt), so there is no dry-run subset of guard_event
+        to count.
+      operationId: getPolicyStats
+      parameters:
+        - name: policyId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: window
+          in: query
+          required: false
+          description: 'Duration like "30d"'
+          schema:
+            type: string
+            default: 30d
+        - name: dryRun
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Trigger count and last-triggered timestamp for the window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyStatsResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/approvals:
     get:
       tags: [approvals]
@@ -1323,3 +1364,16 @@ components:
         auditLogId:
           type: string
           format: uuid
+    PolicyStatsResponse:
+      type: object
+      required: [policyId, window, firedLast30d]
+      properties:
+        policyId:
+          type: string
+        window:
+          type: string
+        firedLast30d:
+          type: integer
+        lastTriggeredAt:
+          type: [string, "null"]
+          format: date-time

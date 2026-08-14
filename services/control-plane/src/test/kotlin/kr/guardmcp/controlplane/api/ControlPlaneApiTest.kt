@@ -223,6 +223,56 @@ class ControlPlaneApiTest : ApiTestSupport() {
     }
 
     @Test
+    fun `policy stats for a never-triggered policy is a zero count, not a 404`() {
+        val response = get("/api/v1/policies/mask_korean_phone/stats")
+
+        assertEquals(200, response.statusCode())
+        val body = parseMap(response.body())
+        assertEquals("mask_korean_phone", body["policyId"])
+        assertEquals(0, body["firedLast30d"])
+        assertNull(body["lastTriggeredAt"])
+    }
+
+    @Test
+    fun `policy stats counts guard_event rows whose matched_policy_ids contains the id`() {
+        val eventId = UUID.randomUUID()
+        val ts = Instant.parse("2026-05-01T00:00:00Z")
+        send(
+            "POST", "/api/v1/events",
+            mapOf(
+                "eventId" to eventId.toString(),
+                "sessionId" to UUID.randomUUID().toString(),
+                "ts" to ts.toString(),
+                "direction" to "response",
+                "toolName" to "read_file",
+                "argsDigest" to "sha256:abc123",
+                "verdict" to "block",
+                "riskScore" to 90,
+                "matchedPolicyIds" to listOf("approve_external_email"),
+                "detections" to emptyList<Any>(),
+            ),
+        )
+
+        val response = get("/api/v1/policies/approve_external_email/stats?window=3650d")
+
+        assertEquals(200, response.statusCode())
+        val body = parseMap(response.body())
+        assertEquals(1, body["firedLast30d"])
+        assertEquals(ts.toString(), body["lastTriggeredAt"])
+    }
+
+    @Test
+    fun `policy stats rejects an unknown policy id and a malformed window`() {
+        val unknown = get("/api/v1/policies/does-not-exist/stats")
+        assertEquals(404, unknown.statusCode())
+        assertEquals("policy_not_found", parseMap(unknown.body())["code"])
+
+        val badWindow = get("/api/v1/policies/mask_korean_phone/stats?window=bogus")
+        assertEquals(400, badWindow.statusCode())
+        assertEquals("invalid_window", parseMap(badWindow.body())["code"])
+    }
+
+    @Test
     fun `policy pack toggle round-trips and bumps the version`() {
         val disabled = send("PUT", "/api/v1/policy-packs/korean-pii", mapOf("enabled" to false))
         assertEquals(200, disabled.statusCode())

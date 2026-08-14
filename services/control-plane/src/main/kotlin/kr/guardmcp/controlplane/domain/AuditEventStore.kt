@@ -46,6 +46,9 @@ interface AuditEventQueries {
     fun findById(eventId: UUID): GuardEventRecord?
 }
 
+/** `GET /policies/{id}/stats` (GMCP-80 §3.5): a policy's trigger count and most recent hit within a window. */
+data class PolicyTriggerStats(val triggeredCount: Int, val lastTriggeredAt: Instant?)
+
 @Component
 class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQueries {
     // Spring Boot doesn't publish a `com.fasterxml.jackson.databind.ObjectMapper` bean here
@@ -129,6 +132,15 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
         }
         return jdbcTemplate.query(sql, rowMapper, *args.toTypedArray())
     }
+
+    /** `matched_policy_ids` is a `text[]`; `= ANY(...)` is the array-membership test for it. */
+    fun policyStats(policyId: String, since: Instant): PolicyTriggerStats =
+        jdbcTemplate.query(
+            "SELECT COUNT(*) AS triggered_count, MAX(ts) AS last_ts FROM guard_event WHERE ? = ANY(matched_policy_ids) AND ts >= ?",
+            { rs, _ -> PolicyTriggerStats(rs.getInt("triggered_count"), rs.getTimestamp("last_ts")?.toInstant()) },
+            policyId,
+            Timestamp.from(since),
+        ).first()
 
     private val rowMapper = RowMapper { rs, _ ->
         @Suppress("UNCHECKED_CAST")
