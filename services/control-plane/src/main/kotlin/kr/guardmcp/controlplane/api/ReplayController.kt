@@ -5,13 +5,21 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.annotation.JsonUnwrapped
 import kr.guardmcp.controlplane.domain.ChainStatus
 import kr.guardmcp.controlplane.domain.ReplayTimelines
+import kr.guardmcp.controlplane.domain.SessionReportRenderer
 import kr.guardmcp.controlplane.domain.TimelineNode
+import org.springframework.http.ContentDisposition
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.time.format.DateTimeParseException
 import java.util.UUID
@@ -45,6 +53,8 @@ data class EventLookupResponse(
     @get:JsonUnwrapped val node: TimelineNode,
 )
 
+data class ExportRequest(val format: String = "html", val theme: String = "light")
+
 /**
  * `GET /sessions`, `GET /sessions/{id}/timeline`, `GET /events/{id}` — the Replay screen's data
  * source (GMCP-28). Reads through [ReplayTimelines], which serves seeded demo sessions and the
@@ -52,7 +62,7 @@ data class EventLookupResponse(
  */
 @RestController
 @RequestMapping("/api/v1")
-class ReplayController(private val replayStore: ReplayTimelines) {
+class ReplayController(private val replayStore: ReplayTimelines, private val reportRenderer: SessionReportRenderer) {
 
     @GetMapping("/sessions")
     fun sessions(
@@ -132,6 +142,42 @@ class ReplayController(private val replayStore: ReplayTimelines) {
         )
     }
 
+    /**
+     * GMCP-80 §3.7 (M4 deliverable; console exposure deferred, but the API ships now). Sync
+     * file-stream response, per the spec's own sanctioned fallback ("스코프가 확정되지 않았다면
+     * 우선 동기 응답... 후속 이슈로 비동기 전환 검토") — no async job/polling endpoint exists yet.
+     * The report is built straight from [ReplayTimelines]'s timeline (same data `GET
+     * /sessions/{id}/timeline` serves), so it can only ever carry masked text (NFR-04).
+     */
+    @PostMapping("/sessions/{sessionId}/export")
+    fun export(@PathVariable sessionId: String, @RequestBody(required = false) request: ExportRequest?): ResponseEntity<ByteArray> {
+        val format = request?.format ?: "html"
+        val theme = request?.theme ?: "light"
+        if (format !in VALID_EXPORT_FORMATS) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "invalid_format", "format must be one of $VALID_EXPORT_FORMATS")
+        }
+        if (theme != "light") {
+            throw ApiException(HttpStatus.BAD_REQUEST, "invalid_theme", "only the light theme is supported")
+        }
+
+        val id = parseUuidOrNull(sessionId) ?: notFoundSession(sessionId)
+        val session = replayStore.session(id) ?: notFoundSession(sessionId)
+        val nodes = replayStore.timeline(id) ?: notFoundSession(sessionId)
+        val chain = replayStore.chainResult(id)
+
+        val html = reportRenderer.renderHtml(session, nodes, chain)
+        val (bytes, mediaType, extension) = if (format == "pdf") {
+            Triple(reportRenderer.renderPdf(html), MediaType.APPLICATION_PDF, "pdf")
+        } else {
+            Triple(html.toByteArray(StandardCharsets.UTF_8), MediaType.TEXT_HTML, "html")
+        }
+        val disposition = ContentDisposition.attachment().filename("session-$id-report.$extension").build()
+        return ResponseEntity.ok()
+            .contentType(mediaType)
+            .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+            .body(bytes)
+    }
+
     @GetMapping("/events/{eventId}")
     fun event(@PathVariable eventId: String): EventLookupResponse {
         val id = parseUuidOrNull(eventId) ?: notFoundEvent(eventId)
@@ -175,5 +221,6 @@ class ReplayController(private val replayStore: ReplayTimelines) {
         private const val MAX_TIMELINE_LIMIT = 1000
         private const val ANCHOR_WINDOW_RADIUS = 50
         private const val ANCHOR_WINDOW_THRESHOLD = 200
+        private val VALID_EXPORT_FORMATS = setOf("html", "pdf")
     }
 }

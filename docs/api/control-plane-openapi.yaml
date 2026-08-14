@@ -131,6 +131,41 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/sessions/{sessionId}/export:
+    post:
+      tags: [sessions]
+      summary: Session report export (GMCP-80 §3.7, M4 deliverable)
+      description: >-
+        Synchronous file-stream response (no async job endpoint yet — the
+        spec's own sanctioned fallback while that scope is unconfirmed).
+        Renders the session's timeline, verdict rationale and chain status
+        straight from the same data GET /sessions/{id}/timeline serves, so
+        the report can only ever carry masked text (NFR-04). Console
+        exposure is deferred to M4; the API is available now.
+      operationId: exportSession
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExportRequest"
+      responses:
+        "200":
+          description: The rendered report as an attachment
+          content:
+            text/html: {}
+            application/pdf: {}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/events/recent:
     get:
       tags: [sessions]
@@ -1377,3 +1412,14 @@ components:
         lastTriggeredAt:
           type: [string, "null"]
           format: date-time
+    ExportRequest:
+      type: object
+      properties:
+        format:
+          type: string
+          enum: [html, pdf]
+          default: html
+        theme:
+          type: string
+          enum: [light]
+          default: light

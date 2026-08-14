@@ -212,6 +212,49 @@ class ControlPlaneApiTest : ApiTestSupport() {
     }
 
     @Test
+    fun `html export contains only the masked form, never the raw secret`() {
+        val response = send("POST", "/api/v1/sessions/${DemoSeed.SESSION_INJECTION_ID}/export", mapOf("format" to "html", "theme" to "light"))
+
+        assertEquals(200, response.statusCode())
+        assertTrue(response.headers().firstValue("Content-Type").orElse("").startsWith("text/html"))
+        assertTrue(response.headers().firstValue("Content-Disposition").orElse("").contains("attachment"))
+        assertFalse(response.body().contains("AKIAIOSFODNN7EXAMPLE"))
+        assertTrue(response.body().contains("AKIA****************"))
+    }
+
+    @Test
+    fun `pdf export produces a real PDF document`() {
+        val response = send("POST", "/api/v1/sessions/${DemoSeed.SESSION_INJECTION_ID}/export", mapOf("format" to "pdf", "theme" to "light"))
+
+        assertEquals(200, response.statusCode())
+        assertTrue(response.headers().firstValue("Content-Type").orElse("").startsWith("application/pdf"))
+        assertTrue(response.body().startsWith("%PDF-"))
+    }
+
+    @Test
+    fun `export defaults to html when no body is sent`() {
+        val response = send("POST", "/api/v1/sessions/${DemoSeed.SESSION_INJECTION_ID}/export", null)
+
+        assertEquals(200, response.statusCode())
+        assertTrue(response.headers().firstValue("Content-Type").orElse("").startsWith("text/html"))
+    }
+
+    @Test
+    fun `export rejects an unknown format, a non-light theme, and an unknown session`() {
+        val badFormat = send("POST", "/api/v1/sessions/${DemoSeed.SESSION_INJECTION_ID}/export", mapOf("format" to "docx", "theme" to "light"))
+        assertEquals(400, badFormat.statusCode())
+        assertEquals("invalid_format", parseMap(badFormat.body())["code"])
+
+        val badTheme = send("POST", "/api/v1/sessions/${DemoSeed.SESSION_INJECTION_ID}/export", mapOf("format" to "html", "theme" to "dark"))
+        assertEquals(400, badTheme.statusCode())
+        assertEquals("invalid_theme", parseMap(badTheme.body())["code"])
+
+        val unknownSession = send("POST", "/api/v1/sessions/${UUID.randomUUID()}/export", null)
+        assertEquals(404, unknownSession.statusCode())
+        assertEquals("session_not_found", parseMap(unknownSession.body())["code"])
+    }
+
+    @Test
     fun `policies and policy packs expose the seeded catalog`() {
         val policies = get("/api/v1/policies")
         val packs = get("/api/v1/policy-packs")

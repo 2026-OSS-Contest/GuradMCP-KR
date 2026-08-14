@@ -29,6 +29,9 @@ dependencies {
     // `implementation`, not `runtimeOnly`: the audit repository uses PGobject/Array directly
     // (text[] and jsonb columns) rather than going through an ORM.
     implementation("org.postgresql:postgresql")
+    // GMCP-80 §3.7 (POST /sessions/{id}/export): renders the session report's HTML straight to
+    // PDF, no external binary (wkhtmltopdf, headless Chrome) required.
+    implementation("io.github.openhtmltopdf:openhtmltopdf-pdfbox:1.1.73")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
