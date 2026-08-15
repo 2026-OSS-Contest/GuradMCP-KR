@@ -309,6 +309,11 @@ function buildGuardEvent(
     ...(decision.normalizedPath !== undefined
       ? { normalizedPath: decision.normalizedPath }
       : {}),
+    // GMCP-68 §3.2: only a fail-closed/fail-open synthesized decision ever sets these.
+    ...(decision.errorInfo !== undefined ? { errorInfo: decision.errorInfo } : {}),
+    ...(decision.failurePolicyApplied !== undefined
+      ? { failurePolicyApplied: decision.failurePolicyApplied }
+      : {}),
     ...(storeRawPayload ? { rawPayload: ctx.payload } : {}),
     ...extras,
   };

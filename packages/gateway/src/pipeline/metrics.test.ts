@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { metricsSnapshot, recordInspection, resetMetrics } from "./metrics.js";
+import { metricsSnapshot, recordInspection, recordPipelineError, resetMetrics } from "./metrics.js";
 
 describe("pipeline metrics", () => {
   beforeEach(resetMetrics);
@@ -36,5 +36,19 @@ describe("pipeline metrics", () => {
     const { latency, inspections } = metricsSnapshot();
     expect(inspections).toBe(0);
     expect(latency).toMatchObject({ count: 0, p50Ms: 0, p95Ms: 0, p99Ms: 0, maxMs: 0 });
+  });
+
+  it("counts pipeline errors per stage and outcome (NFR-06, GMCP-68 §2.2)", () => {
+    recordPipelineError("detection", "fail_closed");
+    recordPipelineError("detection", "fail_closed");
+    recordPipelineError("policy_engine", "fail_open");
+    expect(metricsSnapshot().guard_pipeline_errors_total).toEqual({
+      "detection:fail_closed": 2,
+      "policy_engine:fail_open": 1
+    });
+  });
+
+  it("reports no pipeline errors before any have been recorded", () => {
+    expect(metricsSnapshot().guard_pipeline_errors_total).toEqual({});
   });
 });
