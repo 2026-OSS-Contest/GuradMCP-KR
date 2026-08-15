@@ -197,10 +197,8 @@ export const getApprovals = (signal?: AbortSignal) =>
   get<Approval[]>("/approvals", signal);
 
 /**
- * SCR-501 Settings (spec §5.7). **No control plane serves `/settings`** — it belongs to GMCP-80,
- * so today it only ever reaches the mock. The path and verb are the ones the real endpoint will
- * use, so wiring the backend needs no change here. The screen's other write, server trust, is
- * real: see `putServerTrust`.
+ * SCR-501 Settings (spec §5.7). Served for real by GMCP-68's `SettingsController`; MSW still
+ * answers it in development (`mocks/settings.ts`) whenever `NEXT_PUBLIC_API_BASE_URL` is unset.
  */
 export const getSettings = (signal?: AbortSignal) => get<GatewaySettings>("/settings", signal);
 
