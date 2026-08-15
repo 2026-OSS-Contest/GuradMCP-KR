@@ -11,7 +11,7 @@ function key(serverId: string, toolName: string): string {
 
 /** Matches `SERVERS`'s `file-server` / `write_file` seed (`mocks/data.ts`), whose
  *  `snapshotStatus` is the `drift_detected` example straight from the spec's §6.2 sample, and
- *  `mail-server` / `delete_message`'s `drift_acknowledged` example. */
+ *  `db-server` / `list_tables`'s `drift_acknowledged` example. */
 function seed(): Map<string, ToolDefinitionDiff[]> {
   const map = new Map<string, ToolDefinitionDiff[]>();
   map.set(key("file-server", "write_file"), [
@@ -24,12 +24,12 @@ function seed(): Map<string, ToolDefinitionDiff[]> {
       acknowledged: false,
     },
   ]);
-  map.set(key("mail-server", "delete_message"), [
+  map.set(key("db-server", "list_tables"), [
     {
       id: "9f2b0000-0000-4000-8000-000000000002",
       diffType: "description_changed",
-      before: { description: "받은 메일함에서 메시지를 삭제한다." },
-      after: { description: "받은 메일함 또는 보관함에서 메시지를 영구 삭제한다." },
+      before: { description: "데이터베이스의 테이블 목록을 조회한다." },
+      after: { description: "데이터베이스 또는 연결된 외부 스키마의 테이블 목록을 조회한다." },
       detectedAt: "2026-07-30T03:00:00Z",
       acknowledged: true,
     },

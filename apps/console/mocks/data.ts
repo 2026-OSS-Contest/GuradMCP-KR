@@ -84,16 +84,7 @@ export const SERVERS: McpServer[] = [
         name: "delete_message",
         risk: "medium",
         policies: [],
-        // FR-GW-03 §6.1/§6.3: the operator acknowledged (dismissed) the one diff below, but
-        // never re-approved — the baseline still doesn't cover the current definition, so
-        // this is deliberately not `in_sync`. See `mocks/tool-diffs.ts`'s matching seed.
-        snapshotStatus: {
-          state: "drift_acknowledged",
-          snapshotCapturedAt: "2026-07-15T00:00:00Z",
-          lastCheckedAt: "2026-08-02T03:00:00Z",
-          pendingDiffCount: 0,
-          latestDiffId: null,
-        },
+        snapshotStatus: IN_SYNC,
       },
     ],
   },
@@ -120,7 +111,18 @@ export const SERVERS: McpServer[] = [
         name: "list_tables",
         risk: "low",
         policies: [],
-        snapshotStatus: IN_SYNC,
+        // FR-GW-03 §6.1/§6.3: the operator acknowledged (dismissed) the one diff below, but
+        // never re-approved — the baseline still doesn't cover the current definition, so
+        // this is deliberately not `in_sync`. See `mocks/tool-diffs.ts`'s matching seed.
+        // Placed on the disconnected server so SCR-501's "연결 끊김" label (gated on
+        // `server.connected`, not tool state) isn't affected by this fixture.
+        snapshotStatus: {
+          state: "drift_acknowledged",
+          snapshotCapturedAt: "2026-07-15T00:00:00Z",
+          lastCheckedAt: "2026-08-02T03:00:00Z",
+          pendingDiffCount: 0,
+          latestDiffId: null,
+        },
       },
       {
         name: "describe_table",
