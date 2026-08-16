@@ -19,6 +19,8 @@ interface Sample { id: string; label: boolean; text: string; type?: string }
 interface KoreanServiceTokenSample { id: string; label: boolean; text: string; credential?: string }
 /** FR-SEC-03: the entropy net has no vendor to name, so a sample only carries its verdict. */
 interface EntropySample { id: string; label: boolean; text: string; note?: string }
+/** FR-LAB-02: a Korean injection sample names the rule it must trip, plus the linguistic feature it probes. */
+interface KoreanInjectionSample { id: string; label: boolean; text: string; subtype?: string; note?: string }
 interface Scenario { id: string; text: string; expectBlocked: boolean }
 interface AuthorFixture {
   id: string;
@@ -54,6 +56,8 @@ export interface BenchmarkThresholds {
   koreanServiceTokenFpr: number;
   highEntropyRecall: number;
   highEntropyFpr: number;
+  koreanInjectionRecall: number;
+  koreanInjectionFpr: number;
 }
 
 export interface BenchmarkMetrics {
@@ -80,6 +84,10 @@ export interface BenchmarkMetrics {
   koreanServiceTokenSamples: number;
   koreanServiceTokenRecall: number;
   koreanServiceTokenFpr: number;
+  koreanInjectionSamples: number;
+  koreanInjectionRecall: number;
+  koreanInjectionFpr: number;
+  koreanInjectionSubtypes: number;
 }
 
 export interface BenchmarkReport {
@@ -89,6 +97,7 @@ export interface BenchmarkReport {
   perTypeRecall: Array<{ type: string; total: number; detected: number; recall: number }>;
   koreanServiceTokens: { samples: number; positives: number; negatives: number; recall: number; fpr: number; misses: unknown[] };
   highEntropySecrets: { samples: number; positives: number; negatives: number; recall: number; fpr: number; misses: unknown[] };
+  koreanInjection: { samples: number; positives: number; negatives: number; recall: number; fpr: number; subtypeCoverage: string[]; misses: unknown[] };
   validationImpact: { fprWithoutValidation: number; fprWithValidation: number; falsePositivesPrevented: number; fprReduction: number };
   scenarios: Array<{ id: string; passed: boolean; expectedBlocked: boolean; actualBlocked: boolean }>;
   fixtures: Array<{ id: string; coverage: AuthorFixture["coverage"]; passed: boolean; expected: AuthorFixture["expected"]; actual: { action: Action; matched_policy_ids: string[] } }>;
@@ -101,6 +110,7 @@ export async function runBenchmark(): Promise<BenchmarkReport> {
   const scenarios = JSON.parse(await readFile(new URL("../scenarios/threats.json", import.meta.url), "utf8")) as Scenario[];
   const koreanServiceTokenSamples = JSON.parse(await readFile(new URL("../datasets/korean-service-tokens.json", import.meta.url), "utf8")) as KoreanServiceTokenSample[];
   const entropySamples = JSON.parse(await readFile(new URL("../datasets/high-entropy-secrets.json", import.meta.url), "utf8")) as EntropySample[];
+  const koreanInjectionSamples = JSON.parse(await readFile(new URL("../datasets/korean-injection.json", import.meta.url), "utf8")) as KoreanInjectionSample[];
   const policyRoot = fileURLToPath(new URL("../../policy-packs", import.meta.url));
   const fixtureRoot = fileURLToPath(new URL("../policy-fixtures", import.meta.url));
   const policyPacks = await loadPolicyPacks(policyRoot);
@@ -247,7 +257,41 @@ export async function runBenchmark(): Promise<BenchmarkReport> {
     misses: entropyResults.filter(({ passed }) => !passed).map(({ id, note, detected }) => ({ id, note, detected }))
   };
 
-  const thresholds: BenchmarkThresholds = { recall: 0.90, fpr: 0.05, p95Ms: 50, blockRate: 0.80, scenarioPassRate: 1, fixturePassRate: 1, fixtureCoverageRate: 1, koreanServiceTokenRecall: 0.90, koreanServiceTokenFpr: 0.05, highEntropyRecall: 0.90, highEntropyFpr: 0.05 };
+  /**
+   * FR-LAB-02 (GMCP-96). Kept out of the PII recall above for the same reason the two
+   * blocks before it are: a strong PII score would otherwise hide Korean injection
+   * phrasing the detector stopped recognizing.
+   *
+   * The negatives are the point of this dataset. Korean business writing names the
+   * same nouns an attack uses — a QA document says 개발자 모드, a security policy says
+   * 알리지 않고, a design review says 시스템 프롬프트 — so an FPR measured only against
+   * unrelated text would report 0 while the detector fired on ordinary work.
+   *
+   * A positive must trip the exact subtype it names, so relaxing a rule until it
+   * matches by luck from a different branch fails here instead of passing.
+   */
+  const koreanInjectionResults = koreanInjectionSamples.map((sample) => {
+    const subtypes = new Set(detect(sample.text).filter(({ type }) => type === "INJECTION").map(({ subtype }) => subtype));
+    const detected = sample.subtype ? subtypes.has(sample.subtype) : subtypes.size > 0;
+    return { id: sample.id, label: sample.label, subtype: sample.subtype ?? null, note: sample.note ?? null, detected, passed: detected === sample.label };
+  });
+  const koreanInjectionPositives = koreanInjectionResults.filter(({ label }) => label);
+  const koreanInjectionNegatives = koreanInjectionResults.filter(({ label }) => !label);
+  const koreanInjection = {
+    samples: koreanInjectionResults.length,
+    positives: koreanInjectionPositives.length,
+    negatives: koreanInjectionNegatives.length,
+    recall: koreanInjectionPositives.length === 0
+      ? 0
+      : koreanInjectionPositives.filter(({ detected }) => detected).length / koreanInjectionPositives.length,
+    fpr: koreanInjectionNegatives.length === 0
+      ? 0
+      : koreanInjectionNegatives.filter(({ detected }) => detected).length / koreanInjectionNegatives.length,
+    subtypeCoverage: [...new Set(koreanInjectionPositives.map(({ subtype }) => subtype).filter((value): value is string => value !== null))].sort(),
+    misses: koreanInjectionResults.filter(({ passed }) => !passed).map(({ id, subtype, note, detected }) => ({ id, subtype, note, detected }))
+  };
+
+  const thresholds: BenchmarkThresholds = { recall: 0.90, fpr: 0.05, p95Ms: 50, blockRate: 0.80, scenarioPassRate: 1, fixturePassRate: 1, fixtureCoverageRate: 1, koreanServiceTokenRecall: 0.90, koreanServiceTokenFpr: 0.05, highEntropyRecall: 0.90, highEntropyFpr: 0.05, koreanInjectionRecall: 0.90, koreanInjectionFpr: 0.05 };
   const metrics: BenchmarkMetrics = {
     recall,
     fpr,
@@ -271,7 +315,11 @@ export async function runBenchmark(): Promise<BenchmarkReport> {
     highEntropyFpr: highEntropySecrets.fpr,
     koreanServiceTokenSamples: koreanServiceTokens.samples,
     koreanServiceTokenRecall: koreanServiceTokens.recall,
-    koreanServiceTokenFpr: koreanServiceTokens.fpr
+    koreanServiceTokenFpr: koreanServiceTokens.fpr,
+    koreanInjectionSamples: koreanInjection.samples,
+    koreanInjectionRecall: koreanInjection.recall,
+    koreanInjectionFpr: koreanInjection.fpr,
+    koreanInjectionSubtypes: koreanInjection.subtypeCoverage.length
   };
   const passed = metrics.recall >= thresholds.recall
     && metrics.fpr <= thresholds.fpr
@@ -283,7 +331,9 @@ export async function runBenchmark(): Promise<BenchmarkReport> {
     && metrics.highEntropyRecall >= thresholds.highEntropyRecall
     && metrics.highEntropyFpr <= thresholds.highEntropyFpr
     && metrics.koreanServiceTokenRecall >= thresholds.koreanServiceTokenRecall
-    && metrics.koreanServiceTokenFpr <= thresholds.koreanServiceTokenFpr;
+    && metrics.koreanServiceTokenFpr <= thresholds.koreanServiceTokenFpr
+    && metrics.koreanInjectionRecall >= thresholds.koreanInjectionRecall
+    && metrics.koreanInjectionFpr <= thresholds.koreanInjectionFpr;
   const fprWithoutValidation = negatives === 0 ? 0 : falsePositiveWithoutValidation / negatives;
   const validationImpact = {
     fprWithoutValidation,
@@ -291,7 +341,7 @@ export async function runBenchmark(): Promise<BenchmarkReport> {
     falsePositivesPrevented: falsePositiveWithoutValidation - falsePositive,
     fprReduction: fprWithoutValidation - fpr
   };
-  return { generatedAt: new Date().toISOString(), metrics, thresholds, perTypeRecall, koreanServiceTokens, highEntropySecrets, validationImpact, scenarios: scenarioResults, fixtures: fixtureResults, fixtureCoverage, passed };
+  return { generatedAt: new Date().toISOString(), metrics, thresholds, perTypeRecall, koreanServiceTokens, highEntropySecrets, koreanInjection, validationImpact, scenarios: scenarioResults, fixtures: fixtureResults, fixtureCoverage, passed };
 }
 
 function toDetection(tag: string): Detection {
