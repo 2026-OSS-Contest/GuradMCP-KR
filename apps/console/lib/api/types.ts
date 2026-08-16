@@ -187,8 +187,13 @@ export interface MaskDiff {
 
 export type ChainStatus = "verified" | "failed";
 
-/** A run of text, or a masked token rendered as a chip (e.g. PHONE, BANK_ACCOUNT). */
-export type ContentPart = { text: string } | { mask: string };
+/**
+ * A run of content: plain text, the masked token that replaced a detection (rendered as a chip,
+ * e.g. PHONE, BANK_ACCOUNT), or — on the raw side of the reveal modal — the value that token
+ * stands in for. 기획서 10.4 draws that one with the rule and the tint it
+ * calls "밑줄+틴트 하이라이트", so a reader sees at a glance which lines the masking touched.
+ */
+export type ContentPart = { text: string } | { mask: string } | { secret: string };
 
 /** One numbered line of masked content in the input/return sections and the reveal modal. */
 export interface ContentLine {
@@ -216,7 +221,8 @@ export interface RevealContent {
   /** Source line, e.g. "e-000  get_log  #C-20260712-142". */
   source: string;
   caseId: string;
-  raw: string;
+  /** Numbered like `masked`, so the two columns are read line against line. */
+  raw: ContentLine[];
   masked: ContentLine[];
 }
 

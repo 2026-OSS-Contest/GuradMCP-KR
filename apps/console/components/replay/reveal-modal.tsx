@@ -66,20 +66,12 @@ export function RevealModal({ content, onClose }: { content: RevealContent; onCl
             </h3>
             {/* Same numbered-line layout as MaskedContent so a raw line and its masked
                 counterpart share a row height and stay aligned across the two columns. */}
-            {/* Scrolls sideways rather than wrapping: the two columns are read line against line,
-                and a line that wraps on one side and not the other puts every row below it out of
-                step — which is the whole point of showing them side by side. */}
+            {/* The same component as the masked column: one numbered-line layout for both means a
+                raw line and its counterpart cannot drift apart. Scrolls sideways rather than
+                wrapping — a line that wraps on one side and not the other puts every row below it
+                out of step, which is the whole point of setting them side by side. */}
             <div className="overflow-x-auto rounded-lg bg-(--primitive-opacity-black-alpha-75) p-3">
-              <div className="flex w-max flex-col gap-1 font-mono text-body-mono-b3-rg text-grayscale-200">
-                {content.raw.split("\n").map((text, index) => (
-                  <div key={index} className="flex gap-2">
-                    <span className="flex-none text-(--primitive-opacity-white-alpha-50)">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <span className="whitespace-pre">{text}</span>
-                  </div>
-                ))}
-              </div>
+              <MaskedContent lines={content.raw} nowrap />
             </div>
           </section>
           <section className="flex flex-col gap-2">

@@ -174,16 +174,18 @@ const CONSULT_MASKED: ContentLine[] = [
   line("07", { text: "영수증 발송: " }, { mask: "EMAIL" }),
   line("08", { text: "배송지: " }, { mask: "ADDRESS" })
 ];
-const CONSULT_RAW = [
-  "[상담 로그 #C-20260712-142]",
-  "유형: 환불 계좌 변경, 2026-07-12 14:02",
-  "고객 김민서 님이 환불 계좌 변경을 요청함.",
-  "등록 연락처 010-4728-1953 으로 본인 확인 완료.",
-  "변경 계좌: 국민은행 942102-01-583274 (예금주: 김민서)",
-  "본인확인 과정에서 주민등록번호 881105-2069417 확인",
-  "영수증 발송: minseo.kim88@exampe.com",
-  "배송지: 경기도 성남시 분당구 판교역로 235, 704동 1102호"
-].join("\n");
+// Numbered like the masked side, part for part: each `secret` is exactly what the chip opposite
+// it stands in for, so the two columns line up run by run and the rule falls on the value alone.
+const CONSULT_RAW: ContentLine[] = [
+  line("01", { text: "[상담 로그 #C-20260712-142]" }),
+  line("02", { text: "유형: 환불 계좌 변경, 2026-07-12 14:02" }),
+  line("03", { text: "고객 김민서 님이 환불 계좌 변경을 요청함." }),
+  line("04", { text: "등록 연락처 " }, { secret: "010-4728-1953" }, { text: " 으로 본인 확인 완료." }),
+  line("05", { text: "변경 계좌: 국민은행 " }, { secret: "942102-01-583274" }, { text: " (예금주: 김민서)" }),
+  line("06", { text: "본인확인 과정에서 주민등록번호 " }, { secret: "881105-2069417" }, { text: " 확인" }),
+  line("07", { text: "영수증 발송: " }, { secret: "minseo.kim88@exampe.com" }),
+  line("08", { text: "배송지: " }, { secret: "경기도 성남시 분당구 판교역로 235, 704동 1102호" })
+];
 
 const REVEAL: RevealContent = {
   source: "e-000  get_log",
