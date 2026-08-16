@@ -20,7 +20,7 @@ export function StreamTable({ rows }: { rows: StreamRow[] }) {
       {rows.length === 0 ? (
         <>
           <StreamHeader />
-          <p className="flex items-center justify-center gap-2 py-10 text-body-text-b3-md text-grayscale-400">
+          <p className="flex items-center justify-center gap-2 py-10 text-body-text-b2-md text-grayscale-white">
             <BannerInfoIcon className="size-4 flex-none" aria-hidden />
             {t("streamEmpty")}
           </p>
