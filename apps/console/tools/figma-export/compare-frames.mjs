@@ -508,13 +508,14 @@ async function compareDrafts(browser, files) {
     const frame = (({ w, h }) => ({ w: Math.round(w / 2), h: Math.round(h / 2) }))(pngSize(png));
     const geometry = figmaGeometry(jsonFile);
 
-    const context = await browser.newContext({ viewport: { width: Math.max(frame.w, 800), height: Math.max(frame.h, 600) } });
+    const context = await browser.newContext({ viewport: { width: Math.max(frame.w, 800), height: Math.max(frame.h, 600) }, deviceScaleFactor: 2 });
     const page = await context.newPage();
     await page.goto(pathToFileURL(file).href);
     await page.waitForTimeout(300);
     const draft = await page.evaluate(SCRAPE, "figma");
-    const draftShot = await shoot(page, page.locator("body > div").first());
-    const figmaShot = await shootPng(page, png, frame.w, frame.h);
+    // 76 frames rather than 36, so the page pays for the extra pairs in compression.
+    const draftShot = await shoot(page, page.locator("body > div").first(), undefined, 22);
+    const figmaShot = await shootPng(page, png, frame.w, frame.h, 22);
     await context.close();
 
     const once = (list, text) => list.filter((entry) => norm(entry.text) === text).length === 1;
@@ -603,8 +604,11 @@ if (!selected.length) {
 
 /** A JPEG data URI. Quality 55 keeps a 1280-wide dark screen near 65KB, so 36 states of both
  *  sides stay well inside what a single self-contained page can carry. */
-async function shoot(page, locator, clip) {
-  const buffer = await (locator ?? page).screenshot({ type: "jpeg", quality: 55, ...(clip ? { clip } : {}) });
+async function shoot(page, locator, clip, quality = 45) {
+  // `device`, so both sides are captured at the same 2x the export is drawn at. Downsampling one
+  // side and not the other thins its strokes: measured on the rail's labels, the screen read 8.8%
+  // heavier than the frame at 1x and 1.1% lighter at 2x. That is the capture, not the type.
+  const buffer = await (locator ?? page).screenshot({ type: "jpeg", quality, scale: "device", ...(clip ? { clip } : {}) });
   return `data:image/jpeg;base64,${buffer.toString("base64")}`;
 }
 
@@ -664,7 +668,7 @@ function pngSize(file) {
  * Figma exports at 2x, which is four times the bytes for no more detail at the size the report
  * shows it, so it is re-rendered at 1x and re-encoded on the way in.
  */
-async function shootPng(page, file, width, height) {
+async function shootPng(page, file, width, height, quality) {
   const data = readFileSync(file).toString("base64");
   await page.setContent(
     `<body style="margin:0"><img src="data:image/png;base64,${data}" ` +
@@ -672,7 +676,7 @@ async function shootPng(page, file, width, height) {
   );
   const image = page.locator("img");
   await image.waitFor();
-  return shoot(page, image);
+  return shoot(page, image, undefined, quality);
 }
 
 const browser = await chromium.launch();
@@ -714,7 +718,7 @@ for (const entry of selected) {
   const geometryFile = file.replace(/\.html$/, ".json");
   const geometry = existsSync(geometryFile) ? figmaGeometry(geometryFile) : [];
 
-  const context = await browser.newContext({ viewport: { width: Math.max(frame.w, 1280), height: frame.h } });
+  const context = await browser.newContext({ viewport: { width: Math.max(frame.w, 1280), height: frame.h }, deviceScaleFactor: 2 });
   const page = await context.newPage();
 
   await page.goto(pathToFileURL(file).href);
