@@ -469,6 +469,32 @@ async function shoot(page, locator, clip) {
   return `data:image/jpeg;base64,${buffer.toString("base64")}`;
 }
 
+/** The PNG's own pixel size, straight out of the IHDR chunk. */
+function pngSize(file) {
+  const header = readFileSync(file).subarray(16, 24);
+  return { w: header.readUInt32BE(0), h: header.readUInt32BE(4) };
+}
+
+/**
+ * The comparison shows the exported .png, not the .html. The draft is a reconstruction — close,
+ * but not what Figma actually drew — so comparing against it hides the very differences the
+ * comparison is for. The .html stays the source for the measurements, since only it has computed
+ * styles; the .png is what the eye is given.
+ *
+ * Figma exports at 2x, which is four times the bytes for no more detail at the size the report
+ * shows it, so it is re-rendered at 1x and re-encoded on the way in.
+ */
+async function shootPng(page, file, width, height) {
+  const data = readFileSync(file).toString("base64");
+  await page.setContent(
+    `<body style="margin:0"><img src="data:image/png;base64,${data}" ` +
+      `style="display:block;width:${width}px;height:${height}px" /></body>`
+  );
+  const image = page.locator("img");
+  await image.waitFor();
+  return shoot(page, image);
+}
+
 const browser = await chromium.launch();
 const report = [];
 let frames = 0;
@@ -489,8 +515,11 @@ for (const entry of selected) {
   // The draft's frame is a fixed-size box at 0,0, so shooting it and then shooting the screen
   // clipped to the same box gives two images that overlay pixel for pixel — which is what makes
   // a wipe between them readable at all.
-  const frameBox = REPORT ? await page.locator("body > div").first().boundingBox() : null;
-  const figmaShot = frameBox ? await shoot(page, page.locator("body > div").first()) : null;
+  // The .png is the authority for what the frame looks like; its half-size is the box both
+  // images are shown at, so they overlay exactly.
+  const png = file.replace(/\.html$/, ".png");
+  const shotBox =
+    REPORT && existsSync(png) ? (({ w, h }) => ({ w: Math.round(w / 2), h: Math.round(h / 2) }))(pngSize(png)) : null;
 
   await page.setViewportSize({ width: entry.width, height: 1400 });
   if (entry.scenario) {
@@ -502,13 +531,12 @@ for (const entry of selected) {
   if (entry.state) await entry.state(page).catch((error) => console.log(`   ! state failed: ${error.message}`));
   await page.waitForTimeout(600);
   const app = await page.evaluate(SCRAPE, "app");
-  const appShot = frameBox
-    ? await shoot(page, null, { x: 0, y: 0, width: Math.round(frameBox.width), height: Math.round(frameBox.height) })
-    : null;
+  const appShot = shotBox ? await shoot(page, null, { x: 0, y: 0, width: shotBox.w, height: shotBox.h }) : null;
+  const figmaShot = shotBox ? await shootPng(page, png, shotBox.w, shotBox.h) : null;
 
   const result = compare(figma, app);
   const { missing, sample, extra, type, color, boxes, position } = result;
-  report.push({ ...entry, state: entry.frame.split('/').pop(), ...result, figmaShot, appShot, shotW: frameBox && Math.round(frameBox.width), shotH: frameBox && Math.round(frameBox.height) });
+  report.push({ ...entry, state: entry.frame.split('/').pop(), ...result, figmaShot, appShot, shotW: shotBox && shotBox.w, shotH: shotBox && shotBox.h });
   frames += 1;
   findings += missing.length + extra.length + type.length + color.length + boxes.length + position.length;
 
