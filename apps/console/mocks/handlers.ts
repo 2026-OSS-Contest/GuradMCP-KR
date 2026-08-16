@@ -15,6 +15,7 @@ import {
 } from "@/lib/api/types";
 import { allApprovals, decide, raiseApproval, resetApprovals, resolveRaised } from "./approvals";
 import { ATTACK_SCENARIOS, attackRun } from "./attack-lab";
+import { acknowledgeToolDiff, allDiffsOf, pendingDiffsOf, reapproveToolDiffs } from "./tool-diffs";
 
 import { previewOf } from "./detect";
 import {
@@ -152,6 +153,64 @@ export const handlers = [
       connected: server.connected,
       trust: server.trust,
     });
+  }),
+
+  // SCR-101 snapshot diff popover (FR-GW-03 §6.2/§6.3). Mirrors ToolSnapshotController.kt.
+  http.get("*/api/v1/servers/:id/tools/:toolName/diffs", async ({ request, params }) => {
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    const toolName = String(params.toolName);
+    const serverId = String(params.id);
+    const includeAcknowledged = new URL(request.url).searchParams.get("includeAcknowledged") === "true";
+    const diffs = includeAcknowledged ? allDiffsOf(serverId, toolName) : pendingDiffsOf(serverId, toolName);
+    return HttpResponse.json({ toolName, diffs });
+  }),
+
+  http.post("*/api/v1/servers/:id/tools/:toolName/diffs/:diffId/acknowledge", async ({ params }) => {
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    const serverId = String(params.id);
+    const toolName = String(params.toolName);
+    const diff = acknowledgeToolDiff(serverId, toolName, String(params.diffId));
+    if (!diff) return HttpResponse.json({ code: "tool_diff_not_found", message: "diff not found" }, { status: 404 });
+
+    // The real control plane derives `snapshotStatus` fresh from the diff table on every
+    // GET /servers (ServerController.kt's toolInventory); this fixture is static, so mirror
+    // that derivation here. Acknowledging never touches the baseline (§6.3), so the last
+    // pending diff clearing does not mean `in_sync` — it means `drift_acknowledged` until a
+    // reapprove actually moves the baseline (see the reapprove handler below).
+    const server = SERVERS.find((candidate) => candidate.id === serverId);
+    const tool = server?.tools.find((candidate) => candidate.name === toolName);
+    if (tool) {
+      const remaining = pendingDiffsOf(serverId, toolName);
+      tool.snapshotStatus = {
+        ...tool.snapshotStatus,
+        state: remaining.length > 0 ? "drift_detected" : "drift_acknowledged",
+        pendingDiffCount: remaining.length,
+        latestDiffId: remaining[0]?.id ?? null,
+      };
+    }
+    return HttpResponse.json(diff);
+  }),
+
+  http.post("*/api/v1/servers/:id/tools/:toolName/reapprove", async ({ params }) => {
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    const serverId = String(params.id);
+    const toolName = String(params.toolName);
+    const server = SERVERS.find((candidate) => candidate.id === serverId);
+    const tool = server?.tools.find((candidate) => candidate.name === toolName);
+    if (!tool) return HttpResponse.json({ code: "tool_not_observed", message: "no observation for tool" }, { status: 404 });
+
+    reapproveToolDiffs(serverId, toolName);
+    tool.snapshotStatus = {
+      state: "in_sync",
+      snapshotCapturedAt: new Date().toISOString(),
+      lastCheckedAt: tool.snapshotStatus.lastCheckedAt,
+      pendingDiffCount: 0,
+      latestDiffId: null,
+    };
+    return HttpResponse.json({ approved: true, tools: [{ toolName, description: "" }] });
   }),
 
   http.get("*/api/v1/events/recent", async () =>

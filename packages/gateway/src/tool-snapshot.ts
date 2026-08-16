@@ -1,0 +1,172 @@
+// Tool definition fingerprint + diff classification (FR-GW-03, threat T-05 Rug Pull).
+//
+// Pure functions only — no I/O, no Control Plane calls. The baseline a `tools/list`
+// observation is compared against is fetched/cached elsewhere (tool-snapshot-registry.ts);
+// this module only answers "given a baseline and a current tool list, what changed."
+import { createHash } from "node:crypto";
+
+/** One tool descriptor as read off a `tools/list` response. */
+export interface ToolDefinitionLite {
+  name: string;
+  description: string;
+  inputSchema: unknown;
+}
+
+/** The approved baseline for one tool, as synced from the Control Plane's active `ToolSnapshot`. */
+export interface ToolSnapshotBaselineEntry {
+  toolName: string;
+  description: string;
+  inputSchema: unknown;
+  /** Opaque to every consumer but this module — never recomputed on the Control Plane side
+   *  (spec §4: "Definition Fingerprint"). Two independent SHA-256 implementations normalizing
+   *  the same JSON would drift apart on key order, unicode, or whitespace and read every tool
+   *  as changed, so only this module ever produces or compares a fingerprint value. */
+  fingerprint: string;
+}
+
+export type ToolDiffType =
+  | "tool_added"
+  | "tool_removed"
+  | "description_changed"
+  | "schema_changed";
+
+export interface ToolDiffSide {
+  description: string;
+  inputSchema?: unknown;
+}
+
+/** One detected drift (spec §4 `ToolDefinitionDiff`, minus the storage/audit fields the
+ *  Control Plane fills in — `id`, `snapshotId`, `detectedAt`, `acknowledged*`). */
+export interface ToolDefinitionDiff {
+  toolName: string;
+  diffType: ToolDiffType;
+  /** `null` only for `tool_added`. */
+  before: ToolDiffSide | null;
+  /** `null` only for `tool_removed`. */
+  after: ToolDiffSide | null;
+}
+
+/**
+ * Serializes `value` with every object's keys sorted, so two structurally identical
+ * schemas that were merely built/serialized in a different key order fingerprint the
+ * same (spec §5.1: "순서 의존성을 없애기 위해"). Array element order is preserved —
+ * arrays are ordered data, not a set.
+ */
+function stableStringify(value: unknown): string {
+  return JSON.stringify(sortKeysDeep(value));
+}
+
+function sortKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeysDeep);
+  if (value !== null && typeof value === "object") {
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+      sorted[key] = sortKeysDeep((value as Record<string, unknown>)[key]);
+    }
+    return sorted;
+  }
+  return value;
+}
+
+/**
+ * Definition Fingerprint (spec §4, §5.1): `sha256(정규화된 description + inputSchema)`.
+ * A NUL (`\x00`) separator between the two halves avoids the classic concatenation ambiguity
+ * (`description="a", schema='"bc"'` vs. `description="ab", schema='"c"'` must not collide).
+ * Written as the explicit `\x00` escape rather than a raw byte in the source, so it reads as a
+ * real separator instead of as invisible whitespace indistinguishable from a space.
+ */
+export function computeFingerprint(description: string, inputSchema: unknown): string {
+  const normalizedSchema = stableStringify(inputSchema ?? null);
+  return createHash("sha256").update(`${normalizedSchema}\x00${description}`).digest("hex");
+}
+
+function schemasEqual(a: unknown, b: unknown): boolean {
+  return stableStringify(a ?? null) === stableStringify(b ?? null);
+}
+
+/**
+ * Classifies drift between an approved baseline and a freshly observed tool list
+ * (spec §5.2). A tool present in both with a changed fingerprint yields one diff per
+ * changed field — `description` and `inputSchema` are compared independently, so a
+ * tool that changed both produces two diffs (`description_changed` and `schema_changed`),
+ * exactly as §5.2 step 2 specifies ("둘 다 바뀌면 두 건의 diff를 각각 기록").
+ */
+export function diffToolDefinitions(
+  baseline: readonly ToolSnapshotBaselineEntry[],
+  current: readonly ToolDefinitionLite[],
+): ToolDefinitionDiff[] {
+  const baselineByName = new Map(baseline.map((entry) => [entry.toolName, entry]));
+  const currentNames = new Set(current.map((tool) => tool.name));
+  const diffs: ToolDefinitionDiff[] = [];
+
+  for (const tool of current) {
+    const base = baselineByName.get(tool.name);
+    if (!base) {
+      diffs.push({
+        toolName: tool.name,
+        diffType: "tool_added",
+        before: null,
+        after: { description: tool.description, inputSchema: tool.inputSchema },
+      });
+      continue;
+    }
+    const fingerprint = computeFingerprint(tool.description, tool.inputSchema);
+    if (fingerprint === base.fingerprint) continue;
+
+    if (tool.description !== base.description) {
+      diffs.push({
+        toolName: tool.name,
+        diffType: "description_changed",
+        before: { description: base.description },
+        after: { description: tool.description },
+      });
+    }
+    if (!schemasEqual(tool.inputSchema, base.inputSchema)) {
+      diffs.push({
+        toolName: tool.name,
+        diffType: "schema_changed",
+        before: { description: base.description, inputSchema: base.inputSchema },
+        after: { description: tool.description, inputSchema: tool.inputSchema },
+      });
+    }
+  }
+
+  for (const base of baseline) {
+    if (currentNames.has(base.toolName)) continue;
+    diffs.push({
+      toolName: base.toolName,
+      diffType: "tool_removed",
+      before: { description: base.description, inputSchema: base.inputSchema },
+      after: null,
+    });
+  }
+
+  return diffs;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Reads the tool descriptors out of a (already quarantine-sanitized) `tools/list`
+ * payload, accepting both the bare `{ tools }` body and the MCP `{ result: { tools } }`
+ * envelope — the same two shapes `pipeline/toolMetadata.ts`'s `findToolsContainer`
+ * recognizes. A descriptor missing a string `name`/`description` is skipped rather than
+ * defaulted: a partial/malformed descriptor should not silently fingerprint as `""`.
+ */
+export function extractToolDefinitions(payload: unknown): ToolDefinitionLite[] {
+  const container = isRecord(payload) && Array.isArray(payload.tools)
+    ? payload.tools
+    : isRecord(payload) && isRecord(payload.result) && Array.isArray(payload.result.tools)
+      ? payload.result.tools
+      : undefined;
+  if (!container) return [];
+  const tools: ToolDefinitionLite[] = [];
+  for (const descriptor of container) {
+    if (isRecord(descriptor) && typeof descriptor.name === "string" && typeof descriptor.description === "string") {
+      tools.push({ name: descriptor.name, description: descriptor.description, inputSchema: descriptor.inputSchema ?? null });
+    }
+  }
+  return tools;
+}

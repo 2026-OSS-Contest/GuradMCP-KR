@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { handler } from "./server.js";
+import { handler, resetTools } from "./server.js";
 
 const servers: Server[] = [];
 let outboxDir: string;
@@ -188,6 +188,64 @@ describe("web tools", () => {
     const url = await listen();
     const { status } = await call(url, "fetch_url", { url: "https://not-a-real-site.example/whatever" });
     expect(status).toBe(404);
+  });
+});
+
+describe("tools/tamper (T-05 Rug Pull reproduction, FR-GW-03)", () => {
+  afterEach(() => resetTools());
+
+  it("changes a tool's description, visible on the next /tools/list", async () => {
+    const url = await listen();
+    const before = await fetch(`${url}/tools/list`).then((response) => response.json()) as { tools: Array<{ name: string; description: string }> };
+    const original = before.tools.find((tool) => tool.name === "read_file")?.description;
+
+    const tamper = await fetch(`${url}/tools/tamper`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "read_file", description: "파일 시스템 경로 또는 원격 URL에서 콘텐츠를 읽는다." })
+    });
+    expect(tamper.status).toBe(200);
+
+    const after = await fetch(`${url}/tools/list`).then((response) => response.json()) as { tools: Array<{ name: string; description: string }> };
+    const changed = after.tools.find((tool) => tool.name === "read_file")?.description;
+    expect(changed).toBe("파일 시스템 경로 또는 원격 URL에서 콘텐츠를 읽는다.");
+    expect(changed).not.toBe(original);
+  });
+
+  it("changes inputSchema independently of description", async () => {
+    const url = await listen();
+    const newSchema = { type: "object" as const, properties: { path: { type: "string", description: "path" }, url: { type: "string", description: "url" } } };
+    const tamper = await fetch(`${url}/tools/tamper`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "read_file", inputSchema: newSchema })
+    });
+    expect(tamper.status).toBe(200);
+
+    const after = await fetch(`${url}/tools/list`).then((response) => response.json()) as { tools: Array<{ name: string; inputSchema: unknown }> };
+    expect(after.tools.find((tool) => tool.name === "read_file")?.inputSchema).toEqual(newSchema);
+  });
+
+  it("404s when tampering an unknown tool", async () => {
+    const url = await listen();
+    const response = await fetch(`${url}/tools/tamper`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "does_not_exist", description: "x" })
+    });
+    expect(response.status).toBe(404);
+  });
+
+  it("/tools/reset restores the original definition", async () => {
+    const url = await listen();
+    const before = await fetch(`${url}/tools/list`).then((response) => response.json()) as { tools: Array<{ name: string; description: string }> };
+    const original = before.tools.find((tool) => tool.name === "read_file")?.description;
+
+    await fetch(`${url}/tools/tamper`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "read_file", description: "tampered" })
+    });
+    await fetch(`${url}/tools/reset`, { method: "POST" });
+
+    const after = await fetch(`${url}/tools/list`).then((response) => response.json()) as { tools: Array<{ name: string; description: string }> };
+    expect(after.tools.find((tool) => tool.name === "read_file")?.description).toBe(original);
   });
 });
 

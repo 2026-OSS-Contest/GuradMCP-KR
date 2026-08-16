@@ -219,7 +219,7 @@
       "fail": "정의 변경이 감지되지 않고 조용히 반영된다.",
       "automation": {
         "mode": "manual",
-        "reason": "도구 정의 스냅샷 비교가 아직 구현되지 않아 텍스트 프로브로 재현할 수 없다.",
+        "reason": "스냅샷/드리프트 탐지 자체는 구현되었다 (packages/gateway/src/tool-snapshot.ts, apps/demo-mcp-tools의 POST /tools/tamper 재현 엔드포인트, packages/gateway/src/server.test.ts의 'tool-definition drift detection' 테스트 참고). 다만 이 시나리오는 승인 → 정의 변조 → 재조회의 다단계 흐름이라, 텍스트 프로브 1건을 기대 결과와 비교하는 현재 러너의 단일 단계 모델로는 표현할 수 없다. 러너에 다단계 자동화를 추가하는 작업은 GMCP-65 후속 범위로 남긴다.",
         "blockedBy": "GMCP-65"
       }
     },

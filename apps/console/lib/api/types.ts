@@ -4,7 +4,9 @@
 // different shape. These types describe what the screens need; the MSW handlers in `mocks/`
 // serve exactly this, so wiring the real backend needs no UI change. `/servers` (GET and PUT
 // .../trust) was implemented in GMCP-64 (FR-GW-02) to match this file's `McpServer` shape
-// exactly — `tools` is always `[]` from the real backend today (FR-GW-03 is a separate gap).
+// exactly. `tools[].snapshotStatus` was populated for real in GMCP-65 (FR-GW-03); `risk` and
+// `policies` are still placeholders on the real backend — no tool-level risk scoring or
+// policy-to-tool binding exists yet (see `ServerRegistryStore.kt`'s `ToolSummary` doc comment).
 
 export type Verdict = "allow" | "warn" | "require_approval" | "block";
 export type TrustLevel = "trusted" | "limited" | "untrusted";
@@ -22,13 +24,53 @@ export interface Overview {
   pendingApprovals: number;
 }
 
+/** FR-GW-03 §6.1. `unapproved`: no tool ever had its definition approved as a baseline.
+ *  `drift_acknowledged`: every pending diff for this tool was dismissed via `/acknowledge`,
+ *  but the approved snapshot itself was never updated (spec §6.3 keeps those two operations
+ *  separate) — the tool is still running on a definition the baseline doesn't cover, so this
+ *  is deliberately distinct from `in_sync`, not folded into it. */
+export type SnapshotState = "in_sync" | "drift_detected" | "drift_acknowledged" | "unapproved";
+
+/** FR-GW-03 §6.1 `snapshotStatus`. `GET /servers` (GMCP-65) reports this for real now —
+ *  see `services/control-plane/.../api/ServerController.kt`'s `toolInventory`. */
+export interface SnapshotStatus {
+  state: SnapshotState;
+  snapshotCapturedAt: string | null;
+  lastCheckedAt: string | null;
+  pendingDiffCount: number;
+  latestDiffId: string | null;
+}
+
 export interface ToolEntry {
   name: string;
   risk: RiskLevel;
   /** Policy ids applied to this tool. The first is shown as a chip, the rest as "외 N". */
   policies: string[];
-  /** FR-GW-03: the tool description differs from the one approved at first sight. */
-  snapshotChanged: boolean;
+  snapshotStatus: SnapshotStatus;
+}
+
+/** FR-GW-03 §6.2/§6.3. `before`/`after` are `null` only for `tool_added`/`tool_removed`
+ *  respectively; otherwise `{ description }` or `{ description, inputSchema }` depending on
+ *  which field(s) changed — see `packages/gateway/src/tool-snapshot.ts`'s `ToolDiffSide`. */
+export type ToolDiffType = "tool_added" | "tool_removed" | "description_changed" | "schema_changed";
+
+export interface ToolDiffSide {
+  description?: string;
+  inputSchema?: unknown;
+}
+
+export interface ToolDefinitionDiff {
+  id: string;
+  diffType: ToolDiffType;
+  before: ToolDiffSide | null;
+  after: ToolDiffSide | null;
+  detectedAt: string;
+  acknowledged: boolean;
+}
+
+export interface ToolDiffsResponse {
+  toolName: string;
+  diffs: ToolDefinitionDiff[];
 }
 
 export interface McpServer {

@@ -13,10 +13,10 @@ import {
   DisconnectedDotIcon,
   RiskHighIcon,
   RiskLowIcon,
-  RiskMediumIcon,
-  SnapshotChangedIcon
+  RiskMediumIcon
 } from "@/components/icons";
 import { Tag, type TagTone } from "@/components/ui/tag";
+import { ToolSnapshotBadge } from "./tool-snapshot-badge";
 import { INVENTORY_ANCHOR } from "./kpi-cards";
 import { cn } from "@/lib/utils";
 
@@ -34,7 +34,7 @@ const RISK: Record<RiskLevel, { Icon: ComponentType<SVGProps<SVGSVGElement>>; to
  */
 const POLICY_COLUMN = "w-[200px] xl:w-[318px] min-[1920px]:w-[481px]";
 
-function ToolRow({ tool }: { tool: ToolEntry }) {
+function ToolRow({ serverId, tool }: { serverId: string; tool: ToolEntry }) {
   const t = useTranslations("gateway.inventory");
   const { Icon: RiskIcon, tone, key } = RISK[tool.risk];
   const [first, ...rest] = tool.policies;
@@ -72,12 +72,11 @@ function ToolRow({ tool }: { tool: ToolEntry }) {
           </span>
         )}
 
-        {tool.snapshotChanged && (
-          // FR-GW-03 — the description drifted from the one approved at first sight.
-          <Tag tone="alert" shape="pill" className="text-caption-text-c-md">
-            <SnapshotChangedIcon className="size-4 flex-none" aria-hidden />
-            {t("snapshotChanged")}
-          </Tag>
+        {(tool.snapshotStatus.state === "drift_detected" || tool.snapshotStatus.state === "drift_acknowledged") && (
+          // FR-GW-03 §7 — the definition drifted from the one approved at first sight, and
+          // (drift_acknowledged) dismissing the notice never moved the baseline, so it's
+          // still true. Click opens the before/after diff popover (§6.2/§6.3).
+          <ToolSnapshotBadge serverId={serverId} toolName={tool.name} state={tool.snapshotStatus.state} />
         )}
       </div>
     </div>
@@ -143,7 +142,7 @@ function ServerAccordion({ server, defaultOpen }: { server: McpServer; defaultOp
       {open && (
         <div id={panelId}>
           {server.tools.map((tool) => (
-            <ToolRow key={tool.name} tool={tool} />
+            <ToolRow key={tool.name} serverId={server.id} tool={tool} />
           ))}
         </div>
       )}

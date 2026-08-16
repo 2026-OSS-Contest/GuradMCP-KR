@@ -25,6 +25,8 @@ import type {
   SessionsResponse,
   SettingsUpdate,
   TimelineResponse,
+  ToolDefinitionDiff,
+  ToolDiffsResponse,
 } from "./types";
 import {
   toEventDetailFromLookup,
@@ -147,6 +149,48 @@ export const putServerTrust = (
   put<ServerTrustChangeResult>(
     `/servers/${encodeURIComponent(id)}/trust`,
     request,
+    signal,
+  );
+
+/** SCR-101 snapshot diff popover (FR-GW-03 §6.2). Unacknowledged diffs, most recent first,
+ *  unless `includeAcknowledged` — the `drift_acknowledged` state has no unacknowledged rows
+ *  left to show, so the popover needs the full history to explain what was dismissed. */
+export const getToolDiffs = (
+  serverId: string,
+  toolName: string,
+  signal?: AbortSignal,
+  includeAcknowledged = false,
+) =>
+  get<ToolDiffsResponse>(
+    `/servers/${encodeURIComponent(serverId)}/tools/${encodeURIComponent(toolName)}/diffs${includeAcknowledged ? "?includeAcknowledged=true" : ""}`,
+    signal,
+  );
+
+/** FR-GW-03 §6.3: marks a diff confirmed. Does not change the approved baseline. */
+export const acknowledgeToolDiff = (
+  serverId: string,
+  toolName: string,
+  diffId: string,
+  signal?: AbortSignal,
+) =>
+  postJson<ToolDefinitionDiff>(
+    `/servers/${encodeURIComponent(serverId)}/tools/${encodeURIComponent(toolName)}/diffs/${encodeURIComponent(diffId)}/acknowledge`,
+    {},
+    signal,
+  );
+
+/** FR-GW-03 §5.1.4 false-positive path: re-approves one tool from its latest reported
+ *  observation, replacing `acknowledgeToolDiff`'s "dismiss the notice" with "make the
+ *  current definition the approved one" — the only way `snapshotStatus.state` actually
+ *  returns to `in_sync` after a real (non-false-positive) change. */
+export const reapproveTool = (
+  serverId: string,
+  toolName: string,
+  signal?: AbortSignal,
+) =>
+  postJson<{ approved: boolean; tools: Array<{ toolName: string; description: string }> }>(
+    `/servers/${encodeURIComponent(serverId)}/tools/${encodeURIComponent(toolName)}/reapprove`,
+    {},
     signal,
   );
 

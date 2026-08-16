@@ -59,7 +59,13 @@ export function ServerTable({ servers, onTrustChange, busy }: ServerTableProps) 
           </thead>
           <tbody>
             {servers.map((server) => {
-              const changed = server.tools.filter((tool) => tool.snapshotChanged).length;
+              // `drift_acknowledged` counts too: acknowledging a diff (§6.3) deliberately never
+              // touches the baseline, so that tool is still running on a definition the
+              // approved snapshot doesn't cover — reporting 정상 here would hide exactly the
+              // false-positive-pending-reapproval case the badge/popover exists to surface.
+              const changed = server.tools.filter(
+                (tool) => tool.snapshotStatus.state === "drift_detected" || tool.snapshotStatus.state === "drift_acknowledged",
+              ).length;
               return (
                 <tr key={server.id} className="border-b border-grayscale-800 last:border-0">
                   <td className="text-body-mono-b2-rg px-4 py-4 break-all text-grayscale-white">{server.name}</td>

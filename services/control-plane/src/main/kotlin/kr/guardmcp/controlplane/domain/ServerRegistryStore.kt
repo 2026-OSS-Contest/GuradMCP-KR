@@ -45,20 +45,34 @@ data class McpServer(
 )
 
 /**
+ * Per-tool inventory entry (FR-GW-03 §6.1). `risk`/`policies` have no real backend source
+ * yet — tool-level risk scoring and policy-to-tool binding are a gap this ticket does not
+ * close (`apps/console/lib/api/types.ts` flags the same gap on the console side) — so they
+ * carry placeholder defaults rather than fabricated-looking real data. `snapshotStatus` is
+ * FR-GW-03's actual deliverable and is always real, sourced from [ToolSnapshotStore.statusView].
+ */
+data class ToolSummary(
+    val name: String,
+    val risk: String = "low",
+    val policies: List<String> = emptyList(),
+    val snapshotStatus: ToolSnapshotStatusView,
+)
+
+/**
  * Lean projection served by the list endpoint and the sync stream — the shape the gateway
  * registry cache and the console home-page inventory both consume (§4.1, §6). The richer
  * [McpServer] entity (endpoint, timestamps, tool snapshot) is reserved for the detail endpoint.
- * `tools` is always empty: per-server tool inventory (FR-GW-03) is not sourced from the
- * registry yet, but the console's existing `McpServer` UI contract (`apps/console/lib/api/
- * types.ts`) declares the field as required, so this satisfies that contract at the wire level
- * rather than requiring a UI-side change to tolerate a missing field.
+ * `tools` is populated only by [kr.guardmcp.controlplane.api.ServerController.servers] (the
+ * REST list endpoint, FR-GW-03 §6.1) — the trust-change SSE broadcast in this file still calls
+ * [toSummary] with the default empty list, since neither the gateway's trust-registry sync nor
+ * the console (which reads tool inventory over REST, not SSE) needs per-tool data on that push.
  */
 data class ServerSummary(
     val id: String,
     val name: String,
     val connected: Boolean,
     val trust: String,
-    val tools: List<Nothing> = emptyList(),
+    val tools: List<ToolSummary> = emptyList(),
 )
 
 class ServerNotFoundException(val id: String) : RuntimeException("server $id not found")
@@ -184,5 +198,5 @@ class ServerRegistryStore(private val clock: Clock, private val policyStore: Pol
     }
 }
 
-fun toSummary(server: McpServer): ServerSummary =
-    ServerSummary(id = server.id.toString(), name = server.name, connected = server.connectionStatus == ConnectionStatus.CONNECTED, trust = server.trustLevel.wire)
+fun toSummary(server: McpServer, tools: List<ToolSummary> = emptyList()): ServerSummary =
+    ServerSummary(id = server.id.toString(), name = server.name, connected = server.connectionStatus == ConnectionStatus.CONNECTED, trust = server.trustLevel.wire, tools = tools)
