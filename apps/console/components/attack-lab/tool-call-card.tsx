@@ -28,7 +28,10 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
   // A call the chain never reached — drawn dashed and dimmed, with the reason inline.
   if (call.skippedReason) {
     return (
-      <li className="flex items-center gap-2 rounded-xl border border-dashed border-(--primitive-opacity-white-alpha-25) px-3 py-2 opacity-50">
+      // The frame gives it the same 12px padding and gap as a card that ran, its own white-alpha-6
+      // ground, and a 75% stroke — faint only because the whole card sits at 25% opacity. At 25%
+      // stroke under 50% opacity the dashes were too washed out to read as a border at all.
+      <li className="flex items-center gap-3 rounded-xl border border-dashed border-(--primitive-opacity-white-alpha-75) bg-(--primitive-opacity-white-alpha-6) p-3 opacity-25">
         <Caret />
         <span className="flex-none font-mono text-body-mono-b2-rg text-grayscale-300">{call.tool}</span>
         <span className="min-w-0 text-caption-text-c-rg text-grayscale-400">· {call.skippedReason}</span>
