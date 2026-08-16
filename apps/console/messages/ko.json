@@ -6,6 +6,7 @@
     "detector": "Detector",
     "approval": "Approval",
     "policies": "Policies",
+    "benchmark": "Benchmark",
     "settings": "Setting"
   },
   "shell": {
@@ -334,6 +335,66 @@
     "settings": {
       "title": "Settings",
       "desc": "업스트림 서버·장애 정책·로그 설정"
+    }
+  },
+  "benchmark": {
+    "title": "탐지 벤치마크",
+    "subtitle": "샘플 {count}건 — 데이터셋 · 공격 시나리오 · 정책 픽스처",
+    "run": "벤치마크 실행",
+    "runAgain": "다시 실행",
+    "measuring": "측정 중…",
+    "idle": "벤치마크를 실행하면 결과가 여기에 표시됩니다.",
+    "error": "벤치마크 결과를 불러오지 못했습니다.",
+    "section": {
+      "pii": "PII 데이터셋",
+      "injection": "프롬프트 인젝션",
+      "serviceToken": "한국 서비스 토큰",
+      "entropy": "고엔트로피 시크릿",
+      "scenario": "공격 시나리오",
+      "fixture": "정책 픽스처"
+    },
+    "passed": "게이트 통과",
+    "failed": "게이트 미달",
+    "measuredOn": "{count}건 측정",
+    "quality": "탐지 품질",
+    "metric": {
+      "recall": "Recall",
+      "fpr": "False Positive",
+      "blockRate": "차단율",
+      "p95": "P95 지연"
+    },
+    "atLeast": "기준 {value} 이상",
+    "atMost": "기준 {value} 이하",
+    "perType": "유형별 Recall",
+    "validation": "형식 검증 효과",
+    "validationBody": "형식 검증을 끄면 오탐률이 {without}, 켜면 {with}입니다. 오탐 {prevented}건을 걸러냈습니다.",
+    "reproduce": "재현 커맨드",
+    "copyCommand": "커맨드 복사",
+    "generatedAt": "측정 시각 {at}",
+    "close": "닫기",
+    "yes": "예",
+    "no": "아니오",
+    "blocked": "차단",
+    "allowed": "허용",
+    "rowPassed": "기대대로",
+    "rowFailed": "기대와 다름",
+    "label": {
+      "positive": "탐지 대상",
+      "negative": "정상 문장"
+    },
+    "field": {
+      "text": "샘플 원문",
+      "kind": "유형",
+      "label": "레이블",
+      "detected": "탐지됨",
+      "result": "판정",
+      "probe": "프로브 입력",
+      "args": "도구 인자",
+      "expected": "기대",
+      "actual": "실제",
+      "policy": "정책",
+      "expectation": "기대 동작",
+      "matched": "매칭된 정책"
     }
   },
   "settings": {
