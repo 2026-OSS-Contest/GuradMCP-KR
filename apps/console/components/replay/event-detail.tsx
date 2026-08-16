@@ -183,7 +183,12 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
         {detail.summary && (
           <section className="flex flex-col gap-2">
             <SectionHeading>{t("agentSummary")}</SectionHeading>
-            <p className="text-body-text-b3-md text-grayscale-100">{detail.summary}</p>
+            {/* The frame sets the report on its own ground with a 4px blue rule down the left —
+                the agent speaking, marked off from the panel's own reporting around it. Padding
+                is 12 on three sides and 16 against the rule, so the text clears it. */}
+            <p className="bg-(--primitive-opacity-white-alpha-6) py-3 pr-3 pl-4 text-body-text-b3-md text-grayscale-white shadow-[inset_4px_0_0_0_var(--primitive-color-blue-800)]">
+              {detail.summary}
+            </p>
           </section>
         )}
 
