@@ -26,7 +26,13 @@ import { emitGuardEvent } from "./pipeline/events.js";
 import { explainDecision } from "./pipeline/explanation.js";
 // Side-effect import: registers the pipeline-⑧ Event Emitter's guardEventBus subscription.
 import { auditPublisherMetrics } from "./pipeline/auditPublisher.js";
+import { handlePipelineFailure } from "./pipeline/failsafe.js";
 import { metricsSnapshot, recordInspection } from "./pipeline/metrics.js";
+import {
+  createStageBudgetTracker,
+  PipelineStageError,
+  runStage,
+} from "./pipeline/pipelineRunner.js";
 import {
   inspectToolMetadata,
   type QuarantinedToolReport,
@@ -39,6 +45,7 @@ import type {
 } from "./pipeline/types.js";
 import { scoreRisk } from "./risk.js";
 import { getServerTrust, startServerRegistrySync } from "./server-registry.js";
+import { startFailurePolicySync } from "./settings/failurePolicyCache.js";
 import { runtimePolicyPacks } from "./policies.generated.js";
 
 const port = Number(process.env.PORT ?? 3001);
@@ -56,6 +63,8 @@ const EMAIL_FIELD_SEPARATOR = "\n";
 // identity in the Control Plane's server registry (FR-GW-02 §3.1, §4.1).
 const gatewayServerId = process.env.GATEWAY_SERVER_ID ?? "demo-mcp-tools";
 startServerRegistrySync(process.env.CONTROL_PLANE_URL);
+// NFR-03/GMCP-68 §4.3: cache starts cold (fail-closed) until the first snapshot arrives.
+startFailurePolicySync(process.env.CONTROL_PLANE_URL);
 
 // With CONTROL_PLANE_URL set, a real Approval Console can resolve `require_approval` calls
 // (§5.1, GMCP-26); otherwise there is nothing to answer them, so fail-closed immediately
@@ -432,32 +441,55 @@ const actionWeight: Record<Action, number> = {
  * Every inspection funnels through here, so this is where the rule pipeline is timed
  * (GMCP-52, NFR-01): the measurement covers detection, risk scoring, and policy
  * evaluation on the live gateway rather than in an offline benchmark.
+ *
+ * NFR-03/GMCP-68 §4.1: this function itself never throws. An exception or elapsed-budget
+ * timeout in any stage is caught right here — the one call site every direction (request,
+ * response, tools/list, per-tool quarantine) shares — and resolved to a fail-closed/fail-open
+ * `PolicyDecision` via `handlePipelineFailure`, so every caller downstream of this function
+ * keeps working with an ordinary decision either way.
  */
 function evaluatePayload(
   text: string,
   context: Pick<PolicyContext, "direction" | "tool" | "serverTrust" | "args">,
 ): PolicyDecision {
+  try {
+    return evaluatePayloadOrThrow(text, context);
+  } catch (error) {
+    const stageError =
+      error instanceof PipelineStageError
+        ? error.stageError
+        : { stage: "policy_engine" as const, errorClass: error instanceof Error ? error.constructor.name : "UnknownError", message: "unexpected pipeline failure", timedOut: false };
+    return handlePipelineFailure(stageError);
+  }
+}
+
+function evaluatePayloadOrThrow(
+  text: string,
+  context: Pick<PolicyContext, "direction" | "tool" | "serverTrust" | "args">,
+): PolicyDecision {
   const startedAt = performance.now();
-  const detections = detect(text);
-  const { score: riskScore } = scoreRisk(
-    detections,
-    context.tool,
-    context.serverTrust,
+  const tracker = createStageBudgetTracker();
+  const detections = runStage(tracker, "detection", () => detect(text));
+  const { score: riskScore } = runStage(tracker, "risk_scoring", () =>
+    scoreRisk(detections, context.tool, context.serverTrust),
   );
-  const activePack = runtimePolicyPacks["korean-pii"];
-  if (!activePack) throw new Error("Active policy pack is unavailable");
-  const result = evaluate(
-    resolveRuntimePolicies("korean-pii"),
-    {
-      ...context,
-      detections: detections.map(({ type, subtype }) => ({ type, subtype })),
-      riskScore,
-    },
-    activePack.defaultAction,
-    activePack.evaluationStrategy,
-  );
-  recordInspection(result.action, performance.now() - startedAt);
-  return toPolicyDecision(result, detections, riskScore, context.args);
+  const decision = runStage(tracker, "policy_engine", () => {
+    const activePack = runtimePolicyPacks["korean-pii"];
+    if (!activePack) throw new Error("Active policy pack is unavailable");
+    const result = evaluate(
+      resolveRuntimePolicies("korean-pii"),
+      {
+        ...context,
+        detections: detections.map(({ type, subtype }) => ({ type, subtype })),
+        riskScore,
+      },
+      activePack.defaultAction,
+      activePack.evaluationStrategy,
+    );
+    return toPolicyDecision(result, detections, riskScore, context.args);
+  });
+  recordInspection(decision.verdict, performance.now() - startedAt);
+  return decision;
 }
 
 /**

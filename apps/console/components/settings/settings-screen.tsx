@@ -191,7 +191,7 @@ export function SettingsScreen() {
           confirmLabel={t("failOpenDialog.confirm")}
           pending={busy === "settings"}
           onCancel={() => setPending(null)}
-          onConfirm={() => void save({ failMode: "fail_open" })}
+          onConfirm={() => void save({ failMode: "fail_open", riskAcknowledged: true })}
         />
       )}
 

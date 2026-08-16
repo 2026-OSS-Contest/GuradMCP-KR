@@ -494,14 +494,12 @@ export interface TimelineResponse {
   details: Record<string, EventDetail>;
 }
 
-// ── SCR-501 Settings (spec §5.7, GMCP-88) ───────────────────────────────────
+// ── SCR-501 Settings (spec §5.7, GMCP-88/GMCP-68) ───────────────────────────
 // Server trust is real: FR-GW-02 shipped `PUT /servers/{id}/trust`, and this screen calls it
 // through `putServerTrust` rather than the shape an earlier reading here invented.
 //
-// `GET`/`PUT /settings` is not. It belongs to GMCP-80, whose `PolicyController` counterpart has
-// no settings sibling yet, so the three sections below — failure policy, raw-log opt-in and the
-// general preferences — are mock-only today. The path and verb are the ones that ticket names,
-// so wiring the real backend needs no UI change.
+// `GET`/`PUT /settings` is real too now: GMCP-68's `SettingsController` serves the whole shape
+// below (`services/control-plane/src/main/kotlin/kr/guardmcp/controlplane/api/SettingsController.kt`).
 
 /** What the gateway does when it cannot reach its own guard (GMCP-68). */
 export type FailMode = "fail_closed" | "fail_open";
@@ -516,9 +514,19 @@ export interface GatewaySettings {
   locale: "ko" | "en";
   /** Seconds a held call waits before the gateway fails it closed. The design's default is 120. */
   approvalTimeoutSeconds: number;
+  /**
+   * Whether the operator ticked "위험을 이해했습니다" the last time `failMode` became `fail_open`
+   * (GMCP-68 REQ-08). Reported back by the control plane; the console never needs to read it —
+   * it exists so `SettingsUpdate` can carry it on the one write that requires it.
+   */
+  riskAcknowledged?: boolean;
 }
 
-/** `PUT /settings` — every field independent, so one control never resends another's value. */
+/**
+ * `PUT /settings` — every field independent, so one control never resends another's value.
+ * `riskAcknowledged: true` must ride along with `failMode: "fail_open"` (GMCP-68 REQ-08) — the
+ * control plane returns 400 otherwise, regardless of what the console's own dialog already gated.
+ */
 export type SettingsUpdate = Partial<GatewaySettings>;
 
 // ── SCR-302 Policy Builder (spec §5.5, FR-POL-02/04) ────────────────────────

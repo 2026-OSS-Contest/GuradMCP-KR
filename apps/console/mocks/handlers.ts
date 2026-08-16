@@ -82,8 +82,8 @@ export const handlers = [
     respond({ servers: readScenario() === "empty" ? [] : SERVERS }),
   ),
 
-  // SCR-501 Settings (spec §5.7). No control plane serves `/settings` — it is GMCP-80's — so the
-  // mock is the whole server for these two.
+  // SCR-501 Settings (spec §5.7). GMCP-68's `SettingsController` serves this for real; the mock
+  // stands in for it under MSW (dev/e2e), same as every other handler in this file.
   http.get("*/api/v1/settings", async () => {
     await delay(LATENCY_MS);
     if (readScenario() === "offline") return HttpResponse.error();
@@ -94,6 +94,15 @@ export const handlers = [
     const update = (await request.json()) as Record<string, unknown>;
     await delay(LATENCY_MS);
     if (readScenario() === "offline") return HttpResponse.error();
+    // Mirrors the real SettingsController's server-side guard (GMCP-68 REQ-08): the client's own
+    // checkbox already gates this, but the mock has to enforce it too or a client bug that drops
+    // `riskAcknowledged` would look identical to a correct one under every existing test.
+    if (update.failMode === "fail_open" && update.riskAcknowledged !== true) {
+      return HttpResponse.json(
+        { code: "risk_not_acknowledged", message: "fail_open requires riskAcknowledged=true" },
+        { status: 400 }
+      );
+    }
     return HttpResponse.json(patchSettings(update));
   }),
 

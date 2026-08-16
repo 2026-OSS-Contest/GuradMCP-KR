@@ -1,8 +1,8 @@
 // SCR-501 Settings fixtures (spec §5.7).
 //
-// `GET/PUT /settings` has no control-plane counterpart — it is GMCP-80's — so the mock is the
-// whole server for it. The defaults are the ones the design draws: the gateway ships fail-closed,
-// raw storage off, Korean, and a 120s approval window.
+// `GET/PUT /settings` is served for real by GMCP-68's `SettingsController`; this mock stands in
+// for it whenever `NEXT_PUBLIC_API_BASE_URL` is unset (dev/e2e). The defaults are the ones the
+// design draws: the gateway ships fail-closed, raw storage off, Korean, and a 120s approval window.
 //
 // Server trust is *not* here. FR-GW-02 shipped `PUT /servers/{id}/trust` for real, and its mock
 // lives beside the endpoint it mirrors in `handlers.ts`, writing back into `SERVERS` so the

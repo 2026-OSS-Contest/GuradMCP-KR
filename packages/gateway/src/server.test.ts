@@ -1,9 +1,20 @@
 import { createServer, type Server } from "node:http";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { detect } from "./detect.js";
+import type * as DetectModule from "./detect.js";
 import { onGuardBusMessage } from "./pipeline/events.js";
+import { pipelineErrorMetricsSnapshot, resetMetrics } from "./pipeline/metrics.js";
 import { runtimePolicyPacks } from "./policies.generated.js";
 import { handler } from "./server.js";
 import { clearServerRegistry, replaceServerRegistry } from "./server-registry.js";
+import { resetFailurePolicyCache, setFailurePolicy } from "./settings/failurePolicyCache.js";
+
+// GMCP-68: wraps the real detector so every other test in this file still exercises actual
+// detection, while a fail-closed test can force one call to throw with `mockImplementationOnce`.
+vi.mock("./detect.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof DetectModule>();
+  return { ...actual, detect: vi.fn(actual.detect) };
+});
 
 /** Every policy id any shipped pack declares; a reported id outside this set is invented. */
 const shippedPolicyIds = Object.values(runtimePolicyPacks).flatMap((pack) => pack.policies.map(({ id }) => id));
@@ -27,6 +38,9 @@ function matchedIds(body: GuardBlockErrorBody): string[] {
 afterEach(async () => {
   delete process.env.DEMO_MCP_TOOLS_URL;
   clearServerRegistry();
+  resetFailurePolicyCache();
+  resetMetrics();
+  vi.mocked(detect).mockClear();
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
 });
 
@@ -371,6 +385,107 @@ describe("server trust affects verdict (FR-GW-02 §8.1)", () => {
     expect(body.error?.data.guardmcp.reasonCode).toBe("APPROVAL_TIMEOUT_BLOCKED");
     const policyIds = body.error ? matchedIds({ error: body.error }) : [];
     expect(policyIds).toContain("require_approval_untrusted_high_risk_tool");
+  });
+});
+
+// GMCP-68: fail-closed default + fail-open opt-in when a pipeline stage throws.
+describe("pipeline fail-closed / fail-open (NFR-03)", () => {
+  async function callReadFile(): Promise<{ status: number; body: GuardBlockErrorBody | { result: unknown; _guardmcp: { verdict: string } } }> {
+    const upstream = createServer((_request, response) => response.end(JSON.stringify({ ok: true })));
+    process.env.DEMO_MCP_TOOLS_URL = await listen(upstream);
+    const url = await listen(createServer(handler));
+    const response = await fetch(`${url}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 20, method: "tools/call", params: { name: "read_file", arguments: { path: "/tmp/ok.txt" } } })
+    });
+    return { status: response.status, body: await response.json() };
+  }
+
+  it("blocks by default when a detector throws, without leaking the internal error to the Agent", async () => {
+    vi.mocked(detect).mockImplementationOnce(() => {
+      throw new Error("forced failure: 010-1234-5678 in a stack trace");
+    });
+
+    const { body } = await callReadFile();
+    const error = (body as GuardBlockErrorBody).error;
+    expect(error.code).toBe(-32001);
+    expect(error.data.guardmcp.reasonCode).toBe("GATEWAY_FAIL_CLOSED");
+    expect(JSON.stringify(body)).not.toContain("010-1234-5678");
+    expect(JSON.stringify(body)).not.toContain("forced failure");
+    expect(pipelineErrorMetricsSnapshot()).toEqual({ "detection:fail_closed": 1 });
+  });
+
+  it("blocks when the pipeline overruns its budget before a later stage (REQ-02)", async () => {
+    // The budget is only checked *between* stages (pipelineRunner.ts), so the stage that
+    // overruns isn't the one reported as timed out — the next one's pre-check is. `detection`
+    // runs first and can never itself be `timedOut` for the same reason.
+    vi.mocked(detect).mockImplementationOnce(() => {
+      const until = performance.now() + 600; // exceeds the 500ms default budget
+      while (performance.now() < until) { /* synchronous overrun, simulating a slow stage */ }
+      return [];
+    });
+
+    const guardEvents: Array<{ errorInfo?: { stage: string; timedOut: boolean } }> = [];
+    const unsubscribe = onGuardBusMessage((message) => {
+      if (message.type === "guard.event") guardEvents.push(message.data as typeof guardEvents[number]);
+    });
+
+    const { body } = await callReadFile();
+    unsubscribe();
+
+    expect((body as GuardBlockErrorBody).error.data.guardmcp.reasonCode).toBe("GATEWAY_FAIL_CLOSED");
+    const failureEvent = guardEvents.find((event) => event.errorInfo !== undefined);
+    expect(failureEvent?.errorInfo?.stage).toBe("risk_scoring");
+    expect(failureEvent?.errorInfo?.timedOut).toBe(true);
+  });
+
+  it("blocks when the cache has never been synced (cold start), independent of any explicit setting", async () => {
+    // No setFailurePolicy call: the cache starts cold, same as a gateway that just booted and
+    // hasn't reached the Control Plane yet (REQ-07).
+    vi.mocked(detect).mockImplementationOnce(() => {
+      throw new Error("boom");
+    });
+
+    const { body } = await callReadFile();
+    expect((body as GuardBlockErrorBody).error.data.guardmcp.reasonCode).toBe("GATEWAY_FAIL_CLOSED");
+  });
+
+  it("allows through with a warn-level GuardEvent when failurePolicy=fail_open (REQ-04)", async () => {
+    setFailurePolicy("fail_open");
+    // tools/call inspects both directions (request, then response); failing both keeps the
+    // final _guardmcp summary — sourced from the response decision — at "warn" too.
+    vi.mocked(detect).mockImplementationOnce(() => {
+      throw new Error("boom");
+    });
+    vi.mocked(detect).mockImplementationOnce(() => {
+      throw new Error("boom");
+    });
+
+    const guardEvents: Array<{ verdict: string; errorInfo?: { stage: string; timedOut: boolean }; failurePolicyApplied?: string }> = [];
+    const unsubscribe = onGuardBusMessage((message) => {
+      if (message.type === "guard.event") guardEvents.push(message.data as typeof guardEvents[number]);
+    });
+
+    const { status, body } = await callReadFile();
+    unsubscribe();
+
+    expect(status).toBe(200);
+    expect((body as { _guardmcp: { verdict: string } })._guardmcp.verdict).toBe("warn");
+    const failureEvent = guardEvents.find((event) => event.errorInfo !== undefined);
+    expect(failureEvent?.verdict).toBe("warn");
+    expect(failureEvent?.failurePolicyApplied).toBe("fail_open");
+    expect(failureEvent?.errorInfo?.stage).toBe("detection");
+    expect(pipelineErrorMetricsSnapshot()).toEqual({ "detection:fail_open": 2 });
+  });
+
+  it("records matchedPolicyIds as empty on a fail-closed block (REQ-05: no policy ever matched)", async () => {
+    vi.mocked(detect).mockImplementationOnce(() => {
+      throw new Error("boom");
+    });
+
+    const { body } = await callReadFile();
+    expect((body as GuardBlockErrorBody).error.data.guardmcp.matchedPolicyIds).toBeUndefined();
   });
 });
 

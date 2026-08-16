@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-// SCR-501 Settings. Neither `GET /settings` nor `PUT /servers/{id}` exists on the control plane —
-// both belong to GMCP-80 — so MSW is the whole server here, not just a stand-in for one.
+// SCR-501 Settings. `GET/PUT /settings` (GMCP-68) and `PUT /servers/{id}/trust` (FR-GW-02) are
+// both real control-plane endpoints now; these tests run against MSW's stand-in for them.
 //
 // The rule these tests are mostly about: a change that makes the system *less* safe is confirmed
 // before it is applied, and its opposite goes straight through.
