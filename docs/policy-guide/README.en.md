@@ -309,6 +309,17 @@ expected:
 
 Use a stable, unique `id`. `coverage.policy_id` names the actual policy and `coverage.expectation` is `match` or `not_match`; it must agree with `expected.matched_policy_ids`. All enum and tag values follow this guide. A benign fixture normally expects the pack default action and an empty `matched_policy_ids` list. Both fixtures must use synthetic content. In `npm run bench` output, confirm both `metrics.fixturePassRate` and `metrics.fixtureCoverageRate` are `1`, `metrics.authorFixtures` is at least twice `metrics.policyCount`, and the `fixtures` array names each added ID with `passed: true`.
 
+### Policy Unit Test Framework (deterministic policy unit tests)
+
+Where `npm run bench` (Benchmark Runner) measures statistical performance (recall/FPR), `packages/policy-engine/test/policy-table.test.ts` is a separate, lower-level gate that deterministically checks whether each individual policy decides exactly what its spec says. Every policy file under `policy-packs/default/` must have a matching case file, or the coverage script fails CI.
+
+1. Write `policy-packs/<pack>/policies/<policy-file>.yaml`.
+2. Write `packages/policy-engine/test/fixtures/<pack>/<policy-id>.cases.yaml` (the filename is the kebab-case spelling of `id`). Each policy needs at least one positive case (the policy matches and produces the stated action).
+3. Run `npm run test:policy --workspace @guardmcp/policy-engine` locally, then open the PR.
+4. Confirm the `policy-tests` CI workflow passes.
+
+See `docs/task-docs/GMCP-16/policy-unit-test-framework.md` §4 for the case file's 3-tuple schema (policy YAML + input context + expected verdict).
+
 ## 11. Author checklist
 
 - [ ] Is `id` globally unique and semantically stable?
@@ -319,6 +330,7 @@ Use a stable, unique `id`. `coverage.policy_id` names the actual policy and `cov
 - [ ] Is approval timeout fail-closed?
 - [ ] Are Korean and English explanations/examples updated together?
 - [ ] Do validation and the benchmark pass?
+- [ ] Did you add a `test:policy` case file with at least one positive case?
 
 Use the [author test](author-test.en.md) to verify that an external contributor can create a policy from documentation alone.
 

@@ -1,0 +1,59 @@
+# 부록 A 예시 정책 1/2. task-docs/GMCP-16/policy-unit-test-framework.md §4의
+# 3튜플 스키마를 그대로 따른다.
+policyId: block_env_file_read
+policyFile: ../../../../../policy-packs/default/policies/block-env-file-read.yaml
+pack: default
+cases:
+  - name: ".env 파일 읽기 요청은 차단된다"
+    input:
+      direction: request
+      tool: read_file
+      serverTrust: trusted
+      args:
+        path: ".env"
+      detections: []
+      riskScore: 0
+    expected:
+      verdict: block
+      matchedPolicyIds: [block_env_file_read]
+      severity: critical
+
+  - name: "id_rsa 읽기 요청도 차단된다 (untrusted 서버에서도 동일)"
+    input:
+      direction: request
+      tool: read_file
+      serverTrust: untrusted
+      args:
+        path: "/home/user/.ssh/id_rsa"
+      detections: []
+      riskScore: 0
+    expected:
+      verdict: block
+      matchedPolicyIds: [block_env_file_read]
+      severity: critical
+
+  - name: "무관한 파일 읽기는 통과한다 (음성 케이스)"
+    input:
+      direction: request
+      tool: read_file
+      serverTrust: trusted
+      args:
+        path: "README.md"
+      detections: []
+      riskScore: 0
+    expected:
+      verdict: allow
+      matchedPolicyIds: []
+
+  - name: "read_file이 아닌 도구 호출은 tool 축에서 매칭되지 않는다 (음성 케이스)"
+    input:
+      direction: request
+      tool: write_file
+      serverTrust: trusted
+      args:
+        path: ".env"
+      detections: []
+      riskScore: 0
+    expected:
+      verdict: allow
+      matchedPolicyIds: []

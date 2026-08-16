@@ -309,6 +309,17 @@ expected:
 
 `id`는 안정적이고 유일해야 하며 `coverage.policy_id`는 실제 정책 ID를, `coverage.expectation`은 `match` 또는 `not_match`를 사용합니다. `expectation`은 `expected.matched_policy_ids`와 일치해야 합니다. enum과 탐지 tag는 이 가이드를 따릅니다. 정상 fixture는 보통 팩의 기본 action과 빈 `matched_policy_ids`를 기대합니다. 두 fixture 모두 합성 내용만 사용하세요. `npm run bench` 결과에서 `metrics.fixturePassRate`와 `metrics.fixtureCoverageRate`가 모두 `1`인지, `metrics.authorFixtures`가 정책 수의 두 배 이상인지, `fixtures` 배열에 추가한 각 ID가 `passed: true`로 나오는지 확인합니다.
 
+### Policy Unit Test Framework (결정론적 정책 단위 테스트)
+
+`npm run bench`(Benchmark Runner)가 recall/FPR 같은 통계적 성능을 측정한다면, `packages/policy-engine/test/policy-table.test.ts`는 그보다 하위 레벨에서 "정책 하나하나가 명세대로 판정하는가"를 결정론적으로 검증하는 별도 게이트입니다. `policy-packs/default/`의 모든 정책 파일은 대응하는 케이스 파일이 있어야 하며, 없으면 커버리지 스크립트가 CI를 실패시킵니다.
+
+1. `policy-packs/<pack>/policies/<policy-file>.yaml`을 작성합니다.
+2. `packages/policy-engine/test/fixtures/<pack>/<policy-id>.cases.yaml`을 작성합니다 (`id`의 kebab-case 표기가 파일명). 정책 1개당 최소 1개의 양성 케이스(정책이 매칭되어 지정된 action이 나오는 경우)가 필요합니다.
+3. `npm run test:policy --workspace @guardmcp/policy-engine`을 로컬에서 실행한 뒤 PR을 생성합니다.
+4. CI의 `policy-tests` 워크플로 통과를 확인합니다.
+
+케이스 파일의 3튜플 스키마(policy YAML + 입력 컨텍스트 + 기대 verdict)는 `docs/task-docs/GMCP-16/policy-unit-test-framework.md` §4를 참고하세요.
+
 ## 11. 작성자 자가 점검
 
 - [ ] 전역에서 유일하고 의미가 안정적인 `id`인가?
@@ -319,6 +330,7 @@ expected:
 - [ ] approval timeout이 fail-closed인가?
 - [ ] 한국어/영어 설명과 예제를 함께 갱신했는가?
 - [ ] validation과 benchmark가 통과하는가?
+- [ ] `test:policy`용 케이스 파일(최소 1개 양성 케이스)을 추가했는가?
 
 문서만으로 신규 정책 한 건을 작성할 수 있는지 검증하는 외부자 테스트 절차는 [작성자 테스트](author-test.md)에 있습니다.
 
