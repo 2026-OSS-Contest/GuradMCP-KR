@@ -31,8 +31,13 @@ const RISK: Record<RiskLevel, { Icon: ComponentType<SVGProps<SVGSVGElement>>; to
 /**
  * The design fixes the policy column and lets the tool and risk columns share what is left,
  * widening it once at each breakpoint it was drawn at: 200 / 318 / 481.
+ *
+ * A basis rather than a width, and shrinkable: the design was never drawn below 1024, and at a
+ * width where 200px no longer leaves room the fixed column took everything and squeezed the tool
+ * name to nothing. As a basis it holds those exact numbers wherever they fit and gives ground
+ * only once they do not.
  */
-const POLICY_COLUMN = "w-[200px] xl:w-[318px] min-[1920px]:w-[481px]";
+const POLICY_COLUMN = "basis-[200px] xl:basis-[318px] min-[1920px]:basis-[481px]";
 
 function ToolRow({ serverId, tool }: { serverId: string; tool: ToolEntry }) {
   const t = useTranslations("gateway.inventory");
@@ -40,24 +45,32 @@ function ToolRow({ serverId, tool }: { serverId: string; tool: ToolEntry }) {
   const [first, ...rest] = tool.policies;
 
   return (
-    // The row rule is a bottom-only stroke drawn inside the 45px height.
-    <div className="flex h-[45px] items-center bg-(--primitive-opacity-black-alpha-25) shadow-[inset_0_-1px_0_0_var(--primitive-opacity-white-alpha-10)]">
-      <div className="flex min-w-0 flex-1 items-center justify-center p-3">
-        <code className="w-full truncate text-body-mono-b3-rg">{tool.name}</code>
+    // The row rule is a bottom-only stroke drawn inside the 45px height. The height is a floor
+    // rather than a fixed size: the policy column keeps its width at every breakpoint, so below
+    // the narrowest one the two flexible columns are squeezed to nothing and the tool name
+    // disappears entirely. Letting the row grow is what keeps it readable there.
+    <div className="flex min-h-[45px] items-center bg-(--primitive-opacity-black-alpha-25) shadow-[inset_0_-1px_0_0_var(--primitive-opacity-white-alpha-10)]">
+      <div className="flex min-w-0 flex-[1_1_9rem] items-center justify-center p-3">
+        {/* A tool name is one unbroken token, so it has to be allowed to break mid-word — and
+            then held to two lines, past which it is the policy and the risk that matter more. */}
+        <code className="line-clamp-2 w-full break-all text-body-mono-b3-rg">{tool.name}</code>
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col justify-center p-3">
-        <span className={cn("flex items-center gap-1 text-body-text-b3-md", tone)}>
+      <div className="flex min-w-0 flex-[1_1_6rem] flex-col justify-center p-3">
+        {/* Icon, label and grade wrap independently, so the column reads down the three of them
+            instead of clipping the grade off the end. */}
+        <span className={cn("flex flex-wrap items-center gap-x-1 text-body-text-b3-md", tone)}>
           <RiskIcon className="h-5 w-4 flex-none" aria-hidden />
-          <span className="truncate">
-            {t("risk")} {t(key)}
-          </span>
+          <span>{t("risk")}</span>
+          <span>{t(key)}</span>
         </span>
       </div>
 
-      <div className={cn("flex flex-none items-center gap-3 p-3", POLICY_COLUMN)}>
+      <div className={cn("flex min-w-0 grow-0 flex-wrap items-center gap-x-3 gap-y-1 p-3", POLICY_COLUMN)}>
         {first ? (
-          <Link href={`/policies/${first}`} className="min-w-0 transition-opacity hover:opacity-80">
+            // flex, so the anchor hugs the tag: as an inline box it takes the row's line-height
+            // instead, which is 4px taller than the tag and pushed the whole row past its 45px.
+            <Link href={`/policies/${first}`} className="flex min-w-0 transition-opacity hover:opacity-80">
             <Tag className="max-w-full text-caption-mono-c-rg">
               <span className="truncate">{first}</span>
             </Tag>
