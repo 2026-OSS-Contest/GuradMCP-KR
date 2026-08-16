@@ -59,8 +59,10 @@ export function FailPolicy({ value, onChange, disabled }: FailPolicyProps) {
               disabled={disabled}
               onClick={() => onChange(mode)}
               className={cn(
-                "flex cursor-pointer flex-col gap-1 rounded-(--primitive-radius-rounded-xl) p-4 text-left transition-colors",
-                selected ? "bg-(--primitive-opacity-white-alpha-6)" : "hover:bg-(--primitive-opacity-white-alpha-6)",
+                "flex cursor-pointer flex-col gap-1 rounded-(--primitive-radius-rounded-xl) p-3 text-left transition-colors",
+                // The frame marks the chosen mode in the blue it uses for a current selection —
+                // the same tint the rail puts behind the open screen — not a neutral white wash.
+                selected ? "bg-(--primitive-opacity-blue-alpha-25)" : "hover:bg-(--primitive-opacity-white-alpha-6)",
                 disabled && "cursor-not-allowed opacity-50"
               )}
             >
