@@ -17,6 +17,7 @@ const SCREENS = [
   { scr: "SCR-302", path: "/policies" },
   { scr: "SCR-401", path: "/detector" },
   { scr: "SCR-402", path: "/approvals" },
+  { scr: "SCR-601", path: "/benchmark" },
   { scr: "SCR-501", path: "/settings" }
 ] as const;
 

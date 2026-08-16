@@ -20,6 +20,14 @@ const SCREENS = [
   { scr: "SCR-302", path: "/policies", anchor: (page: Page) => page.getByRole("region", { name: "YAML" }) },
   { scr: "SCR-401", path: "/detector", anchor: (page: Page) => page.locator('[data-scr="SCR-401"]') },
   { scr: "SCR-402", path: "/approvals", anchor: (page: Page) => page.locator('[data-scr="SCR-402"]') },
+  // The benchmark list is the Korean PII dataset itself — measured data, not copy to translate.
+  // Everything else on the screen is still scanned.
+  {
+    scr: "SCR-601",
+    path: "/benchmark",
+    anchor: (page: Page) => page.locator('[data-scr="SCR-601"]'),
+    except: '[data-testid="run-list"]'
+  },
   { scr: "SCR-501", path: "/settings", anchor: (page: Page) => page.locator('[data-scr="SCR-501"]') }
 ] as const;
 
@@ -45,13 +53,16 @@ async function settle(page: Page, anchor: Locator) {
   await expect(page.locator(".animate-pulse")).toHaveCount(0);
 }
 
-/** Visible copy only — script and template text carry RSC payloads that mention every locale. */
-function visibleText(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
+/**
+ * Visible copy only — script and template text carry RSC payloads that mention every locale.
+ * `except` drops one more subtree, for a screen that renders data rather than copy.
+ */
+function visibleText(page: Page, except?: string): Promise<string[]> {
+  return page.evaluate((skip) => {
     const seen: string[] = [];
     const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
       acceptNode: (node) =>
-        node.parentElement?.closest("script, style, template")
+        node.parentElement?.closest(skip ? `script, style, template, ${skip}` : "script, style, template")
           ? NodeFilter.FILTER_REJECT
           : NodeFilter.FILTER_ACCEPT
     });
@@ -61,7 +72,7 @@ function visibleText(page: Page): Promise<string[]> {
       if (text) seen.push(text);
     }
     return seen;
-  });
+  }, except);
 }
 
 for (const locale of LOCALES) {
@@ -88,7 +99,9 @@ for (const locale of LOCALES) {
   }
 }
 
-for (const { scr, path, anchor } of SCREENS) {
+for (const screen of SCREENS) {
+  const { scr, path, anchor } = screen;
+  const except = "except" in screen ? screen.except : undefined;
   test(`${scr} shows no Korean in en`, async ({ page, context }) => {
     await context.addCookies([{ name: "NEXT_LOCALE", value: "en", url: "http://127.0.0.1:3000" }]);
     await page.goto(path);
@@ -96,7 +109,7 @@ for (const { scr, path, anchor } of SCREENS) {
 
     // A key present in both bundles but never translated reads as Korean on an English screen —
     // which no missing-key check can see, because nothing is missing.
-    const korean = (await visibleText(page))
+    const korean = (await visibleText(page, except))
       // The language picker names each language in its own language, so 한국어 stays.
       .filter((text) => /[가-힣]/.test(text) && text !== "한국어")
       .map((text) => text.slice(0, 80));

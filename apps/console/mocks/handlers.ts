@@ -14,6 +14,7 @@ import {
   type ServerTrustChangeRequest,
 } from "@/lib/api/types";
 import { allApprovals, decide, raiseApproval, resetApprovals } from "./approvals";
+import { benchmarkReport, benchmarkSamples } from "./benchmark";
 import { ATTACK_SCENARIOS, attackRun } from "./attack-lab";
 import { acknowledgeToolDiff, allDiffsOf, pendingDiffsOf, reapproveToolDiffs } from "./tool-diffs";
 
@@ -424,6 +425,19 @@ export const handlers = [
       }
       seq += 1;
     }, STREAM_INTERVAL_MS);
+  }),
+
+  // ── SCR-601 Benchmark (GMCP-61) ───────────────────────────────────────────
+  // Neither path exists on the control plane; these two are what the console needs built. The
+  // bodies are a real `npm run bench` run, not invented numbers — see mocks/benchmark.ts.
+  http.get("*/api/v1/benchmark/report", async () => {
+    await delay(LATENCY_MS);
+    return HttpResponse.json(benchmarkReport);
+  }),
+
+  http.get("*/api/v1/benchmark/samples", async () => {
+    await delay(LATENCY_MS);
+    return HttpResponse.json({ samples: benchmarkSamples });
   }),
 
   // Deep-link support (spec §3.3): a single node lookup by eventId. Registered after the
