@@ -68,13 +68,15 @@ class LiveReplaySource(private val repository: AuditEventQueries) {
             endedAt = records.last().ts,
             isLive = false,
         )
-        // Deliberately not ReplayChain.validate(nodes). The hashes on these nodes were just
-        // derived from the records a few lines above, so validating them would compare a
-        // value against itself and answer VALID every time — including for a tampered
-        // `guard_event` row, which would simply produce a different self-consistent chain.
-        // The audit table's hash/prev_hash columns are schema-only until GMCP-83 writes
-        // them; until there is a stored hash to check against, this reports UNKNOWN.
-        return Projection(session, nodes, ChainResult(ChainStatus.UNKNOWN, null), sessionId)
+        // Deliberately not ReplayChain.validate(nodes) — the hashes on `nodes` were just
+        // derived from `records` a few lines above (ChainBuilder, for display only), so
+        // validating them would compare a value against itself and answer VALID every time,
+        // including for a tampered `guard_event` row. GuardEventHasher.verify checks the
+        // `hash`/`prev_hash` GuardEventRepository.insert actually stored (GMCP-83) against a
+        // fresh recomputation, in `seq` order — the chain's integrity order, not `records`'
+        // `ts` display order above.
+        val chain = GuardEventHasher.verify(sessionId, repository.findBySessionIdOrderBySeq(sessionId))
+        return Projection(session, nodes, chain, sessionId)
     }
 
     private fun toVerdictNode(record: GuardEventRecord, chain: ChainBuilder): TimelineNode {

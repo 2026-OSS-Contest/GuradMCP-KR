@@ -53,6 +53,23 @@ data class EventLookupResponse(
     @get:JsonUnwrapped val node: TimelineNode,
 )
 
+/**
+ * `GET /sessions/{id}/chain-verify` (GMCP-83 §4.2). Field names/shape follow the spec; `status`
+ * keeps this codebase's existing `valid`/`broken`/`unknown` vocabulary rather than the spec's
+ * `VALID`/`INVALID`/`EMPTY` — see [kr.guardmcp.controlplane.domain.ChainResult]'s doc comment
+ * for why. Computed on demand, not stored (spec §4.2: "on-demand 계산").
+ */
+data class ChainVerifyResponse(
+    val sessionId: UUID,
+    val status: ChainStatus,
+    val verifiedCount: Int,
+    val totalCount: Int,
+    @get:JsonInclude(JsonInclude.Include.NON_NULL) val firstMismatchEventId: UUID?,
+    val mismatchEventIds: List<UUID>,
+    @get:JsonInclude(JsonInclude.Include.NON_NULL) val lastVerifiedHash: String?,
+    val verifiedAt: Instant,
+)
+
 data class ExportRequest(val format: String = "html", val theme: String = "light")
 
 /**
@@ -139,6 +156,28 @@ class ReplayController(private val replayStore: ReplayTimelines, private val rep
             brokenAt = chain.brokenAt,
             nodes = page.items,
             nextCursor = page.nextCursor,
+        )
+    }
+
+    /**
+     * GMCP-83 §4.2: the detailed counterpart to `timeline`'s `chainStatus`/`brokenAt` summary —
+     * this is where `mismatchEventIds` (plural) is worth the extra round trip, for the Pill's
+     * click-through and for the export report (§7).
+     */
+    @GetMapping("/sessions/{sessionId}/chain-verify")
+    fun chainVerify(@PathVariable sessionId: String): ChainVerifyResponse {
+        val id = parseUuidOrNull(sessionId) ?: notFoundSession(sessionId)
+        replayStore.session(id) ?: notFoundSession(sessionId)
+        val chain = replayStore.chainResult(id)
+        return ChainVerifyResponse(
+            sessionId = id,
+            status = chain.status,
+            verifiedCount = chain.verifiedCount,
+            totalCount = chain.totalCount,
+            firstMismatchEventId = chain.brokenAt,
+            mismatchEventIds = chain.mismatchEventIds,
+            lastVerifiedHash = chain.lastVerifiedHash,
+            verifiedAt = chain.verifiedAt,
         )
     }
 
