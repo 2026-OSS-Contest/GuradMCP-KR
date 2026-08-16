@@ -545,7 +545,16 @@ async function compareDrafts(browser, files) {
       if (run.hug && (Math.abs(d.w - Math.round(run.w)) > POSITION_TOLERANCE || Math.abs(d.h - Math.round(run.h)) > POSITION_TOLERANCE)) {
         boxes.push({ text, what: "크기", figma: `${Math.round(run.w)}×${Math.round(run.h)}`, app: `${d.w}×${d.h}` });
       }
-      if (run.size && `${run.size}px` !== d.size) type.push({ text, figma: `${run.family ?? "?"} ${run.size}px`, app: `${d.family} ${d.size}` });
+      // Weight as well as size: the draft takes its typography from the token class the layer's
+      // style names, so a style whose weight the class does not carry shows up only here.
+      const wanted = FIGMA_WEIGHT[(run.style ?? "").toLowerCase().replace(/\s|italic/g, "")];
+      if ((run.size && `${run.size}px` !== d.size) || (wanted && String(wanted) !== d.weight)) {
+        type.push({
+          text,
+          figma: `${run.family ?? "?"} ${run.size}px/${wanted ?? "?"}`,
+          app: `${d.family} ${d.size}/${d.weight}`
+        });
+      }
       if (run.hex && run.alpha === 1) {
         const hex = rgbToHex(d.color);
         if (hex && hex.toLowerCase() !== run.hex.toLowerCase()) color.push({ text, figma: run.hex, app: hex });
@@ -624,6 +633,7 @@ function figmaGeometry(file) {
         hug: node.sizing?.h === "HUG",
         size: node.fontSize,
         family: node.font?.family,
+        style: node.font?.style,
         hex: node.fills?.[0]?.hex,
         alpha: node.fills?.[0]?.a
       });
@@ -632,6 +642,12 @@ function figmaGeometry(file) {
   })(root, -(root.x ?? 0), -(root.y ?? 0));
   return runs;
 }
+
+/** Figma names a weight by its style; CSS wants the number. */
+const FIGMA_WEIGHT = {
+  thin: 100, extralight: 200, light: 300, regular: 400, normal: 400, medium: 500,
+  semibold: 600, demibold: 600, bold: 700, extrabold: 800, black: 900, heavy: 900
+};
 
 /** The PNG's own pixel size, straight out of the IHDR chunk. */
 function pngSize(file) {

@@ -125,7 +125,9 @@ test("SCR-000 session picker is operable from the keyboard alone", async ({ page
 
 test("SCR-000 session picker explains an empty session list", async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem("guardmcp.mock-scenario", "empty"));
-  await page.goto("/");
+  // Not the gateway: with nothing registered its own empty frame draws a bare status bar, so the
+  // picker is not on screen there to be asked.
+  await page.goto("/replay");
   await page.getByRole("banner").getByRole("button", { name: /세션/ }).click();
   // Spec §4.2: the copy gives the cause and the next action.
   await expect(page.getByText(/데모를 실행하면 세션이 만들어집니다/)).toBeVisible();

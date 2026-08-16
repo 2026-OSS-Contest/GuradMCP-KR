@@ -50,13 +50,13 @@ function ToolRow({ serverId, tool }: { serverId: string; tool: ToolEntry }) {
     // the narrowest one the two flexible columns are squeezed to nothing and the tool name
     // disappears entirely. Letting the row grow is what keeps it readable there.
     <div className="flex min-h-[45px] items-center bg-(--primitive-opacity-black-alpha-25) shadow-[inset_0_-1px_0_0_var(--primitive-opacity-white-alpha-10)]">
-      <div className="flex min-w-0 flex-[1_1_9rem] items-center justify-center p-3">
+      <div className="flex min-w-0 flex-1 items-center justify-center p-3">
         {/* A tool name is one unbroken token, so it has to be allowed to break mid-word — and
             then held to two lines, past which it is the policy and the risk that matter more. */}
         <code className="line-clamp-2 w-full break-all text-body-mono-b3-rg">{tool.name}</code>
       </div>
 
-      <div className="flex min-w-0 flex-[1_1_6rem] flex-col justify-center p-3">
+      <div className="flex min-w-0 flex-1 flex-col justify-center p-3">
         {/* Icon, label and grade wrap independently, so the column reads down the three of them
             instead of clipping the grade off the end. */}
         <span className={cn("flex flex-wrap items-center gap-x-1 text-body-text-b3-md", tone)}>
