@@ -39,6 +39,17 @@ enum class ToolCallDirection(@get:JsonValue val wire: String) {
 enum class ChainStatus(@get:JsonValue val wire: String) {
     VALID("valid"),
     BROKEN("broken"),
+
+    /**
+     * No stored hash to check against, so tamper-evidence cannot be claimed either way.
+     *
+     * This is not a degraded VALID. A verification needs a hash that was written when the
+     * event was recorded; `guard_event.hash`/`prev_hash` are schema-only until GMCP-83
+     * fills them in. Recomputing a hash at read time and comparing it to a hash derived
+     * from the same in-memory node proves only that the function is deterministic — it
+     * would report VALID over a tampered row just as readily.
+     */
+    UNKNOWN("unknown"),
 }
 
 data class Span(val start: Int, val end: Int)

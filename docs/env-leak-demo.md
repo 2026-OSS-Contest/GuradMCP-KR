@@ -61,12 +61,22 @@ curl --fail --silent --request POST http://localhost:3002/demo/readme-summary/co
 | `argsDigest` | 검사한 인자의 다이제스트 — **원문 아님** |
 | `normalizedPath` | `.env` |
 
-`normalizedPath`가 들어가는 건 의도된 것입니다(FR-SEC-04 §3.3). Replay가 **`path_regex`가 무엇에 매칭됐는지** 보여줘야 하기 때문이고, 파일 **내용**은 어디에도 담기지 않습니다.
+`normalizedPath`가 들어가는 건 의도된 것입니다(FR-SEC-04 §3.3) — **`path_regex`가 무엇에 매칭됐는지** 남기기 위한 필드이고, 파일 **내용**은 어디에도 담기지 않습니다. 다만 이 필드는 Control Plane 수집 DTO에 없어서 경계에서 버려집니다. Replay 타임라인까지는 도달하지 않습니다.
 
-## 현재 한계 — Replay 화면에는 아직 안 뜹니다
+## Replay에서 확인하기
 
-차단 이벤트는 위 표대로 정책 ID와 위험 점수를 싣고 Control Plane까지 **도달합니다**. 다만 Replay 화면이 그걸 읽지 않습니다.
+차단 이벤트는 위 표대로 정책 ID와 위험 점수를 싣고 Control Plane까지 도달하며, **Replay 화면이 그걸 읽습니다**(GMCP-114). 방금 실행한 데모가 세션 목록에 나타납니다.
 
-`ReplayStore`는 기동 시 시드된 세션 세 건을 들고 있고 수집된 감사 이벤트(`GuardEventRepository`)와 연결돼 있지 않습니다. 그래서 지금 Replay에 보이는 것은 **고정 시드**이고, 방금 실행한 데모는 목록에 나타나지 않습니다.
+```bash
+curl --fail --silent "http://localhost:8080/api/v1/sessions?limit=100"
+```
 
-연결은 Control Plane 쪽 작업이라 **GMCP-114**로 분리했습니다. 그때까지 이 데모의 차단 근거는 위 스크립트와 demo-agent 응답, 그리고 감사 이벤트로 확인합니다.
+`agentLabel`이 이 데모의 게이트웨이 세션 ID인 항목을 찾아, 그 `sessionId`(UUID)로 타임라인을 엽니다.
+
+```bash
+curl --fail --silent "http://localhost:8080/api/v1/sessions/<uuid>/timeline"
+```
+
+차단 노드에 `verdict: "block"`, `riskScore`, `detail.matchedPolicyIds: ["block_env_file_read"]`가 위 표와 같은 값으로 담겨 있습니다. 자세한 동작은 [Replay 세션·타임라인](replay.md)에 있습니다.
+
+조회 시점에 투영하므로 화면을 새로 불러야 새 이벤트가 보입니다 — 실시간 푸시는 아직 없습니다.

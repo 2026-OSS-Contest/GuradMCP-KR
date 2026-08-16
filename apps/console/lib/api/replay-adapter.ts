@@ -108,7 +108,15 @@ export function toTimelineResponse(api: ApiSessionTimelineResponse): TimelineRes
   for (const node of api.nodes) {
     if (node.type === "TOOL_CALL") lastToolName = node.toolName;
     events.push(toTimelineEvent(node));
-    const chainStatus: ChainStatus = api.chainStatus === "broken" && api.brokenAt === node.eventId ? "failed" : "verified";
+    // "unknown" carries no evidence either way, so the pill is left off entirely — the same
+    // rule `toEventDetailFromLookup` applies below. Defaulting it to "verified" would put a
+    // green badge on a session nothing has actually verified.
+    const chainStatus: ChainStatus | undefined =
+      api.chainStatus === "unknown"
+        ? undefined
+        : api.chainStatus === "broken" && api.brokenAt === node.eventId
+          ? "failed"
+          : "verified";
     details[node.eventId] = toEventDetail(node, api.sessionId, lastToolName, chainStatus);
   }
   return { events, details };

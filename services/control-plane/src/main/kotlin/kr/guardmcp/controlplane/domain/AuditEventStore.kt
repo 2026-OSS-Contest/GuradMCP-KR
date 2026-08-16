@@ -35,8 +35,19 @@ data class GuardEventRecord(
     val rawPayload: String?,
 )
 
+/**
+ * The slice of the audit log Replay reads (GMCP-114). Declared as an interface so the
+ * projection can be exercised without Postgres; [GuardEventRepository] is the only
+ * production implementation.
+ */
+interface AuditEventQueries {
+    fun findSessionIds(): List<String>
+    fun findBySessionId(sessionId: String): List<GuardEventRecord>
+    fun findById(eventId: UUID): GuardEventRecord?
+}
+
 @Component
-class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) {
+class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQueries {
     // Spring Boot doesn't publish a `com.fasterxml.jackson.databind.ObjectMapper` bean here
     // (see ApiTestSupport's note), so this reads/writes the jsonb column with its own instance.
     private val objectMapper = ObjectMapper()
@@ -65,8 +76,30 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) {
         return rowsAffected > 0
     }
 
-    fun findById(eventId: UUID): GuardEventRecord? =
+    override fun findById(eventId: UUID): GuardEventRecord? =
         jdbcTemplate.query(SELECT_SQL, rowMapper, eventId).firstOrNull()
+
+    /**
+     * Session ids present in the log (GMCP-114). Replay lists sessions before it knows
+     * which one a reader wants, so this stays a projection over ids rather than loading
+     * every event.
+     *
+     * Ordered by most recent activity, but that is only a deterministic base: sessions
+     * are re-sorted by `startedAt` once seeded and projected sessions are merged, so
+     * callers must not treat this order as the one the API answers with.
+     */
+    override fun findSessionIds(): List<String> =
+        // session_id is NOT NULL in the schema, but queryForList types the column as
+        // nullable; filtering keeps the signature honest without a cast.
+        jdbcTemplate.queryForList(SELECT_SESSION_IDS_SQL, String::class.java).filterNotNull()
+
+    /**
+     * Every event of one session, ordered the way the Replay timeline orders nodes:
+     * `ts` ascending with `event_id` as the tie-break, so two events written in the
+     * same millisecond still come back in a stable order.
+     */
+    override fun findBySessionId(sessionId: String): List<GuardEventRecord> =
+        jdbcTemplate.query(SELECT_BY_SESSION_SQL, rowMapper, sessionId)
 
     private val rowMapper = RowMapper { rs, _ ->
         @Suppress("UNCHECKED_CAST")
@@ -110,6 +143,21 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) {
                    matched_policy_ids, detections, mask_diff_ref, raw_payload
             FROM guard_event
             WHERE event_id = ?
+        """
+
+        private const val SELECT_SESSION_IDS_SQL = """
+            SELECT session_id
+            FROM guard_event
+            GROUP BY session_id
+            ORDER BY MAX(ts) DESC, session_id
+        """
+
+        private const val SELECT_BY_SESSION_SQL = """
+            SELECT event_id, session_id, ts, direction, tool_name, args_digest, verdict, risk_score,
+                   matched_policy_ids, detections, mask_diff_ref, raw_payload
+            FROM guard_event
+            WHERE session_id = ?
+            ORDER BY ts, event_id
         """
     }
 }

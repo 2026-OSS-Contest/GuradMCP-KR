@@ -154,8 +154,12 @@ class ControlPlaneApiTest : ApiTestSupport() {
         assertTrue(closedItems.all { it["isLive"] == false })
 
         val byTool = parseMap(get("/api/v1/sessions?q=read_file").body())
-        val toolItems = (byTool["items"] as List<*>).map { it as Map<*, *> }
-        assertEquals(listOf(DemoSeed.SESSION_INJECTION_ID.toString()), toolItems.map { it["sessionId"] })
+        val toolIds = (byTool["items"] as List<*>).map { (it as Map<*, *>)["sessionId"] }
+        // Sessions projected from ingested audit events match this search too (GMCP-114), so the
+        // assertion is that the seeded read_file session is found and an unrelated seeded session
+        // is not — rather than that the seeds are the only thing in the store.
+        assertTrue(toolIds.contains(DemoSeed.SESSION_INJECTION_ID.toString()))
+        assertTrue(!toolIds.contains(DemoSeed.SESSION_PII_ID.toString()))
 
         val invalidStatus = get("/api/v1/sessions?status=bogus")
         assertEquals(400, invalidStatus.statusCode())

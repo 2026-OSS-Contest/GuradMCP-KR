@@ -80,6 +80,7 @@ Do not disclose vulnerabilities in public issues. [SECURITY.md](SECURITY.md#engl
 | Policy Authoring Guide | [Open](docs/policy-guide/README.en.md) | [열기](docs/policy-guide/README.md) |
 | Risk score formula | [Open](docs/risk-scoring.en.md) | [열기](docs/risk-scoring.md) |
 | Verdict explanations | [Open](docs/explanation.en.md) | [열기](docs/explanation.md) |
+| Replay sessions and timeline | [Open](docs/replay.en.md) | [열기](docs/replay.md) |
 | Korean service credentials | [Open](docs/korean-service-tokens.en.md) | [열기](docs/korean-service-tokens.md) |
 | High-entropy credential net | [Open](docs/high-entropy-secrets.en.md) | [열기](docs/high-entropy-secrets.md) |
 | Korean PII masking demo | [Open](docs/korean-pii-demo.en.md) | [열기](docs/korean-pii-demo.md) |

