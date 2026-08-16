@@ -19,19 +19,22 @@ test("SCR-401 a sample runs and reports each finding with its masked form", asyn
   await page.getByRole("button", { name: "한국형 PII 샘플" }).click();
   await page.getByRole("button", { name: "검사 실행" }).click();
 
-  // Every detector the design draws, tagged and scored.
+  // Every detector the design draws, tagged and scored. The sample is the consultation ticket
+  // the rest of the console is about (TCK-2026-9001), so what is flagged here is what SCR-301
+  // shows masked.
   const findings = page.getByRole("region", { name: "탐지 결과" });
   await expect(findings.getByText("PHONE")).toBeVisible();
-  await expect(findings.getByText("010-1234-5678")).toBeVisible();
+  await expect(findings.getByText("010-3456-7890")).toBeVisible();
   await expect(findings.getByText("98%").first()).toBeVisible();
+  await expect(findings.getByText("BANK_ACCOUNT")).toBeVisible();
   // The resident number is never echoed in full, even by the thing that flagged it.
-  await expect(findings.getByText("900101-*******")).toBeVisible();
-  await expect(findings.getByText("900101-1234567")).toBeHidden();
+  await expect(findings.getByText("881124-*******")).toBeVisible();
+  await expect(findings.getByText("881124-2300149")).toBeHidden();
 
   // The masked pane substitutes a chip per finding.
   const masked = page.getByRole("region", { name: "마스킹 결과" });
-  await expect(masked.getByText("SECRET_OPENAI")).toBeVisible();
-  await expect(masked.getByText("sk-af1k2j3h4h5g6")).toBeHidden();
+  await expect(masked.getByText("RRN_LIKE")).toBeVisible();
+  await expect(masked.getByText("881124-2300149")).toBeHidden();
 });
 
 test("SCR-401 choosing a finding selects it in the input", async ({ page }) => {
@@ -39,14 +42,14 @@ test("SCR-401 choosing a finding selects it in the input", async ({ page }) => {
   await page.getByRole("button", { name: "한국형 PII 샘플" }).click();
   await page.getByRole("button", { name: "검사 실행" }).click();
 
-  await page.getByRole("region", { name: "탐지 결과" }).getByText("010-1234-5678").click();
+  await page.getByRole("region", { name: "탐지 결과" }).getByText("010-3456-7890").click();
 
   // Selecting the match is what scrolls the textarea to it and shows which run of text it was.
   const selected = await page.evaluate(() => {
     const input = document.querySelector("textarea");
     return input?.value.slice(input.selectionStart ?? 0, input.selectionEnd ?? 0);
   });
-  expect(selected).toBe("010-1234-5678");
+  expect(selected).toBe("010-3456-7890");
 });
 
 test("SCR-401 switching direction drops the stale result, then runs the text the other way", async ({ page }) => {
@@ -84,9 +87,12 @@ test("SCR-401 each sample loads its own material", async ({ page }) => {
   const findings = page.getByRole("region", { name: "탐지 결과" });
   await expect(findings.getByText("SECRET").first()).toBeVisible();
 
+  // The injection sample is the README's own hidden comment, so it carries the wording, the
+  // file it names and the address it would send it to.
   await page.getByRole("button", { name: "인젝션 샘플" }).click();
+  await expect(findings.getByText("INJECTION").first()).toBeVisible();
   await expect(findings.getByText("PATH").first()).toBeVisible();
-  await expect(findings.getByText("attacker@evil.example")).toBeVisible();
+  await expect(findings.getByText("attacker@example.com")).toBeVisible();
 });
 
 test("SCR-401 inspects the first 64KB of a longer text and says the rest went unchecked", async ({ page }) => {
@@ -143,15 +149,15 @@ test("SCR-401 copies the masked text", async ({ page }) => {
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/detector");
   await page.getByRole("button", { name: "한국형 PII 샘플" }).click();
-  await expect(page.getByRole("region", { name: "마스킹 결과" }).getByText("SECRET_OPENAI")).toBeVisible();
+  await expect(page.getByRole("region", { name: "마스킹 결과" }).getByText("RRN_LIKE")).toBeVisible();
 
   await page.getByRole("button", { name: "마스킹 결과 복사" }).click();
 
   await expect(page.getByText("복사했습니다.")).toBeVisible();
   // What lands on the clipboard is the masked form — never the text that was pasted in.
   const clipboard = await page.evaluate(() => navigator.clipboard.readText());
-  expect(clipboard).toContain("[SECRET_OPENAI]");
-  expect(clipboard).not.toContain("sk-af1k2j3h4h5g6");
+  expect(clipboard).toContain("[RRN_LIKE]");
+  expect(clipboard).not.toContain("881124-2300149");
 });
 
 test("SCR-401 floats the results over the input at 1024", async ({ page }) => {

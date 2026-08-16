@@ -115,9 +115,9 @@ test("SCR-000 session picker is operable from the keyboard alone", async ({ page
   await expect(list.getByRole("option", { name: /#s-0712/ })).toBeFocused();
   // Arrows rove between options; Enter activates the focused one.
   await page.keyboard.press("ArrowDown");
-  await expect(list.getByRole("option", { name: /#s-0711/ })).toBeFocused();
+  await expect(list.getByRole("option", { name: /#s-0713/ })).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/replay\/s-0711$/);
+  await expect(page).toHaveURL(/\/replay\/s-0713$/);
 });
 
 // Both states need the very first load to be empty/failing, so the scenario is seeded before
