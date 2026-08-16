@@ -26,9 +26,12 @@ function StatPanel({ label, value, suffix, suffixType, danger }: { label: string
   return (
     <div className="flex flex-1 flex-col gap-2 rounded-lg bg-grayscale-900 px-3 py-2 shadow-[inset_0_0_0_1px_var(--primitive-color-grayscale-800)]">
       <span className="text-body-text-b3-md text-grayscale-300">{label}</span>
-      <span className="flex items-end justify-end gap-1">
+      {/* Baseline, not the box bottom: the two are set at 36px and 18px, so aligning their boxes
+          leaves the digits sitting on different lines. `pb-2` had been nudging the smaller one
+          back up by eye — the frame simply puts them on one baseline. */}
+      <span className="flex items-baseline justify-end gap-1">
         <b className={cn("text-header-text-h-bd", danger ? "text-red-400" : "text-grayscale-white")}>{value}</b>
-        {suffix && <span className={cn("pb-2 text-(--primitive-opacity-white-alpha-50)", suffixType ?? "text-caption-text-c-md")}>{suffix}</span>}
+        {suffix && <span className={cn("text-(--primitive-opacity-white-alpha-50)", suffixType ?? "text-caption-text-c-md")}>{suffix}</span>}
       </span>
     </div>
   );
