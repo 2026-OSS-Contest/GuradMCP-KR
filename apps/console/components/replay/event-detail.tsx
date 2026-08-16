@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Lock } from "lucide-react";
 import { revealEvent } from "@/lib/api/client";
-import type { DirectionVerdict, EventDetail, RevealContent } from "@/lib/api/types";
+import type { DirectionVerdict, EventDetail, RevealContent, TimelineNodeType } from "@/lib/api/types";
 import { VerdictBadge } from "@/components/verdict-badge";
-import { VerdictAllowIcon, VerdictWarnIcon } from "@/components/icons";
+import { RevealLockIcon, VerdictAllowIcon, VerdictWarnIcon } from "@/components/icons";
 import { PolicyChip } from "./policy-chip";
 import { MaskDiffView } from "./mask-diff";
 import { MaskedContent } from "./masked-content";
@@ -22,24 +21,57 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 }
 
 /** 위협 점수 / 탐지 count panels. */
-function StatPanel({ label, value, suffix, danger }: { label: string; value: number | string; suffix?: string; danger?: boolean }) {
+function StatPanel({ label, value, suffix, suffixType, danger }: { label: string; value: number | string; suffix?: string; suffixType?: string; danger?: boolean }) {
   return (
-    <div className="flex flex-1 flex-col gap-2 rounded-sm bg-grayscale-900 px-3 py-2 shadow-[inset_0_0_0_1px_var(--primitive-color-grayscale-800)]">
+    <div className="flex flex-1 flex-col gap-2 rounded-lg bg-grayscale-900 px-3 py-2 shadow-[inset_0_0_0_1px_var(--primitive-color-grayscale-800)]">
       <span className="text-body-text-b3-md text-grayscale-300">{label}</span>
-      <span className="flex items-end justify-end gap-1">
+      {/* Baseline, not the box bottom: the two are set at 36px and 18px, so aligning their boxes
+          leaves the digits sitting on different lines. `pb-2` had been nudging the smaller one
+          back up by eye — the frame simply puts them on one baseline. */}
+      <span className="flex items-baseline justify-end gap-1">
         <b className={cn("text-header-text-h-bd", danger ? "text-red-400" : "text-grayscale-white")}>{value}</b>
-        {suffix && <span className="pb-2 text-caption-text-c-md text-(--primitive-opacity-white-alpha-50)">{suffix}</span>}
+        {suffix && <span className={cn("text-(--primitive-opacity-white-alpha-50)", suffixType ?? "text-caption-text-c-md")}>{suffix}</span>}
       </span>
     </div>
   );
 }
 
+/**
+ * The tool call's arguments, with the values picked out. Keys, braces and commas are structure —
+ * the same for every call — while a value is what this call actually carried, so it is the one run
+ * that takes a colour. The frame colours `".env"` alone and leaves the rest grey.
+ *
+ * A quoted run is a key when a colon follows it, and a value otherwise; numbers, booleans and null
+ * are always values.
+ */
+const JSON_TOKEN = /("(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?|true|false|null)/g;
+
+function ArgsJson({ json }: { json: string }) {
+  const parts = json.split(JSON_TOKEN);
+  return (
+    <pre className="overflow-x-auto rounded-lg bg-(--primitive-opacity-black-alpha-75) p-3 font-mono text-body-mono-b3-rg text-grayscale-300">
+      {parts.map((part, index) => {
+        const quoted = part.startsWith('"');
+        const isKey = quoted && /^\s*:/.test(parts[index + 1] ?? "");
+        const isValue = index % 2 === 1 && !isKey;
+        return isValue ? (
+          <span key={index} className="text-green-200">
+            {part}
+          </span>
+        ) : (
+          <span key={index}>{part}</span>
+        );
+      })}
+    </pre>
+  );
+}
+
 /** The direction verdict a tool-call / result carries: a verdict badge + policy chip. */
-function Direction({ direction }: { direction: DirectionVerdict }) {
+function Direction({ direction, kind }: { direction: DirectionVerdict; kind: TimelineNodeType }) {
   const t = useTranslations("replay.detail");
   return (
     <section className="flex flex-col gap-2">
-      <SectionHeading>{direction.heading}</SectionHeading>
+      <SectionHeading>{kind === "result" ? t("responseDirection") : t("requestDirection")}</SectionHeading>
       <div className="flex flex-wrap items-center gap-3">
         <VerdictBadge verdict={direction.verdict} size="sm" />
         <PolicyChip id={direction.policy} />
@@ -87,7 +119,7 @@ function ConfirmRevealModal({ onCancel, onConfirm, pending }: { onCancel: () => 
         role="alertdialog"
         aria-labelledby="confirm-reveal-title"
         aria-describedby="confirm-reveal-body"
-        className="w-96 max-w-full rounded-lg bg-grayscale-900 p-6 shadow-xl shadow-black/50"
+        className="w-96 max-w-full rounded-xl bg-grayscale-900 p-6 shadow-xl shadow-black/50"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <h2 id="confirm-reveal-title" className="text-body-text-b1-bd text-grayscale-white">
@@ -100,7 +132,7 @@ function ConfirmRevealModal({ onCancel, onConfirm, pending }: { onCancel: () => 
           <button
             type="button"
             onClick={onCancel}
-            className="flex h-9 items-center rounded-lg bg-(--primitive-opacity-white-alpha-6) px-4 text-body-text-b3-md transition-colors hover:bg-white/10"
+            className="flex h-9 items-center rounded-xl bg-(--primitive-opacity-white-alpha-6) px-4 text-body-text-b2-md transition-colors hover:bg-white/10"
           >
             {t("cancel")}
           </button>
@@ -108,7 +140,7 @@ function ConfirmRevealModal({ onCancel, onConfirm, pending }: { onCancel: () => 
             type="button"
             onClick={onConfirm}
             disabled={pending}
-            className="flex h-9 items-center rounded-lg bg-blue-800 px-4 text-body-text-b3-md transition-colors hover:bg-blue-700 disabled:opacity-50"
+            className="flex h-9 items-center rounded-xl bg-blue-800 px-4 text-body-text-b2-md transition-colors hover:bg-blue-700 disabled:opacity-50"
           >
             {t("continue")}
           </button>
@@ -125,7 +157,6 @@ function ConfirmRevealModal({ onCancel, onConfirm, pending }: { onCancel: () => 
  */
 export function EventDetailPanel({ detail }: { detail: EventDetail }) {
   const t = useTranslations("replay.detail");
-  const [maskExpanded, setMaskExpanded] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [revealed, setRevealed] = useState<RevealContent | null>(null);
@@ -134,7 +165,6 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
   useEffect(() => {
     setConfirmOpen(false);
     setRevealed(null);
-    setMaskExpanded(false);
   }, [detail.id]);
 
   const confirmReveal = async () => {
@@ -166,7 +196,9 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
             <span
               className={cn(
                 "min-w-0 break-words text-grayscale-white",
-                monoTitle || isVerdict ? "font-mono text-title-mono-t1-rg" : "text-title-text-t2-bd"
+                // User and agent nodes are titled with their own prose summary, so they take the
+                // design's title type rather than mono (frame `…-agent-단계`, GMCP-115 A-2).
+                monoTitle || isVerdict ? "font-mono text-title-mono-t1-rg" : "text-title-text-t1-bd"
               )}
             >
               {detail.tool}
@@ -177,8 +209,13 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
         {/* Agent — its own summary of the decision. */}
         {detail.summary && (
           <section className="flex flex-col gap-2">
-            <SectionHeading>{detail.summary.heading}</SectionHeading>
-            <p className="text-body-text-b3-rg text-grayscale-100">{detail.summary.text}</p>
+            <SectionHeading>{t("agentSummary")}</SectionHeading>
+            {/* The frame sets the report on its own ground with a 4px blue rule down the left —
+                the agent speaking, marked off from the panel's own reporting around it. Padding
+                is 12 on three sides and 16 against the rule, so the text clears it. */}
+            <p className="bg-(--primitive-opacity-white-alpha-6) py-3 pr-3 pl-4 text-body-text-b3-md text-grayscale-white shadow-[inset_4px_0_0_0_var(--primitive-color-blue-800)]">
+              {detail.summary}
+            </p>
           </section>
         )}
 
@@ -195,9 +232,7 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
               <SectionHeading>
                 {t("args")} <span className="text-grayscale-300">{t("argsCount", { count: detail.call.argsCount })}</span>
               </SectionHeading>
-              <pre className="overflow-x-auto rounded-lg bg-(--primitive-opacity-black-alpha-75) p-3 font-mono text-caption-mono-c-rg text-grayscale-200">
-                {detail.call.argsJson}
-              </pre>
+              <ArgsJson json={detail.call.argsJson} />
             </section>
           </>
         )}
@@ -227,7 +262,7 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
         {/* Verdict — threat score and detection count. */}
         {(detail.threatScore !== undefined || (detail.detections && detail.detections.length > 0)) && (
           <div className="flex gap-4">
-            <StatPanel label={t("threatScore")} value={detail.threatScore ?? 0} suffix="/100" danger />
+            <StatPanel label={t("threatScore")} value={detail.threatScore ?? 0} suffix="/100" suffixType="text-body-text-b1-bd" danger />
             <StatPanel label={t("detections")} value={detail.detections?.length ?? 0} suffix={t("detectionUnit")} />
           </div>
         )}
@@ -256,31 +291,26 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
         {/* User input / tool result — numbered, masked content. */}
         {detail.body && (
           <section className="flex flex-col gap-2">
-            <SectionHeading>{detail.body.heading}</SectionHeading>
+            <SectionHeading>{detail.kind === "result" ? t("returnSummary") : t("inputOriginal")}</SectionHeading>
             <div className="rounded-lg bg-(--primitive-opacity-black-alpha-75) p-3">
-              <MaskedContent lines={detail.body.lines} />
+              <MaskedContent lines={detail.body} />
             </div>
           </section>
         )}
 
         {/* Tool call / result — direction verdict. */}
-        {detail.direction && <Direction direction={detail.direction} />}
+        {detail.direction && <Direction direction={detail.direction} kind={detail.kind} />}
 
-        {/* Verdict — mask diff. */}
+        {/* Verdict — mask diff. The frame heads it with a 상세 보기 button; it is not here, because
+            what that button opens is unsettled. The frame behind it shows a modal carrying the raw
+            phone, account and RRN values with no confirmation — the audit gate 화면설계서 5.3 no.5
+            puts in front of 원문 열람, skipped. Until the designer says which it is, a button that
+            only relabels itself is worse than none: the clamp it used to release never engaged at
+            the sizes this diff runs to, so it changed nothing on screen. */}
         {detail.maskDiff && (
           <section className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-              <SectionHeading>Mask Diff</SectionHeading>
-              <button
-                type="button"
-                onClick={() => setMaskExpanded((previous) => !previous)}
-                aria-expanded={maskExpanded}
-                className="flex h-[29px] items-center rounded-lg bg-(--primitive-opacity-white-alpha-25) px-3 text-body-text-b3-md transition-colors hover:bg-white/30"
-              >
-                {maskExpanded ? t("collapse") : t("expand")}
-              </button>
-            </div>
-            <MaskDiffView diff={detail.maskDiff} expanded={maskExpanded} />
+            <SectionHeading>Mask Diff</SectionHeading>
+            <MaskDiffView diff={detail.maskDiff} />
           </section>
         )}
 
@@ -292,9 +322,9 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
         <button
           type="button"
           onClick={() => setConfirmOpen(true)}
-          className="flex h-12 flex-none items-center justify-center gap-2 rounded-lg bg-blue-800 text-body-text-b2-md transition-colors hover:bg-blue-700"
+          className="flex h-12 flex-none items-center justify-center gap-2 rounded-xl bg-blue-800 text-body-text-b2-md transition-colors hover:bg-blue-700"
         >
-          <Lock className="size-5 flex-none" aria-hidden />
+          <RevealLockIcon className="h-6 w-5 flex-none" aria-hidden />
           {t("reveal")}
         </button>
       )}

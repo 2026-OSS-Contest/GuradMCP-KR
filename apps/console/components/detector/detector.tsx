@@ -99,9 +99,14 @@ export function Detector() {
   // each column carries its own 24/16 inset instead. That is what makes the 488px button row fit
   // the 520px input column at 1280 without wrapping.
   //
-  // The frames stop at 1024, where the results float over the input. Narrower than that the
-  // overlay would sit on top of the run button and half the samples, so the two stack instead —
-  // the design says nothing about that width, and covering the controls is not a reading of it.
+  // The frames stop at 1024, where the results float over the input. Floating, it is the same
+  // panel SCR-301 floats at that width — the frame names it `event detail` on both screens and
+  // puts it at 661,76 · 347x932, clear of the content row's top, right and bottom by the same
+  // 16px. It had 24px above and below against 16 at the side.
+  //
+  // Narrower than 1024 the overlay would sit on top of the run button and half the samples, so
+  // the two stack instead — the design says nothing about that width, and covering the controls
+  // is not a reading of it.
   return (
     <div data-scr="SCR-401" className="relative flex min-h-0 flex-1 flex-col lg:flex-row">
       <DetectorInput
@@ -126,7 +131,7 @@ export function Detector() {
         width, so it is the design's responsive rule rather than the composition artifact an
         earlier reading here took it for.
       */}
-      <div className="flex min-h-100 flex-col gap-4 overflow-y-auto px-4 pb-6 lg:absolute lg:inset-y-6 lg:right-4 lg:min-h-0 lg:w-86.75 lg:rounded-(--primitive-radius-rounded-2xl) lg:bg-grayscale-950 lg:p-4 lg:ring-1 lg:shadow-xl lg:shadow-black/40 lg:ring-grayscale-800 xl:static xl:inset-auto xl:w-auto xl:flex-1 xl:overflow-visible xl:rounded-none xl:bg-transparent xl:px-4 xl:py-6 xl:shadow-none xl:ring-0">
+      <div className="flex min-h-100 flex-col gap-4 overflow-y-auto px-4 pb-6 lg:absolute lg:inset-y-4 lg:right-4 lg:min-h-0 lg:w-86.75 lg:rounded-(--primitive-radius-rounded-2xl) lg:bg-grayscale-950 lg:p-4 lg:ring-1 lg:shadow-[0_0_12px_0_var(--primitive-opacity-black-alpha-50)] lg:ring-grayscale-800 xl:static xl:inset-auto xl:w-auto xl:flex-1 xl:overflow-visible xl:rounded-none xl:bg-transparent xl:px-4 xl:py-6 xl:shadow-none xl:ring-0">
         {failed && (
           <p role="status" className="flex-none text-body-text-b3-md text-grayscale-400">
             {t("error")}

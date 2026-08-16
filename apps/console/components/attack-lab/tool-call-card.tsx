@@ -7,7 +7,13 @@ import { Tag } from "@/components/ui/tag";
 import { cn } from "@/lib/utils";
 
 /** The caret the design puts before every call name. */
-const Caret = () => <span className="flex-none text-grayscale-300">▶</span>;
+// The frame's marker is a 20px icon. Without a size of its own this span takes the body's
+// line-height instead — 24px, which made every card three pixels taller than it is drawn.
+const Caret = () => (
+  <span className="flex size-5 flex-none items-center justify-center text-caption-text-c-rg text-grayscale-300" aria-hidden>
+    ▶
+  </span>
+);
 
 /**
  * Only a ruling the gateway acted on is stamped, and the design draws just these two 전각 인장.
@@ -28,10 +34,28 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
   // A call the chain never reached — drawn dashed and dimmed, with the reason inline.
   if (call.skippedReason) {
     return (
-      <li className="flex items-center gap-2 rounded-xl border border-dashed border-(--primitive-opacity-white-alpha-25) px-3 py-2 opacity-50">
+      // The frame gives it the same 12px padding and gap as a card that ran, its own white-alpha-6
+      // ground, and a 75% stroke — faint only because the whole card sits at 25% opacity. At 25%
+      // stroke under 50% opacity the dashes were too washed out to read as a border at all.
+      <li className="relative flex items-center gap-3 rounded-xl bg-(--primitive-opacity-white-alpha-6) p-3 opacity-25">
+        {/* The outline is drawn rather than bordered because CSS has no control over the dash
+            length of `border-style: dashed` — Chromium picks about 3px at a 1px border, a third of
+            the frame's. An svg sized by the box keeps its user units in CSS pixels, so the dashes
+            stay the length set here on every edge instead of stretching with the card's width. */}
+        <svg aria-hidden className="pointer-events-none absolute inset-[0.5px] h-[calc(100%-1px)] w-[calc(100%-1px)]">
+          <rect
+            width="100%"
+            height="100%"
+            rx="11.5"
+            fill="none"
+            stroke="var(--primitive-opacity-white-alpha-75)"
+            strokeWidth="1"
+            strokeDasharray="9 6"
+          />
+        </svg>
         <Caret />
-        <span className="flex-none font-mono text-body-mono-b2-rg text-grayscale-300">{call.tool}</span>
-        <span className="min-w-0 text-caption-text-c-rg text-grayscale-400">· {call.skippedReason}</span>
+        <span className="flex-none font-mono text-body-mono-b3-rg text-grayscale-300">{call.tool}</span>
+        <span className="min-w-0 text-caption-text-c-md text-grayscale-400">· {call.skippedReason}</span>
       </li>
     );
   }
@@ -63,7 +87,7 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
       )}
       <div className="flex items-start gap-2">
         <Caret />
-        <span className="min-w-0 flex-1 font-mono text-body-mono-b2-rg break-all text-grayscale-white">
+        <span className="min-w-0 flex-1 font-mono text-body-mono-b3-rg break-all text-grayscale-white">
           {call.tool}
           {call.args && <span className="text-(--primitive-opacity-white-alpha-75)"> ({call.args})</span>}
         </span>

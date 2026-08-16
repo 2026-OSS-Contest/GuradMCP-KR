@@ -57,22 +57,22 @@ export function PolicyTable({ policies, selected, onSelect, onToggle, stats, bus
         </colgroup>
         <thead>
           <tr className="text-body-text-b2-md border-b border-grayscale-800 text-left text-grayscale-300">
-            <th scope="col" className="truncate py-3 pr-2 font-normal">
+            <th scope="col" className="[font-weight:inherit] truncate py-3 pr-2">
               {t("table.id")}
             </th>
-            <th scope="col" className="truncate py-3 pr-2 font-normal">
+            <th scope="col" className="[font-weight:inherit] truncate py-3 pr-2">
               {t("table.priority")}
             </th>
-            <th scope="col" className="truncate py-3 pr-2 font-normal">
+            <th scope="col" className="[font-weight:inherit] truncate py-3 pr-2">
               {t("table.action")}
             </th>
-            <th scope="col" className="truncate py-3 pr-2 font-normal">
+            <th scope="col" className="[font-weight:inherit] truncate py-3 pr-2">
               {t("table.severity")}
             </th>
-            <th scope="col" className="truncate py-3 pr-2 font-normal">
+            <th scope="col" className="[font-weight:inherit] truncate py-3 pr-2">
               {t("table.enabled")}
             </th>
-            <th scope="col" className="truncate py-3 font-normal">
+            <th scope="col" className="[font-weight:inherit] truncate py-3">
               {t("table.fired")}
             </th>
           </tr>
@@ -103,7 +103,10 @@ export function PolicyTable({ policies, selected, onSelect, onToggle, stats, bus
                 className={cn(
                   "cursor-pointer border-b border-grayscale-800 align-middle",
                   selected === policy.id && "bg-grayscale-800",
-                  muted && "text-grayscale-500"
+                  // The frame dims the whole row rather than greying its text, which is what
+                  // carries the badges down with it — a disabled policy whose verdict badge still
+                  // reads at full strength looks like it is still deciding calls.
+                  muted && "opacity-25"
                 )}
               >
                 {/* 78px cannot hold a policy id, and the design clamps rather than reflowing
@@ -121,10 +124,7 @@ export function PolicyTable({ policies, selected, onSelect, onToggle, stats, bus
                     <VerdictBadge verdict={toVerdict(policy.action)} size="sm" compact />
                   )}
                 </td>
-                <td className={cn(
-                    "text-body-text-b2-md py-4 pr-2",
-                    muted ? "text-grayscale-500" : SEVERITY_INK[policy.severity]
-                  )}>
+                <td className={cn("text-body-text-b2-md py-4 pr-2", SEVERITY_INK[policy.severity])}>
                   {policy.severity}
                 </td>
                 <td className="py-4 pr-2">

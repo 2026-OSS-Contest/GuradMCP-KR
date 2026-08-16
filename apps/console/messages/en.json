@@ -140,8 +140,6 @@
       "detections": "Detections",
       "detectionUnit": "",
       "detectionList": "Detection list",
-      "expand": "Expand",
-      "collapse": "Collapse",
       "chainVerified": "Chain verified",
       "chainFailed": "Chain verification failed",
       "reveal": "Reveal original",
@@ -151,7 +149,12 @@
       "args": "Arguments",
       "argsCount": "{count}",
       "normalizedPath": "Normalized path",
-      "morePolicies": "+{count}"
+      "morePolicies": "+{count}",
+      "agentSummary": "Agent report",
+      "inputOriginal": "Input",
+      "returnSummary": "Returned data",
+      "requestDirection": "Request verdict",
+      "responseDirection": "Response verdict"
     },
     "policy": {
       "goToPolicy": "Go to policy",

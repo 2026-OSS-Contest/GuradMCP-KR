@@ -75,7 +75,7 @@ export function RunPane({
             <span className="flex size-10 items-center justify-center rounded-full bg-(--primitive-opacity-white-alpha-10)">
               <LiveConsoleIcon className="size-5 text-grayscale-300" aria-hidden />
             </span>
-            <p className="text-body-text-b1-md text-grayscale-white">{t("paneIdle")}</p>
+            <p className="text-title-text-t2-bd text-grayscale-white">{t("paneIdle")}</p>
           </div>
         ) : (
           // See recent-events: `role="log"` on the list itself would strip its list semantics.

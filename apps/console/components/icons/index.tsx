@@ -224,9 +224,60 @@ export const StatusDisconnectedIcon = (props: P) => (
   </svg>
 );
 
+// Fill follows `currentColor` like every other icon here. It was pinned to yellow-100, so the
+// one place the design wants it achromatic — the Live Console's sandbox notice — could not
+// have it: a colour set on the element did nothing. Callers set the colour now.
 export const BannerInfoIcon = (props: P) => (
   <svg {...props} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M8.00001 1.33325C4.32001 1.33325 1.33334 4.31992 1.33334 7.99992C1.33334 11.6799 4.32001 14.6666 8.00001 14.6666C11.68 14.6666 14.6667 11.6799 14.6667 7.99992C14.6667 4.31992 11.68 1.33325 8.00001 1.33325ZM8.00001 11.3333C7.63334 11.3333 7.33334 11.0333 7.33334 10.6666V7.99992C7.33334 7.63325 7.63334 7.33325 8.00001 7.33325C8.36668 7.33325 8.66668 7.63325 8.66668 7.99992V10.6666C8.66668 11.0333 8.36668 11.3333 8.00001 11.3333ZM8.66668 5.99992H7.33334V4.66658H8.66668V5.99992Z" fill="#FDEDCB"/>
+  <path d="M8.00001 1.33325C4.32001 1.33325 1.33334 4.31992 1.33334 7.99992C1.33334 11.6799 4.32001 14.6666 8.00001 14.6666C11.68 14.6666 14.6667 11.6799 14.6667 7.99992C14.6667 4.31992 11.68 1.33325 8.00001 1.33325ZM8.00001 11.3333C7.63334 11.3333 7.33334 11.0333 7.33334 10.6666V7.99992C7.33334 7.63325 7.63334 7.33325 8.00001 7.33325C8.36668 7.33325 8.66668 7.63325 8.66668 7.99992V10.6666C8.66668 11.0333 8.36668 11.3333 8.00001 11.3333ZM8.66668 5.99992H7.33334V4.66658H8.66668V5.99992Z" fill="currentColor"/>
+  </svg>
+);
+
+// SCR-301 reveal modal — the two column markers, extracted from the frame's own rasters
+// (`…-원문-열람-계속-클릭-시`). The masked one dropped its clipPath: the arrow is wholly inside the
+// viewBox, so it clipped nothing and only risked an id collision with a second instance.
+export const RevealRawIcon = (props: P) => (
+  <svg {...props} width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M6.6665 13.3333C7.58317 13.3333 8.36789 13.0069 9.02067 12.3542C9.67345 11.7014 9.99984 10.9167 9.99984 10C9.99984 9.08333 9.67345 8.29861 9.02067 7.64583C8.36789 6.99306 7.58317 6.66667 6.6665 6.66667C5.74984 6.66667 4.96512 6.99306 4.31234 7.64583C3.65956 8.29861 3.33317 9.08333 3.33317 10C3.33317 10.9167 3.65956 11.7014 4.31234 12.3542C4.96512 13.0069 5.74984 13.3333 6.6665 13.3333ZM6.6665 15C5.27762 15 4.09706 14.5139 3.12484 13.5417C2.15262 12.5694 1.6665 11.3889 1.6665 10C1.6665 8.61111 2.15262 7.43056 3.12484 6.45833C4.09706 5.48611 5.27762 5 6.6665 5C7.9165 5 9.00345 5.39583 9.92734 6.1875C10.8507 6.97917 11.4096 7.97222 11.604 9.16667H18.3332V10.8333H11.604C11.4096 12.0278 10.8507 13.0208 9.92734 13.8125C9.00345 14.6042 7.9165 15 6.6665 15Z" fill="currentColor" />
+  </svg>
+);
+
+export const RevealMaskedIcon = (props: P) => (
+  <svg {...props} width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M4.16683 10.8333H13.4752L9.4085 14.8999C9.0835 15.2249 9.0835 15.7583 9.4085 16.0833C9.7335 16.4083 10.2585 16.4083 10.5835 16.0833L16.0752 10.5916C16.4002 10.2666 16.4002 9.7416 16.0752 9.4166L10.5918 3.9166C10.2668 3.5916 9.74183 3.5916 9.41683 3.9166C9.09183 4.2416 9.09183 4.7666 9.41683 5.0916L13.4752 9.1666H4.16683C3.7085 9.1666 3.3335 9.5416 3.3335 9.99994C3.3335 10.4583 3.7085 10.8333 4.16683 10.8333Z" fill="currentColor" />
+  </svg>
+);
+
+// The disclosure chevron the frames draw on a card that opens — SCR-402's 마스킹 미리보기 among
+// them. Points down; a closed row rotates it rather than swapping in a second glyph, which is
+// what the frame does with the one icon it carries.
+export const DisclosureChevronIcon = (props: P) => (
+  <svg {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M8.11997 9.29055L12 13.1705L15.88 9.29055C16.27 8.90055 16.9 8.90055 17.29 9.29055C17.68 9.68055 17.68 10.3105 17.29 10.7005L12.7 15.2905C12.31 15.6805 11.68 15.6805 11.29 15.2905L6.69997 10.7005C6.30997 10.3105 6.30997 9.68055 6.69997 9.29055C7.08997 8.91055 7.72997 8.90055 8.11997 9.29055Z" fill="currentColor" />
+  </svg>
+);
+
+// The separator between a held call's tool and its target (SCR-402). A chevron of its own at
+// 20px, not the 24px disclosure one turned on its side — the frame draws two different glyphs.
+export const CaretRightIcon = (props: P) => (
+  <svg {...props} width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M7.74167 13.2331L10.975 9.99974L7.74167 6.76641C7.41667 6.44141 7.41667 5.91641 7.74167 5.59141C8.06667 5.26641 8.59167 5.26641 8.91667 5.59141L12.7417 9.41641C13.0667 9.74141 13.0667 10.2664 12.7417 10.5914L8.91667 14.4164C8.59167 14.7414 8.06667 14.7414 7.74167 14.4164C7.42501 14.0914 7.41667 13.5581 7.74167 13.2331Z" fill="currentColor" />
+  </svg>
+);
+
+// The tick inside a checked box (SCR-501's risk dialog). Drawn 10x8, so it is placed rather than
+// stretched — the box is 18px and the mark sits inside it.
+export const CheckMarkIcon = (props: P) => (
+  <svg {...props} width="10" height="8" viewBox="0 0 10 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M2.98159 5.85798L0.981374 3.85777C0.756566 3.63296 0.393414 3.63296 0.168606 3.85777C-0.056202 4.08257 -0.056202 4.44572 0.168606 4.67053L2.57809 7.08002C2.8029 7.30482 3.16605 7.30482 3.39086 7.08002L9.4895 0.981374C9.71431 0.756566 9.71431 0.393414 9.4895 0.168606C9.26469 -0.056202 8.90154 -0.056202 8.67673 0.168606L2.98159 5.85798Z" fill="currentColor" />
+  </svg>
+);
+
+// The padlock on SCR-301's 원문 열람 button. Drawn 20x24 like the other leading icons here — the
+// glyph is 20 wide inside a 24-tall box, which is what `h-6 w-5` renders.
+export const RevealLockIcon = (props: P) => (
+  <svg {...props} width="20" height="24" viewBox="0 0 20 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M15 8.66634H14.1667V6.99967C14.1667 4.69967 12.3 2.83301 10 2.83301C7.70001 2.83301 5.83334 4.69967 5.83334 6.99967V8.66634H5.00001C4.08334 8.66634 3.33334 9.41634 3.33334 10.333V18.6663C3.33334 19.583 4.08334 20.333 5.00001 20.333H15C15.9167 20.333 16.6667 19.583 16.6667 18.6663V10.333C16.6667 9.41634 15.9167 8.66634 15 8.66634ZM10 16.1663C9.08334 16.1663 8.33334 15.4163 8.33334 14.4997C8.33334 13.583 9.08334 12.833 10 12.833C10.9167 12.833 11.6667 13.583 11.6667 14.4997C11.6667 15.4163 10.9167 16.1663 10 16.1663ZM7.50001 8.66634V6.99967C7.50001 5.61634 8.61668 4.49967 10 4.49967C11.3833 4.49967 12.5 5.61634 12.5 6.99967V8.66634H7.50001Z" fill="currentColor" />
   </svg>
 );
 

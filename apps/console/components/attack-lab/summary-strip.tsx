@@ -39,7 +39,7 @@ export function SummaryStrip({ summary, sessionId }: { summary: RunSummary | und
       <span className="flex-none text-body-text-b3-md text-grayscale-300">{t("resultSummary")}</span>
 
       {ITEMS.map(({ verdict, key, Icon, tone }) => (
-        <span key={key} className="flex flex-none items-center gap-2 text-body-text-b3-md text-grayscale-300">
+        <span key={key} className="flex flex-none items-center gap-2 text-body-text-b3-md text-(--primitive-opacity-white-alpha-50)">
           <Icon className={cn("h-5 w-4 flex-none", tone)} aria-hidden />
           {tVerdict(LABEL[verdict])}
           <span className="text-grayscale-white">{summary ? summary[key] : "–"}</span>
@@ -50,7 +50,7 @@ export function SummaryStrip({ summary, sessionId }: { summary: RunSummary | und
         {sessionId ? (
           <Link
             href={`/replay/${sessionId}`}
-            className="inline-flex h-8 items-center gap-1 rounded-lg bg-(--primitive-opacity-white-alpha-10) px-4 text-body-text-b3-md text-grayscale-white transition-colors hover:bg-white/20"
+            className="inline-flex h-8 items-center gap-1 rounded-lg bg-(--primitive-opacity-white-alpha-25) px-4 text-body-text-b3-md text-grayscale-white transition-colors hover:bg-white/30"
           >
             {t("openInReplay")}
             <CtaChevronIcon className="h-5 w-4 flex-none" aria-hidden />

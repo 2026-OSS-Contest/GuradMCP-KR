@@ -110,6 +110,14 @@ Two more rules that come from the same failure:
 ## Dev, build and test
 
 - The dev server runs Turbopack (`next dev --turbopack`).
+- **Open it on `localhost`.** MSW mocks the API from a service worker, and a service worker only
+  registers in a secure context — of the addresses that reach the dev server only `localhost`,
+  `127.0.0.1` and `[::1]` qualify. On `0.0.0.0` or a LAN IP the worker never registers, so nothing
+  is mocked: every `/api/v1` call 404s against a server that serves no such route, and the screens
+  fill with offline states and a live stream that retries for ever. The provider logs the reason,
+  but the symptom points nowhere near it. Reaching the console from another device needs HTTPS —
+  `next dev --experimental-https` or a tunnel — and `allowedDevOrigins` in `next.config.ts`, since
+  Next answers cross-origin dev requests with 403 otherwise.
 - Do **not** run `next build` while `next dev` is running — it clobbers `.next` and the dev
   server then serves 500s. Stop the dev server first.
 - Playwright specs live in `e2e/`, but `@playwright/test` is a **root** devDependency; run them

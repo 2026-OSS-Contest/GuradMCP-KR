@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckMarkIcon } from "@/components/icons";
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
@@ -90,19 +91,26 @@ export function RiskDialog({
         <h2 id="risk-dialog-title" className="text-body-text-b1-bd text-grayscale-white">
           {title}
         </h2>
-        <p id="risk-dialog-body" className="text-body-text-b3-md mt-3 text-grayscale-300">
+        <p id="risk-dialog-body" className="text-body-text-b3-md mt-3 text-grayscale-100">
           {body}
         </p>
         {note && <p className="text-body-text-b3-md mt-2 text-grayscale-400">{note}</p>}
 
         {acknowledgement && (
-          <label className="text-body-text-b2-md mt-6 flex cursor-pointer items-center gap-3 text-grayscale-white">
-            <input
-              type="checkbox"
-              checked={acknowledged}
-              onChange={(event) => setAcknowledged(event.target.checked)}
-              className="size-4 flex-none accent-blue-600"
-            />
+          // The frame sets this row against the dialog's right edge, beside the buttons below it.
+          <label className="text-body-text-b2-md mt-6 flex cursor-pointer items-center justify-end gap-2 text-grayscale-white">
+            {/* The platform checkbox paints itself light, which on this ground reads as already
+                filled. The frame draws an empty box — a 1px white-alpha-25 rule over nothing —
+                that turns blue-800 with a tick in it. */}
+            <span className="relative flex size-[18px] flex-none items-center justify-center">
+              <input
+                type="checkbox"
+                checked={acknowledged}
+                onChange={(event) => setAcknowledged(event.target.checked)}
+                className="peer size-full cursor-pointer appearance-none rounded-sm shadow-[inset_0_0_0_1px_var(--primitive-opacity-white-alpha-25)] checked:bg-blue-800 checked:shadow-none"
+              />
+              <CheckMarkIcon className="pointer-events-none absolute text-grayscale-white opacity-0 peer-checked:opacity-100" aria-hidden />
+            </span>
             {acknowledgement}
           </label>
         )}

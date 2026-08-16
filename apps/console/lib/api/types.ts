@@ -187,8 +187,13 @@ export interface MaskDiff {
 
 export type ChainStatus = "verified" | "failed";
 
-/** A run of text, or a masked token rendered as a chip (e.g. PHONE, BANK_ACCOUNT). */
-export type ContentPart = { text: string } | { mask: string };
+/**
+ * A run of content: plain text, the masked token that replaced a detection (rendered as a chip,
+ * e.g. PHONE, BANK_ACCOUNT), or — on the raw side of the reveal modal — the value that token
+ * stands in for. 기획서 10.4 draws that one with the rule and the tint it
+ * calls "밑줄+틴트 하이라이트", so a reader sees at a glance which lines the masking touched.
+ */
+export type ContentPart = { text: string } | { mask: string } | { secret: string };
 
 /** One numbered line of masked content in the input/return sections and the reveal modal. */
 export interface ContentLine {
@@ -196,9 +201,12 @@ export interface ContentLine {
   parts: ContentPart[];
 }
 
-/** The direction verdict a tool-call / tool-result node carries (요청/응답 방향 판정). */
+/**
+ * The direction verdict a tool-call / tool-result node carries. Which direction it is (요청 /
+ * 응답 방향 판정) follows from the node kind, so the heading stays in the message catalogs
+ * rather than riding along in the data.
+ */
 export interface DirectionVerdict {
-  heading: string;
   verdict: Verdict;
   policy: string;
   /** "외 N" when more than one policy matched. */
@@ -213,7 +221,8 @@ export interface RevealContent {
   /** Source line, e.g. "e-000  get_log  #C-20260712-142". */
   source: string;
   caseId: string;
-  raw: string;
+  /** Numbered like `masked`, so the two columns are read line against line. */
+  raw: ContentLine[];
   masked: ContentLine[];
 }
 
@@ -238,9 +247,9 @@ export interface EventDetail {
   chain?: { status: ChainStatus; hash: string };
 
   // Agent node: the agent's own summary of what it decided.
-  summary?: { heading: string; text: string };
+  summary?: string;
   // User-input / tool-result node: numbered, masked content.
-  body?: { heading: string; lines: ContentLine[] };
+  body?: ContentLine[];
   // Tool-call node: the target and the JSON arguments.
   call?: { target: string; argsCount: number; argsJson: string };
   /**
@@ -321,6 +330,13 @@ export interface ApiVerdictDetail {
   detections: ApiDetection[];
   /** URL the Mask Diff View fetches separately (out of scope: GET /events/{id}/mask-diff). */
   maskDiffRef: string;
+  /**
+   * The diff itself, inlined. GET /events/{id}/mask-diff is not in the 화면설계서 6.2 API list
+   * and nothing implements it, so `maskDiffRef` points at a route no client can call — which is
+   * why the panel's Mask Diff section never rendered (GMCP-115 A-1). Optional and mock-supplied
+   * per AGENTS.md: the control plane omits it and the section simply folds away.
+   */
+  maskDiff?: { before: string; after: string } | null;
   hash: string;
   /** Empty string for the first VERDICT node in a session (chain genesis). */
   prevHash: string;
@@ -337,6 +353,22 @@ export interface ApiTimelineNode {
   verdict?: Verdict;
   riskScore?: number;
   detail: ApiVerdictDetail | null;
+
+  // The four below back the node-type-specific panel sections the design shows (frames
+  // `…-사용자-입력-단계`, `…-agent-단계`, `…-tool-call-단계`, `…-tool-결과-단계`) and the GMCP-28
+  // contract has no field for — it carries only a `sha256:` args digest, never the arguments,
+  // the content or the per-direction verdict. Without them every node but VERDICT rendered a
+  // bare header (GMCP-115 C-3). Optional and mock-supplied per AGENTS.md: the control plane
+  // omits them and each section folds away.
+
+  /** AGENT_STEP: the agent's own report of what it decided. */
+  agentSummary?: string;
+  /** USER_INPUT / RESULT: the numbered, already-masked content. */
+  content?: ContentLine[];
+  /** TOOL_CALL: the arguments as sent. `argsDigest` above is all the real API returns. */
+  argsJson?: string;
+  /** TOOL_CALL / RESULT: the verdict for that direction alone, distinct from the VERDICT node. */
+  directionVerdict?: { verdict: Verdict; policyIds: string[] };
 }
 
 export interface ApiSessionSummary {

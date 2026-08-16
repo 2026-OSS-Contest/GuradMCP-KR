@@ -11,6 +11,7 @@ import type {
   ApiTimelineNodeType,
   ChainStatus,
   Detection,
+  DirectionVerdict,
   EventDetail,
   SessionsResponse,
   SessionSummary,
@@ -49,12 +50,36 @@ export function toSessionsResponse(api: ApiSessionsResponse): SessionsResponse {
 }
 
 /**
- * Kinds that plausibly carry maskable original content. Reveal-eligibility is a client-side
- * policy, not part of the GMCP-28 timeline contract — POST /events/{id}/reveal is a separate,
- * still-unimplemented endpoint, so this only decides whether the button offers to try it.
+ * A VERDICT or RESULT node carries no `toolName` of its own but is *about* the TOOL_CALL before
+ * it, so the design titles the panel with that tool in mono (frames `…-guard-판정-단계`,
+ * `…-tool-결과-단계`). A USER_INPUT or AGENT_STEP node is not — inheriting a sibling's tool name
+ * is what titled the Agent panel `read_file` (GMCP-115 A-2). Those show their own summary, and
+ * `event-detail.tsx` sets it in prose type to match `…-agent-단계`.
  */
-function canReveal(kind: TimelineNodeType): boolean {
-  return kind === "user" || kind === "verdict" || kind === "result";
+const INHERITS_TOOL_NAME: ReadonlySet<TimelineNodeType> = new Set(["tool_call", "verdict", "result"]);
+
+/**
+ * The design's tool-call panel splits the arguments into a 대상 chip and the JSON block, and
+ * counts them. All three come from the one `argsJson` string rather than three mock fields; the
+ * target is the path-like argument, the same one FR-SEC-04 normalizes.
+ */
+function toCall(argsJson: string): EventDetail["call"] {
+  let args: Record<string, unknown> = {};
+  try {
+    args = JSON.parse(argsJson) as Record<string, unknown>;
+  } catch {
+    return { target: "", argsCount: 0, argsJson };
+  }
+  const target = args.path ?? args.file_path ?? args.filename ?? Object.values(args)[0];
+  return { target: typeof target === "string" ? target : "", argsCount: Object.keys(args).length, argsJson };
+}
+
+function toDirection(direction: NonNullable<ApiTimelineNode["directionVerdict"]>): DirectionVerdict {
+  return {
+    verdict: direction.verdict,
+    policy: direction.policyIds[0],
+    morePolicies: direction.policyIds.length > 1 ? direction.policyIds.length - 1 : undefined
+  };
 }
 
 function toTimelineEvent(node: ApiTimelineNode): TimelineEvent {
@@ -87,16 +112,26 @@ export function toEventDetail(
     at: node.ts,
     kind,
     verdict: node.verdict ?? "allow",
-    tool: node.toolName ?? contextToolName ?? node.summary,
+    tool: node.toolName ?? (INHERITS_TOOL_NAME.has(kind) ? contextToolName : undefined) ?? node.summary,
     policies: detail?.matchedPolicyIds,
     threatScore: node.riskScore,
     detections: detail?.detections.map(
       (d): Detection => ({ type: d.type, subtype: d.subtype, confidence: Math.round(d.confidence * 100) })
     ),
+    maskDiff: detail?.maskDiff,
     chain: detail && chainStatus ? { status: chainStatus, hash: detail.hash } : undefined,
-    canReveal: canReveal(kind)
-    // body/call/direction/maskDiff/reveal: no source in this API yet, left undefined — see the
-    // GMCP-28 wire contract note in ./types.ts.
+    summary: node.agentSummary,
+    body: node.content,
+    call: node.argsJson === undefined ? undefined : toCall(node.argsJson),
+    direction: node.directionVerdict && toDirection(node.directionVerdict),
+    // 화면설계서 5.3 no.5 gates the reveal button on the operator's permission, and every
+    // node-type frame draws it — including the agent and tool-call ones this used to
+    // withhold it from, on a guess about which kinds "plausibly carry maskable content"
+    // that neither the spec nor the frames make. Permission is not something the timeline
+    // contract carries, so the button is offered wherever the design offers it.
+    canReveal: true
+    // normalizedPath/reveal: no source in this API yet, left undefined — see the GMCP-28 wire
+    // contract note in ./types.ts.
   };
 }
 
