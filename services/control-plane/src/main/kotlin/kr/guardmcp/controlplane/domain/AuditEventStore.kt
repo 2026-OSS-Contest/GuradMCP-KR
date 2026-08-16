@@ -31,7 +31,8 @@ data class GuardEventRecord(
     val matchedPolicyIds: List<String>,
     val detections: List<Map<String, Any?>>,
     val maskDiffRef: String?,
-    /** NFR-04 opt-in only; null unless `audit.store-raw-payload=true` on this service. */
+    /** NFR-04 opt-in only; null unless [kr.guardmcp.controlplane.domain.GuardSettingsStore]'s
+     *  `storeRawOptIn` was true (`PUT /api/v1/settings`) at ingest time. */
     val rawPayload: String?,
 )
 
@@ -45,6 +46,9 @@ interface AuditEventQueries {
     fun findBySessionId(sessionId: String): List<GuardEventRecord>
     fun findById(eventId: UUID): GuardEventRecord?
 }
+
+/** `GET /policies/{id}/stats` (GMCP-80 §3.5): a policy's trigger count and most recent hit within a window. */
+data class PolicyTriggerStats(val triggeredCount: Int, val lastTriggeredAt: Instant?)
 
 @Component
 class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQueries {
@@ -101,6 +105,44 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
     override fun findBySessionId(sessionId: String): List<GuardEventRecord> =
         jdbcTemplate.query(SELECT_BY_SESSION_SQL, rowMapper, sessionId)
 
+    /**
+     * Newest-first, optionally scoped to a session and to strictly-after an anchor point
+     * (GMCP-80 §3.3 gap-fill: SSE reconnect resumes from the last event it saw).
+     *
+     * The anchor is `(ts, eventId)`, not just `ts`: eventIds are random UUIDs, not monotonic,
+     * so two events sharing a `ts` (same millisecond) need a second, stable tie-break or a
+     * naive `ts > ?` filter drops/duplicates rows at the boundary — the exact "중복/누락 없이
+     * 병합" requirement the spec calls out. `ORDER BY ... event_id DESC` mirrors the same
+     * tie-break so the comparison and the ordering never disagree at the boundary row.
+     */
+    fun findRecent(limit: Int, sessionId: String?, sinceTs: Instant?, sinceEventId: UUID?): List<GuardEventRecord> {
+        val sql = buildString {
+            append(SELECT_COLUMNS_FROM)
+            append(" WHERE 1 = 1")
+            if (sessionId != null) append(" AND session_id = ?")
+            if (sinceTs != null) append(" AND (ts, event_id) > (?, ?)")
+            append(" ORDER BY ts DESC, event_id DESC LIMIT ?")
+        }
+        val args = buildList<Any?> {
+            if (sessionId != null) add(sessionId)
+            if (sinceTs != null) {
+                add(Timestamp.from(sinceTs))
+                add(sinceEventId)
+            }
+            add(limit)
+        }
+        return jdbcTemplate.query(sql, rowMapper, *args.toTypedArray())
+    }
+
+    /** `matched_policy_ids` is a `text[]`; `= ANY(...)` is the array-membership test for it. */
+    fun policyStats(policyId: String, since: Instant): PolicyTriggerStats =
+        jdbcTemplate.query(
+            "SELECT COUNT(*) AS triggered_count, MAX(ts) AS last_ts FROM guard_event WHERE ? = ANY(matched_policy_ids) AND ts >= ?",
+            { rs, _ -> PolicyTriggerStats(rs.getInt("triggered_count"), rs.getTimestamp("last_ts")?.toInstant()) },
+            policyId,
+            Timestamp.from(since),
+        ).first()
+
     private val rowMapper = RowMapper { rs, _ ->
         @Suppress("UNCHECKED_CAST")
         val policyIds = (rs.getArray("matched_policy_ids").array as Array<Any?>).map { it as String }
@@ -138,11 +180,10 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
             ON CONFLICT (event_id) DO NOTHING
         """
 
-        private const val SELECT_SQL = """
+        private const val SELECT_COLUMNS_FROM = """
             SELECT event_id, session_id, ts, direction, tool_name, args_digest, verdict, risk_score,
                    matched_policy_ids, detections, mask_diff_ref, raw_payload
             FROM guard_event
-            WHERE event_id = ?
         """
 
         private const val SELECT_SESSION_IDS_SQL = """
@@ -159,6 +200,8 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
             WHERE session_id = ?
             ORDER BY ts, event_id
         """
+
+        private const val SELECT_SQL = "$SELECT_COLUMNS_FROM WHERE event_id = ?"
     }
 }
 

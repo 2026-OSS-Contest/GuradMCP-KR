@@ -7,11 +7,17 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.test.context.TestPropertySource
 import java.math.BigDecimal
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.time.Instant
 import java.util.UUID
 
+/** `security.reveal-token` must be configured for any reveal call to succeed (NFR-04) — see
+ *  [AuditEventController.hasValidOperatorToken]'s doc comment: unconfigured (blank) always denies. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@TestPropertySource(properties = ["security.reveal-token=test-operator-token"])
 class AuditEventApiTest : ApiTestSupport() {
     @Autowired
     private lateinit var repository: GuardEventRepository
@@ -91,7 +97,7 @@ class AuditEventApiTest : ApiTestSupport() {
 
     @Test
     fun `raw payload is dropped by default even when the gateway sends one`() {
-        // audit.store-raw-payload defaults to false (application.yaml) — NFR-04.
+        // guard_settings.store_raw_opt_in defaults to false (V4 migration) — NFR-04.
         val eventId = UUID.randomUUID()
         send("POST", "/api/v1/events", ingestPayload(eventId, rawPayload = "010-1234-5678 unmasked"))
 
@@ -117,16 +123,171 @@ class AuditEventApiTest : ApiTestSupport() {
         assertNotNull(repository.findById(eventId))
     }
 
+    @Test
+    fun `recent events without since returns the newest N, most recent first`() {
+        val sessionId = UUID.randomUUID().toString()
+        val base = Instant.parse("2026-03-01T00:00:00Z")
+        val ids = (1..3).map { UUID.randomUUID() }
+        ids.forEachIndexed { i, id ->
+            send("POST", "/api/v1/events", ingestPayload(id, sessionId = sessionId, ts = base.plusSeconds(i.toLong())))
+        }
+
+        val response = get("/api/v1/events/recent?sessionId=$sessionId&limit=2")
+
+        assertEquals(200, response.statusCode())
+        val events = (parseMap(response.body())["events"] as List<*>).map { it as Map<*, *> }
+        assertEquals(2, events.size)
+        assertEquals(listOf(ids[2].toString(), ids[1].toString()), events.map { it["id"] })
+    }
+
+    @Test
+    fun `since as an eventId returns only strictly newer events, gap-fill style`() {
+        val sessionId = UUID.randomUUID().toString()
+        val base = Instant.parse("2026-03-02T00:00:00Z")
+        val ids = (1..4).map { UUID.randomUUID() }
+        ids.forEachIndexed { i, id ->
+            send("POST", "/api/v1/events", ingestPayload(id, sessionId = sessionId, ts = base.plusSeconds(i.toLong())))
+        }
+
+        val response = get("/api/v1/events/recent?sessionId=$sessionId&since=${ids[1]}")
+
+        val events = (parseMap(response.body())["events"] as List<*>).map { it as Map<*, *> }
+        assertEquals(listOf(ids[3].toString(), ids[2].toString()), events.map { it["id"] })
+    }
+
+    @Test
+    fun `since as an ISO-8601 instant resumes from that moment, inclusive`() {
+        val sessionId = UUID.randomUUID().toString()
+        val base = Instant.parse("2026-03-03T00:00:00Z")
+        val early = UUID.randomUUID()
+        val atCutoff = UUID.randomUUID()
+        val late = UUID.randomUUID()
+        send("POST", "/api/v1/events", ingestPayload(early, sessionId = sessionId, ts = base))
+        send("POST", "/api/v1/events", ingestPayload(atCutoff, sessionId = sessionId, ts = base.plusSeconds(1)))
+        send("POST", "/api/v1/events", ingestPayload(late, sessionId = sessionId, ts = base.plusSeconds(2)))
+
+        val response = get("/api/v1/events/recent?sessionId=$sessionId&since=${base.plusSeconds(1)}")
+
+        val events = (parseMap(response.body())["events"] as List<*>).map { it as Map<*, *> }
+        assertEquals(listOf(late.toString(), atCutoff.toString()), events.map { it["id"] })
+    }
+
+    @Test
+    fun `mask_then_allow collapses into the console's warn verdict`() {
+        val sessionId = UUID.randomUUID().toString()
+        val eventId = UUID.randomUUID()
+        send("POST", "/api/v1/events", ingestPayload(eventId, sessionId = sessionId, verdict = "mask_then_allow"))
+
+        val response = get("/api/v1/events/recent?sessionId=$sessionId")
+
+        val event = (parseMap(response.body())["events"] as List<*>).map { it as Map<*, *> }.single()
+        assertEquals("warn", event["verdict"])
+    }
+
+    @Test
+    fun `since pointing at an unknown eventId is a 400`() {
+        val response = get("/api/v1/events/recent?since=${UUID.randomUUID()}")
+        assertEquals(400, response.statusCode())
+        assertEquals("since_event_not_found", parseMap(response.body())["code"])
+    }
+
+    @Test
+    fun `reveal without the operator role is forbidden, even with a valid operator token`() {
+        val eventId = UUID.randomUUID()
+        send("POST", "/api/v1/events", ingestPayload(eventId))
+
+        val response = client.send(
+            HttpRequest.newBuilder(uri("/api/v1/events/$eventId/reveal"))
+                .header("Content-Type", "application/json")
+                .header(OPERATOR_TOKEN_HEADER, "test-operator-token")
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+
+        assertEquals(403, response.statusCode())
+        assertEquals("reveal_forbidden", parseMap(response.body())["code"])
+    }
+
+    @Test
+    fun `reveal with the operator role but a missing or wrong operator token is forbidden`() {
+        val eventId = UUID.randomUUID()
+        send("POST", "/api/v1/events", ingestPayload(eventId))
+
+        val missingToken = client.send(
+            HttpRequest.newBuilder(uri("/api/v1/events/$eventId/reveal"))
+                .header("Content-Type", "application/json")
+                .header(Actor.ID_HEADER, "operator@company.co.kr")
+                .header(Actor.ROLE_HEADER, "operator")
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertEquals(403, missingToken.statusCode())
+        assertEquals("reveal_unauthorized", parseMap(missingToken.body())["code"])
+
+        val wrongToken = client.send(
+            HttpRequest.newBuilder(uri("/api/v1/events/$eventId/reveal"))
+                .header("Content-Type", "application/json")
+                .header(Actor.ID_HEADER, "operator@company.co.kr")
+                .header(Actor.ROLE_HEADER, "operator")
+                .header(OPERATOR_TOKEN_HEADER, "not-the-configured-token")
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertEquals(403, wrongToken.statusCode())
+        assertEquals("reveal_unauthorized", parseMap(wrongToken.body())["code"])
+    }
+
+    @Test
+    fun `reveal by an operator when no raw payload was stored is a 409, not a 404`() {
+        // guard_settings.store_raw_opt_in defaults to false, so rawPayload is never persisted
+        // regardless of what the caller sends (NFR-04) — see the sibling opt-in test, which
+        // restores this shared singleton row afterward rather than leaving it toggled on.
+        val eventId = UUID.randomUUID()
+        send("POST", "/api/v1/events", ingestPayload(eventId, rawPayload = "010-1234-5678 unmasked"))
+
+        val response = revealAsOperator(eventId)
+
+        assertEquals(409, response.statusCode())
+        assertEquals("raw_payload_not_stored", parseMap(response.body())["code"])
+    }
+
+    @Test
+    fun `reveal of an unknown or malformed eventId is a 404`() {
+        val unknown = revealAsOperator(UUID.randomUUID())
+        assertEquals(404, unknown.statusCode())
+        assertEquals("event_not_found", parseMap(unknown.body())["code"])
+
+        val malformed = revealAsOperator(null, rawPath = "/api/v1/events/not-a-uuid/reveal")
+        assertEquals(404, malformed.statusCode())
+        assertEquals("event_not_found", parseMap(malformed.body())["code"])
+    }
+
+    private fun revealAsOperator(eventId: UUID?, rawPath: String? = null): HttpResponse<String> =
+        client.send(
+            HttpRequest.newBuilder(uri(rawPath ?: "/api/v1/events/$eventId/reveal"))
+                .header("Content-Type", "application/json")
+                .header(Actor.ID_HEADER, "operator@company.co.kr")
+                .header(Actor.ROLE_HEADER, "operator")
+                .header(OPERATOR_TOKEN_HEADER, "test-operator-token")
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+
     private fun ingestPayload(
         eventId: UUID,
         sessionId: String = UUID.randomUUID().toString(),
         verdict: String = "block",
         direction: String = "response",
         rawPayload: String? = null,
+        ts: Instant = Instant.now(),
     ) = mapOf(
         "eventId" to eventId.toString(),
         "sessionId" to sessionId,
-        "ts" to Instant.now().toString(),
+        "ts" to ts.toString(),
         "direction" to direction,
         "toolName" to "read_file",
         "argsDigest" to "sha256:abc123",
@@ -145,4 +306,8 @@ class AuditEventApiTest : ApiTestSupport() {
         "maskDiffRef" to null,
         "rawPayload" to rawPayload,
     )
+
+    private companion object {
+        const val OPERATOR_TOKEN_HEADER = "X-Operator-Token"
+    }
 }

@@ -161,6 +161,18 @@ class GuardSettingsStore(
                 requestIp = requestIp,
             )
         }
+        // NFR-04: only the transition *into* raw-payload storage is audited, matching
+        // ServerRegistryStore.changeTrust only auditing an upgrade, not every write.
+        if (!before.storeRawOptIn && next.storeRawOptIn) {
+            auditLog.record(
+                action = "SETTINGS_RAW_PAYLOAD_OPT_IN_CHANGED",
+                actor = actor,
+                before = mapOf("storeRawOptIn" to false),
+                after = mapOf("storeRawOptIn" to true),
+                severity = "high",
+                requestIp = requestIp,
+            )
+        }
         return next
     }
 

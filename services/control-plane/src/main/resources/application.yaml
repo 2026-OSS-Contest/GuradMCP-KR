@@ -28,7 +28,8 @@ management:
       probes:
         enabled: true
 
-# NFR-04: raw (unmasked) payload text is never persisted unless explicitly opted in.
-# Default false — the audit event store only ever holds argsDigest/maskDiffRef.
-audit:
-  store-raw-payload: ${AUDIT_STORE_RAW_PAYLOAD:false}
+security:
+  # NFR-04: shared secret required (in addition to the forgeable X-Actor-Role header) to call
+  # POST /events/{id}/reveal. Blank (the default) disables the endpoint entirely — deploying
+  # without setting this must not silently leave reveal reachable by header alone.
+  reveal-token: ${REVEAL_OPERATOR_TOKEN:}

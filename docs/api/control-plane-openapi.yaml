@@ -131,6 +131,81 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/sessions/{sessionId}/export:
+    post:
+      tags: [sessions]
+      summary: Session report export (GMCP-80 §3.7, M4 deliverable)
+      description: >-
+        Synchronous file-stream response (no async job endpoint yet — the
+        spec's own sanctioned fallback while that scope is unconfirmed).
+        Renders the session's timeline, verdict rationale and chain status
+        straight from the same data GET /sessions/{id}/timeline serves, so
+        the report can only ever carry masked text (NFR-04). Console
+        exposure is deferred to M4; the API is available now.
+      operationId: exportSession
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExportRequest"
+      responses:
+        "200":
+          description: The rendered report as an attachment
+          content:
+            text/html: {}
+            application/pdf: {}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/events/recent:
+    get:
+      tags: [sessions]
+      summary: Recent security events (GMCP-80 §3.3)
+      description: >-
+        Backs the SCR-101 "최근 보안 이벤트" widget and doubles as the SSE
+        reconnect gap-fill (4.2 "복구 시 끊긴 구간은 폴링으로 보충").
+        `since` accepts either an eventId (resume strictly after it) or an
+        ISO-8601 instant (resume from that moment onward); results are
+        newest-first. Backed by the real guard_event table (GMCP-24), not the
+        Replay demo fixtures.
+      operationId: listRecentEvents
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: sessionId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: since
+          in: query
+          required: false
+          description: An eventId (uuid) or an ISO-8601 instant
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Recent events, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecentEventsResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /api/v1/events/{eventId}:
     get:
       tags: [sessions]
@@ -156,6 +231,80 @@ paths:
                 $ref: "#/components/schemas/EventLookupResponse"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/events/{eventId}/reveal:
+    post:
+      tags: [sessions]
+      summary: Reveal the unmasked original payload (NFR-04, GMCP-80 §3.6)
+      description: >-
+        Operator-only, and requires a valid X-Operator-Token (server-side
+        secret, configured out of band via REVEAL_OPERATOR_TOKEN — unset by
+        default, which disables this endpoint entirely). X-Actor-Role alone
+        is a forgeable header with no session/auth system behind it anywhere
+        in this service, so it is attribution only, not access control. Every
+        call — granted or denied — writes an append-only RevealAuditLog
+        entry. 409 when this event's raw payload was never stored
+        (audit.store-raw-payload / settings.storeRawOptIn was off at ingest
+        time), not 404. Does not match apps/console/lib/api/types.ts's
+        RevealContent (masked-line reconstruction is out of scope here); this
+        is the spec's own response shape.
+      operationId: revealEvent
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-Actor-Id
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: X-Actor-Role
+          in: header
+          required: false
+          description: Must be "operator" or the call is rejected with 403.
+          schema:
+            type: string
+        - name: X-Operator-Token
+          in: header
+          required: true
+          description: >-
+            Must match the server's configured REVEAL_OPERATOR_TOKEN or the
+            call is rejected with 403, regardless of X-Actor-Role.
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RevealRequest"
+      responses:
+        "200":
+          description: Unmasked payload plus the audit log entry it created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevealResponse"
+        "403":
+          description: >-
+            X-Operator-Token is missing, invalid, or unconfigured server-side
+            (reveal_unauthorized), or the actor is not an operator
+            (reveal_forbidden). Either way the attempt is still logged as
+            REVEAL_DENIED.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: No raw payload was stored for this event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/policy-packs:
     get:
       tags: [policies]
@@ -246,6 +395,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Policy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/policies/{policyId}/stats:
+    get:
+      tags: [policies]
+      summary: Policy trigger stats (GMCP-80 §3.5)
+      description: >-
+        A policy with no trigger history answers firedLast30d=0, not 404 —
+        only an unknown policyId is a 404. dryRun=true always answers
+        firedLast30d=0: no policy in this system is ever marked dry-run yet
+        (GMCP-77 is unbuilt), so there is no dry-run subset of guard_event
+        to count.
+      operationId: getPolicyStats
+      parameters:
+        - name: policyId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: window
+          in: query
+          required: false
+          description: 'Duration like "30d"'
+          schema:
+            type: string
+            default: 30d
+        - name: dryRun
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Trigger count and last-triggered timestamp for the window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyStatsResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "404":
@@ -367,6 +557,25 @@ paths:
                 $ref: "#/components/schemas/DetectionPreview"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /api/v1/attacklab/scenarios:
+    get:
+      tags: [attack-lab]
+      summary: Attack Lab scenario catalog (GMCP-80 §3.4)
+      description: >-
+        Derived from attack-lab/scenarios/catalog.json (the same file the
+        GMCP-55 runner executes against) at build time, not hand-maintained —
+        a threat is available only once every one of its attack-kind
+        scenarios has automation.mode=probe. Scoped to PROJECT.md 3.2's
+        T-01..T-08; the catalog has since grown a T-09 this endpoint does
+        not cover.
+      operationId: listAttackLabScenarios
+      responses:
+        "200":
+          description: All eight threats, available/modes reflecting real automation state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttackScenariosResponse"
   /api/v1/attacklab/run/{scenarioId}:
     post:
       tags: [attack-lab]
@@ -440,7 +649,11 @@ paths:
         of applying; the same request with `confirmed: true` then applies it.
         A request for the server's current grade is a no-op. Every actual
         change is recorded as a TrustLevelChangeEvent in the audit hash chain
-        and pushed to /api/v1/servers/stream subscribers immediately.
+        and pushed to /api/v1/servers/stream subscribers immediately. This is
+        the endpoint GMCP-80 §3.8.1's `PUT /servers/{id}` describes — the
+        console (lib/api/client.ts) deliberately calls this trust
+        sub-resource rather than a bare PUT /servers/{id}, so no separate
+        endpoint was added.
       operationId: changeServerTrust
       parameters:
         - name: id
@@ -510,7 +723,7 @@ paths:
   /api/v1/settings:
     get:
       tags: [settings]
-      summary: Current gateway settings (GMCP-68)
+      summary: Current gateway settings (GMCP-68, GMCP-80 §3.8.2)
       operationId: getSettings
       responses:
         "200":
@@ -523,15 +736,28 @@ paths:
       tags: [settings]
       summary: Update gateway settings
       description: >-
-        Every field is independent, so a caller sends only what it changed.
-        Setting failMode to fail_open requires riskAcknowledged: true in the
-        same request, regardless of the previous value — otherwise the
-        request is rejected with 400 and nothing is changed. Reverting
-        failMode to fail_closed never requires it. A failMode change is
-        recorded as a SETTINGS_FAILURE_POLICY_CHANGED audit-log entry
-        (severity=high for fail_open, info for fail_closed) and pushed to
-        /api/v1/settings/stream subscribers immediately.
+        No console session/auth exists yet, so this is not gated on
+        X-Actor-Role (apps/console/lib/api/client.ts never sends it) — it is
+        read only for the updatedBy audit trail. Every field is independent,
+        so a caller sends only what it changed. Setting failMode to fail_open
+        requires riskAcknowledged: true in the same request, regardless of
+        the previous value — otherwise the request is rejected with 400 and
+        nothing is changed. Reverting failMode to fail_closed never requires
+        it. A failMode change is recorded as a SETTINGS_FAILURE_POLICY_CHANGED
+        audit-log entry (severity=high for fail_open, info for fail_closed)
+        and pushed to /api/v1/settings/stream subscribers immediately;
+        storeRawOptIn flipping to true is recorded as
+        SETTINGS_RAW_PAYLOAD_OPT_IN_CHANGED (severity=high) and also gates
+        AuditEventController's ingest raw-payload write directly, so that
+        change takes effect on the very next event without a restart.
       operationId: updateSettings
+      parameters:
+        - name: X-Actor-Id
+          in: header
+          required: false
+          description: Recorded as updatedBy on the settings row; not an access-control check.
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -547,7 +773,8 @@ paths:
                 $ref: "#/components/schemas/GuardSettings"
         "400":
           description: >-
-            Malformed failMode, or failMode=fail_open without
+            Malformed failMode, an out-of-range approvalTimeoutSeconds or
+            unsupported locale, or failMode=fail_open without
             riskAcknowledged=true.
           content:
             application/json:
@@ -622,14 +849,17 @@ components:
             last time failMode became fail_open.
         storeRawOptIn:
           type: boolean
+          description: NFR-04. Off by default; also gates AuditEventController's raw-payload write directly.
         locale:
           type: string
           enum: [ko, en]
         approvalTimeoutSeconds:
           type: integer
+          minimum: 1
+          maximum: 3600
     SettingsUpdateRequest:
       type: object
-      description: Every field optional; unset fields are left unchanged.
+      description: Partial<GatewaySettings> — every field independent, unset fields are left unchanged.
       properties:
         failMode:
           $ref: "#/components/schemas/FailMode"
@@ -642,6 +872,8 @@ components:
           enum: [ko, en]
         approvalTimeoutSeconds:
           type: integer
+          minimum: 1
+          maximum: 3600
     ApiError:
       type: object
       required: [code, message]
@@ -806,7 +1038,7 @@ components:
             type: integer
     SessionsResponse:
       type: object
-      required: [items, nextCursor]
+      required: [items, nextCursor, total]
       properties:
         items:
           type: array
@@ -814,6 +1046,9 @@ components:
             $ref: "#/components/schemas/SessionSummary"
         nextCursor:
           type: [string, "null"]
+        total:
+          type: integer
+          description: Count matching q/status — not items.length, the page size (GMCP-80 §3.2).
     SessionTimelineResponse:
       type: object
       required: [sessionId, agentLabel, startedAt, isLive, chainStatus, nodes, nextCursor]
@@ -983,9 +1218,53 @@ components:
     ConnectionStatus:
       type: string
       enum: [connected, disconnected]
+    ToolRisk:
+      type: string
+      enum: [high, medium, low]
+    ToolSnapshotStatusView:
+      type: object
+      required: [state, pendingDiffCount]
+      description: >-
+        FR-GW-03 §6.1. Postgres-backed drift state, unlike ToolSummary's risk/policies which
+        are still a static demo seed (see ToolSummary's own description).
+      properties:
+        state:
+          type: string
+          enum: [unapproved, in_sync, drift_detected, drift_acknowledged]
+        snapshotCapturedAt:
+          type: [string, "null"]
+          format: date-time
+        lastCheckedAt:
+          type: [string, "null"]
+          format: date-time
+        pendingDiffCount:
+          type: integer
+        latestDiffId:
+          type: [string, "null"]
+          format: uuid
+    ToolSummary:
+      type: object
+      required: [name, risk, policies, snapshotStatus]
+      description: >-
+        GMCP-80 §3.1. Field names match apps/console/lib/api/types.ts's ToolEntry
+        (risk, policies) rather than the spec doc's illustrative riskLevel/policyIds.
+        risk/policies are a fixed demo seed (no real per-tool risk scoring or
+        policy binding exists yet); snapshotStatus is FR-GW-03's real, Postgres-backed
+        drift state.
+      properties:
+        name:
+          type: string
+        risk:
+          $ref: "#/components/schemas/ToolRisk"
+        policies:
+          type: array
+          items:
+            type: string
+        snapshotStatus:
+          $ref: "#/components/schemas/ToolSnapshotStatusView"
     ServerSummary:
       type: object
-      required: [id, name, connected, trust, tools]
+      required: [id, name, connected, trust, tools, endpoint]
       properties:
         id:
           type: string
@@ -997,9 +1276,11 @@ components:
         trust:
           $ref: "#/components/schemas/TrustLevel"
         tools:
-          description: Always empty today — FR-GW-03 per-server tool inventory is not sourced from the registry yet.
           type: array
-          items: {}
+          items:
+            $ref: "#/components/schemas/ToolSummary"
+        endpoint:
+          type: string
     ServersResponse:
       type: object
       required: [servers]
@@ -1084,3 +1365,108 @@ components:
           type: string
         hash:
           type: string
+    SecurityEvent:
+      type: object
+      required: [id, sessionId, verdict, tool, at]
+      description: >-
+        apps/console/lib/api/types.ts's SecurityEvent — the SCR-101 widget's
+        lean shape, not the full GuardEvent. mask_then_allow collapses into
+        warn, matching Verdict's existing 4-value vocabulary.
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        tool:
+          type: string
+        target:
+          description: No reliable source yet (only argsDigest is stored); always omitted.
+          type: string
+        at:
+          type: string
+          format: date-time
+    RecentEventsResponse:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecurityEvent"
+    AttackScenarioSummary:
+      type: object
+      required: [id, title, description, available, modes]
+      properties:
+        id:
+          type: string
+          description: T-01..T-08
+        title:
+          type: string
+        description:
+          type: string
+        available:
+          type: boolean
+          description: apps/console's AttackScenario.available — not runnable yet lists as 준비 중.
+        modes:
+          type: array
+          items:
+            type: string
+            enum: [vulnerable, guarded]
+    AttackScenariosResponse:
+      type: object
+      required: [scenarios]
+      properties:
+        scenarios:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttackScenarioSummary"
+    RevealRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Optional; recorded in the audit log entry regardless.
+    RevealResponse:
+      type: object
+      required: [eventId, originalPayload, revealedBy, revealedAt, auditLogId]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        originalPayload:
+          type: string
+        revealedBy:
+          type: string
+        revealedAt:
+          type: string
+          format: date-time
+        auditLogId:
+          type: string
+          format: uuid
+    PolicyStatsResponse:
+      type: object
+      required: [policyId, window, firedLast30d]
+      properties:
+        policyId:
+          type: string
+        window:
+          type: string
+        firedLast30d:
+          type: integer
+        lastTriggeredAt:
+          type: [string, "null"]
+          format: date-time
+    ExportRequest:
+      type: object
+      properties:
+        format:
+          type: string
+          enum: [html, pdf]
+          default: html
+        theme:
+          type: string
+          enum: [light]
+          default: light

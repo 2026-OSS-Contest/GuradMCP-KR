@@ -138,22 +138,31 @@ class ControlPlaneApiTest : ApiTestSupport() {
 
     @Test
     fun `sessions list is sorted by startedAt descending and supports status and q filters`() {
-        val all = parseMap(get("/api/v1/sessions").body())
+        // Sibling test classes in this suite (AuditEventApiTest, ReplayLiveEventsApiTest) share
+        // this Postgres container and ingest their own live sessions with `startedAt: now()`,
+        // which always sort ahead of the seeded fixtures' fixed 2026-01-01 timestamp. The default
+        // `limit=20` page can fill up entirely with that live-session churn before ever reaching
+        // a seeded row, so every lookup below asks for the full `MAX_SESSION_LIMIT` page instead
+        // of relying on the unpaged default.
+        val all = parseMap(get("/api/v1/sessions?limit=100").body())
         val items = (all["items"] as List<*>).map { it as Map<*, *> }
         val startedAts = items.map { Instant.parse(it["startedAt"] as String) }
         assertEquals(startedAts.sortedDescending(), startedAts)
+        // `total` is the match count, not the page size — distinct once a `size`/`limit` narrower
+        // than the full result set is introduced (GMCP-80 §3.2).
+        assertEquals(items.size, all["total"])
 
-        val live = parseMap(get("/api/v1/sessions?status=live").body())
+        val live = parseMap(get("/api/v1/sessions?status=live&limit=100").body())
         val liveItems = (live["items"] as List<*>).map { it as Map<*, *> }
         assertTrue(liveItems.isNotEmpty())
         assertTrue(liveItems.all { it["isLive"] == true })
 
-        val closed = parseMap(get("/api/v1/sessions?status=closed").body())
+        val closed = parseMap(get("/api/v1/sessions?status=closed&limit=100").body())
         val closedItems = (closed["items"] as List<*>).map { it as Map<*, *> }
         assertTrue(closedItems.isNotEmpty())
         assertTrue(closedItems.all { it["isLive"] == false })
 
-        val byTool = parseMap(get("/api/v1/sessions?q=read_file").body())
+        val byTool = parseMap(get("/api/v1/sessions?q=read_file&limit=100").body())
         val toolIds = (byTool["items"] as List<*>).map { (it as Map<*, *>)["sessionId"] }
         // Sessions projected from ingested audit events match this search too (GMCP-114), so the
         // assertion is that the seeded read_file session is found and an unrelated seeded session
@@ -163,6 +172,10 @@ class ControlPlaneApiTest : ApiTestSupport() {
 
         val invalidStatus = get("/api/v1/sessions?status=bogus")
         assertEquals(400, invalidStatus.statusCode())
+
+        val firstPage = parseMap(get("/api/v1/sessions?limit=1").body())
+        assertEquals(1, (firstPage["items"] as List<*>).size)
+        assertEquals(all["total"], firstPage["total"])
 
         val injectionSession = items.single { it["sessionId"] == DemoSeed.SESSION_INJECTION_ID.toString() }
         val verdictSummary = injectionSession["verdictSummary"] as Map<*, *>
@@ -205,6 +218,49 @@ class ControlPlaneApiTest : ApiTestSupport() {
     }
 
     @Test
+    fun `html export contains only the masked form, never the raw secret`() {
+        val response = send("POST", "/api/v1/sessions/${DemoSeed.SESSION_INJECTION_ID}/export", mapOf("format" to "html", "theme" to "light"))
+
+        assertEquals(200, response.statusCode())
+        assertTrue(response.headers().firstValue("Content-Type").orElse("").startsWith("text/html"))
+        assertTrue(response.headers().firstValue("Content-Disposition").orElse("").contains("attachment"))
+        assertFalse(response.body().contains("AKIAIOSFODNN7EXAMPLE"))
+        assertTrue(response.body().contains("AKIA****************"))
+    }
+
+    @Test
+    fun `pdf export produces a real PDF document`() {
+        val response = send("POST", "/api/v1/sessions/${DemoSeed.SESSION_INJECTION_ID}/export", mapOf("format" to "pdf", "theme" to "light"))
+
+        assertEquals(200, response.statusCode())
+        assertTrue(response.headers().firstValue("Content-Type").orElse("").startsWith("application/pdf"))
+        assertTrue(response.body().startsWith("%PDF-"))
+    }
+
+    @Test
+    fun `export defaults to html when no body is sent`() {
+        val response = send("POST", "/api/v1/sessions/${DemoSeed.SESSION_INJECTION_ID}/export", null)
+
+        assertEquals(200, response.statusCode())
+        assertTrue(response.headers().firstValue("Content-Type").orElse("").startsWith("text/html"))
+    }
+
+    @Test
+    fun `export rejects an unknown format, a non-light theme, and an unknown session`() {
+        val badFormat = send("POST", "/api/v1/sessions/${DemoSeed.SESSION_INJECTION_ID}/export", mapOf("format" to "docx", "theme" to "light"))
+        assertEquals(400, badFormat.statusCode())
+        assertEquals("invalid_format", parseMap(badFormat.body())["code"])
+
+        val badTheme = send("POST", "/api/v1/sessions/${DemoSeed.SESSION_INJECTION_ID}/export", mapOf("format" to "html", "theme" to "dark"))
+        assertEquals(400, badTheme.statusCode())
+        assertEquals("invalid_theme", parseMap(badTheme.body())["code"])
+
+        val unknownSession = send("POST", "/api/v1/sessions/${UUID.randomUUID()}/export", null)
+        assertEquals(404, unknownSession.statusCode())
+        assertEquals("session_not_found", parseMap(unknownSession.body())["code"])
+    }
+
+    @Test
     fun `policies and policy packs expose the seeded catalog`() {
         val policies = get("/api/v1/policies")
         val packs = get("/api/v1/policy-packs")
@@ -213,6 +269,56 @@ class ControlPlaneApiTest : ApiTestSupport() {
         assertEquals(3, parseList(policies.body()).size)
         assertEquals(200, packs.statusCode())
         assertEquals(2, parseList(packs.body()).size)
+    }
+
+    @Test
+    fun `policy stats for a never-triggered policy is a zero count, not a 404`() {
+        val response = get("/api/v1/policies/mask_korean_phone/stats")
+
+        assertEquals(200, response.statusCode())
+        val body = parseMap(response.body())
+        assertEquals("mask_korean_phone", body["policyId"])
+        assertEquals(0, body["firedLast30d"])
+        assertNull(body["lastTriggeredAt"])
+    }
+
+    @Test
+    fun `policy stats counts guard_event rows whose matched_policy_ids contains the id`() {
+        val eventId = UUID.randomUUID()
+        val ts = Instant.parse("2026-05-01T00:00:00Z")
+        send(
+            "POST", "/api/v1/events",
+            mapOf(
+                "eventId" to eventId.toString(),
+                "sessionId" to UUID.randomUUID().toString(),
+                "ts" to ts.toString(),
+                "direction" to "response",
+                "toolName" to "read_file",
+                "argsDigest" to "sha256:abc123",
+                "verdict" to "block",
+                "riskScore" to 90,
+                "matchedPolicyIds" to listOf("approve_external_email"),
+                "detections" to emptyList<Any>(),
+            ),
+        )
+
+        val response = get("/api/v1/policies/approve_external_email/stats?window=3650d")
+
+        assertEquals(200, response.statusCode())
+        val body = parseMap(response.body())
+        assertEquals(1, body["firedLast30d"])
+        assertEquals(ts.toString(), body["lastTriggeredAt"])
+    }
+
+    @Test
+    fun `policy stats rejects an unknown policy id and a malformed window`() {
+        val unknown = get("/api/v1/policies/does-not-exist/stats")
+        assertEquals(404, unknown.statusCode())
+        assertEquals("policy_not_found", parseMap(unknown.body())["code"])
+
+        val badWindow = get("/api/v1/policies/mask_korean_phone/stats?window=bogus")
+        assertEquals(400, badWindow.statusCode())
+        assertEquals("invalid_window", parseMap(badWindow.body())["code"])
     }
 
     @Test
@@ -286,11 +392,27 @@ class ControlPlaneApiTest : ApiTestSupport() {
         assertEquals("file-server", fileServer["name"])
         assertEquals(true, fileServer["connected"])
         assertEquals("limited", fileServer["trust"])
-        // apps/console/lib/api/types.ts's McpServer requires `tools`; this satisfies that wire
-        // contract exactly (FR-GW-03 per-server tool data is not sourced from here yet) so the
-        // console's server-inventory component never dereferences a missing field against the
-        // real backend.
-        assertEquals(emptyList<Any>(), fileServer["tools"])
+        assertNotNull(fileServer["endpoint"])
+        // apps/console/lib/api/types.ts's `ToolEntry`: name/risk/policies/snapshotStatus
+        // (GMCP-80 §3.1). file-server's read_file tool is high-risk and gated by a policy.
+        // No test in this suite ever approves or observes a snapshot for file-server's real
+        // "read_file" tool name (ToolSnapshotApiTest uses its own per-test tool names on
+        // SERVER_DB_ID to avoid exactly this kind of shared-state collision, per its header
+        // comment), so this tool's snapshotStatus is deterministically "unapproved" — the
+        // FR-GW-03 drift states themselves (in_sync/drift_detected/drift_acknowledged) are
+        // covered end to end by ToolSnapshotApiTest, including via this same GET /servers
+        // endpoint.
+        val fileTools = fileServer["tools"] as List<*>
+        val readFile = fileTools.map { it as Map<*, *> }.single { it["name"] == "read_file" }
+        assertEquals("high", readFile["risk"])
+        assertEquals(listOf("block_env_file_read"), readFile["policies"])
+        assertEquals("unapproved", (readFile["snapshotStatus"] as Map<*, *>)["state"])
+    }
+
+    @Test
+    fun `an empty server registry would serialize to an empty array, not a missing field`() {
+        val body = objectMapper.writeValueAsString(ServersResponse(emptyList()))
+        assertEquals("""{"servers":[]}""", body)
     }
 
     @Test
@@ -399,5 +521,24 @@ class ControlPlaneApiTest : ApiTestSupport() {
         val rejected = send("POST", "/api/v1/attacklab/run/T-99", null)
         assertEquals(404, rejected.statusCode())
         assertEquals("scenario_not_found", parseMap(rejected.body())["code"])
+    }
+
+    @Test
+    fun `attack lab scenarios list all eight threats, not implemented ones as unavailable`() {
+        val response = get("/api/v1/attacklab/scenarios")
+
+        assertEquals(200, response.statusCode())
+        val scenarios = (parseMap(response.body())["scenarios"] as List<*>).map { it as Map<*, *> }
+        assertEquals((1..8).map { "T-%02d".format(it) }.toSet(), scenarios.map { it["id"] }.toSet())
+
+        val t06 = scenarios.single { it["id"] == "T-06" }
+        assertEquals(false, t06["available"])
+        assertEquals(emptyList<Any>(), t06["modes"])
+
+        val t01 = scenarios.single { it["id"] == "T-01" }
+        assertEquals(true, t01["available"])
+        assertEquals(listOf("vulnerable", "guarded"), t01["modes"])
+        assertNotNull(t01["title"])
+        assertNotNull(t01["description"])
     }
 }

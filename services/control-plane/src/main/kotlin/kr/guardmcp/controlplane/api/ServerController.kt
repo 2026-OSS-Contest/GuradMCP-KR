@@ -1,9 +1,12 @@
 package kr.guardmcp.controlplane.api
 
 import kr.guardmcp.controlplane.domain.AuditChain
+import kr.guardmcp.controlplane.domain.DemoSeed
 import kr.guardmcp.controlplane.domain.McpServer
 import kr.guardmcp.controlplane.domain.ServerRegistryStore
 import kr.guardmcp.controlplane.domain.ServerSummary
+import kr.guardmcp.controlplane.domain.ToolRisk
+import kr.guardmcp.controlplane.domain.ToolSnapshotStatusView
 import kr.guardmcp.controlplane.domain.ToolSnapshotStore
 import kr.guardmcp.controlplane.domain.ToolSummary
 import kr.guardmcp.controlplane.domain.TrustLevel
@@ -37,9 +40,23 @@ class ServerController(
     @GetMapping("/servers")
     fun servers(): ServersResponse = ServersResponse(registryStore.list().map { toSummary(it, toolInventory(it.id)) })
 
-    private fun toolInventory(serverId: UUID): List<ToolSummary> =
-        toolSnapshotStore.statusView(serverId).map { (name, status) -> ToolSummary(name = name, snapshotStatus = status) }
-            .sortedBy { it.name }
+    /**
+     * Merges [ToolSnapshotStore]'s real, Postgres-backed drift state (FR-GW-03) with a static
+     * demo `risk`/`policies` seed (GMCP-80 §3.1) — tool-level risk scoring has no real backend
+     * source yet, matching the console-side gap `ToolSummary`'s doc comment notes. The seed's
+     * tool names are unioned into the result even when [ToolSnapshotStore] has never seen them
+     * (no `tool-snapshot/approve` or `/tool-observations` call for that server), so this stays a
+     * *fixed display seed* rather than silently disappearing once the real feature has no data
+     * for it — such an entry reads honestly as `snapshotStatus.state == "unapproved"`.
+     */
+    private fun toolInventory(serverId: UUID): List<ToolSummary> {
+        val statuses = toolSnapshotStore.statusView(serverId)
+        val seed = TOOL_RISK_SEED[serverId].orEmpty()
+        return (statuses.keys + seed.keys).map { name ->
+            val (risk, policies) = seed[name] ?: (ToolRisk.LOW to emptyList())
+            ToolSummary(name = name, risk = risk, policies = policies, snapshotStatus = statuses[name] ?: UNAPPROVED_PLACEHOLDER)
+        }.sortedBy { it.name }
+    }
 
     /** Full entity — endpoint, connection/tool-snapshot state, and trust-change provenance (§3.1). */
     @GetMapping("/servers/{id}")
@@ -60,7 +77,7 @@ class ServerController(
                 confirmedBy = outcome.server.trustLevelUpdatedBy,
             )
         }
-        return toSummary(outcome.server)
+        return toSummary(outcome.server, toolInventory(outcome.server.id))
     }
 
     /** Audit query surface for the trust-change hash chain (§3.2, §9 — "Replay에서 조회 가능"). */
@@ -80,6 +97,25 @@ class ServerController(
 
     private companion object {
         const val STREAM_TIMEOUT_MS = 30 * 60 * 1000L
+
+        /** Demo-only seed (§3.1) — real per-tool risk scoring and policy binding do not exist
+         *  yet; see [toolInventory]'s doc comment. */
+        val TOOL_RISK_SEED: Map<UUID, Map<String, Pair<ToolRisk, List<String>>>> = mapOf(
+            DemoSeed.SERVER_FILE_ID to mapOf(
+                "read_file" to (ToolRisk.HIGH to listOf("block_env_file_read")),
+                "list_dir" to (ToolRisk.LOW to emptyList()),
+            ),
+            DemoSeed.SERVER_MAIL_ID to mapOf(
+                "send_email" to (ToolRisk.HIGH to listOf("approve_external_email")),
+            ),
+            DemoSeed.SERVER_DB_ID to mapOf(
+                "lookup_customer" to (ToolRisk.MEDIUM to listOf("mask_korean_phone")),
+            ),
+        )
+
+        val UNAPPROVED_PLACEHOLDER = ToolSnapshotStatusView(
+            state = "unapproved", snapshotCapturedAt = null, lastCheckedAt = null, pendingDiffCount = 0, latestDiffId = null,
+        )
     }
 
     private fun parseId(id: String): UUID =
