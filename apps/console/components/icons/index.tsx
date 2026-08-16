@@ -265,6 +265,22 @@ export const CaretRightIcon = (props: P) => (
   </svg>
 );
 
+// The tick inside a checked box (SCR-501's risk dialog). Drawn 10x8, so it is placed rather than
+// stretched — the box is 18px and the mark sits inside it.
+export const CheckMarkIcon = (props: P) => (
+  <svg {...props} width="10" height="8" viewBox="0 0 10 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M2.98159 5.85798L0.981374 3.85777C0.756566 3.63296 0.393414 3.63296 0.168606 3.85777C-0.056202 4.08257 -0.056202 4.44572 0.168606 4.67053L2.57809 7.08002C2.8029 7.30482 3.16605 7.30482 3.39086 7.08002L9.4895 0.981374C9.71431 0.756566 9.71431 0.393414 9.4895 0.168606C9.26469 -0.056202 8.90154 -0.056202 8.67673 0.168606L2.98159 5.85798Z" fill="currentColor" />
+  </svg>
+);
+
+// The padlock on SCR-301's 원문 열람 button. Drawn 20x24 like the other leading icons here — the
+// glyph is 20 wide inside a 24-tall box, which is what `h-6 w-5` renders.
+export const RevealLockIcon = (props: P) => (
+  <svg {...props} width="20" height="24" viewBox="0 0 20 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M15 8.66634H14.1667V6.99967C14.1667 4.69967 12.3 2.83301 10 2.83301C7.70001 2.83301 5.83334 4.69967 5.83334 6.99967V8.66634H5.00001C4.08334 8.66634 3.33334 9.41634 3.33334 10.333V18.6663C3.33334 19.583 4.08334 20.333 5.00001 20.333H15C15.9167 20.333 16.6667 19.583 16.6667 18.6663V10.333C16.6667 9.41634 15.9167 8.66634 15 8.66634ZM10 16.1663C9.08334 16.1663 8.33334 15.4163 8.33334 14.4997C8.33334 13.583 9.08334 12.833 10 12.833C10.9167 12.833 11.6667 13.583 11.6667 14.4997C11.6667 15.4163 10.9167 16.1663 10 16.1663ZM7.50001 8.66634V6.99967C7.50001 5.61634 8.61668 4.49967 10 4.49967C11.3833 4.49967 12.5 5.61634 12.5 6.99967V8.66634H7.50001Z" fill="currentColor" />
+  </svg>
+);
+
 // SCR-501 Settings.
 export const TagWarningIcon = (props: P) => (
   <svg {...props} viewBox="0 0 16 20" fill="none" xmlns="http://www.w3.org/2000/svg">

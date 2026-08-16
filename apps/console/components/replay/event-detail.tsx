@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Lock } from "lucide-react";
 import { revealEvent } from "@/lib/api/client";
 import type { DirectionVerdict, EventDetail, RevealContent, TimelineNodeType } from "@/lib/api/types";
 import { VerdictBadge } from "@/components/verdict-badge";
-import { VerdictAllowIcon, VerdictWarnIcon } from "@/components/icons";
+import { RevealLockIcon, VerdictAllowIcon, VerdictWarnIcon } from "@/components/icons";
 import { PolicyChip } from "./policy-chip";
 import { MaskDiffView } from "./mask-diff";
 import { MaskedContent } from "./masked-content";
@@ -332,7 +331,7 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
           onClick={() => setConfirmOpen(true)}
           className="flex h-12 flex-none items-center justify-center gap-2 rounded-xl bg-blue-800 text-body-text-b2-md transition-colors hover:bg-blue-700"
         >
-          <Lock className="size-5 flex-none" aria-hidden />
+          <RevealLockIcon className="h-6 w-5 flex-none" aria-hidden />
           {t("reveal")}
         </button>
       )}
