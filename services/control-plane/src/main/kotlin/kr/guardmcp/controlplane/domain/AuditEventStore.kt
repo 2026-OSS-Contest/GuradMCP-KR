@@ -31,7 +31,8 @@ data class GuardEventRecord(
     val matchedPolicyIds: List<String>,
     val detections: List<Map<String, Any?>>,
     val maskDiffRef: String?,
-    /** NFR-04 opt-in only; null unless `audit.store-raw-payload=true` on this service. */
+    /** NFR-04 opt-in only; null unless [kr.guardmcp.controlplane.domain.GuardSettingsStore]'s
+     *  `storeRawOptIn` was true (`PUT /api/v1/settings`) at ingest time. */
     val rawPayload: String?,
 )
 

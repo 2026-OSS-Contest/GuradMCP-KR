@@ -93,7 +93,7 @@ class AuditEventApiTest : ApiTestSupport() {
 
     @Test
     fun `raw payload is dropped by default even when the gateway sends one`() {
-        // audit.store-raw-payload defaults to false (application.yaml) — NFR-04.
+        // guard_settings.store_raw_opt_in defaults to false (V4 migration) — NFR-04.
         val eventId = UUID.randomUUID()
         send("POST", "/api/v1/events", ingestPayload(eventId, rawPayload = "010-1234-5678 unmasked"))
 
@@ -206,8 +206,9 @@ class AuditEventApiTest : ApiTestSupport() {
 
     @Test
     fun `reveal by an operator when no raw payload was stored is a 409, not a 404`() {
-        // This context's audit.store-raw-payload defaults to false, so rawPayload is never
-        // persisted regardless of what the caller sends (NFR-04) — see the sibling opt-in test.
+        // guard_settings.store_raw_opt_in defaults to false, so rawPayload is never persisted
+        // regardless of what the caller sends (NFR-04) — see the sibling opt-in test, which
+        // restores this shared singleton row afterward rather than leaving it toggled on.
         val eventId = UUID.randomUUID()
         send("POST", "/api/v1/events", ingestPayload(eventId, rawPayload = "010-1234-5678 unmasked"))
 
