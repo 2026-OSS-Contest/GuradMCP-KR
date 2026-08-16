@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { VerdictAllowIcon, VerdictBlockIcon } from "@/components/icons";
+import { CheckMarkIcon, VerdictBlockIcon } from "@/components/icons";
 import type { RunRow, RunState } from "./use-benchmark-run";
 
 /**
@@ -74,11 +74,14 @@ export function RunList({
               >
                 {/* The verdict mark alone says whether a row has been reached. Dimming the row
                     itself was the first draft, and it put every unreached sample under 4.5:1 —
-                    on a screen whose whole point is that the samples can be read (NFR-08). */}
+                    on a screen whose whole point is that the samples can be read (NFR-08).
+
+                    The tick is neutral, not green: on a run that passes it is 245 marks, and 245
+                    green marks leave a single red one nowhere to stand out. */}
                 <span className="flex size-5 flex-none items-center justify-center">
                   {done ? (
                     row.passed ? (
-                      <VerdictAllowIcon className="h-5 w-4 text-verdict-allow" aria-hidden />
+                      <CheckMarkIcon className="text-grayscale-400" aria-hidden />
                     ) : (
                       <VerdictBlockIcon className="h-5 w-4 text-verdict-block" aria-hidden />
                     )
@@ -86,10 +89,14 @@ export function RunList({
                     <span className="size-2 rounded-full bg-(--primitive-opacity-white-alpha-25)" aria-hidden />
                   )}
                 </span>
-                {/* Scenarios and fixtures are named by their id, so printing it here as well
-                    would repeat the same string twice; the column stays for the alignment. */}
-                <span className="w-24 flex-none font-mono text-caption-mono-c-rg text-(--primitive-opacity-white-alpha-50)">
-                  {row.id === row.text ? "" : row.id}
+                {/* One gutter width for every section, so the rows read as columns. The short
+                    ids (`p01`, `T-01-a`) fit it; a fixture id — a whole case name — is the one
+                    thing on this screen that is elided, and the dialog has it whole. */}
+                <span
+                  title={row.id}
+                  className="w-24 flex-none truncate font-mono text-caption-mono-c-rg text-(--primitive-opacity-white-alpha-50)"
+                >
+                  {row.id}
                 </span>
                 {row.kind && (
                   <span className="flex-none rounded-sm bg-(--primitive-opacity-white-alpha-10) px-2 py-px font-mono text-caption-mono-c-rg text-grayscale-200 shadow-[inset_0_0_0_1px_var(--primitive-opacity-white-alpha-10)]">

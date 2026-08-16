@@ -53,10 +53,13 @@ export function toRows(samples: BenchmarkSample[], report: BenchmarkReport): Run
     ),
     ...report.fixtures.map(
       (fixture): RunRow => ({
+        // The fixture's own id — long, because it names the case; the list truncates it and the
+        // dialog has it whole. Every column then says something different: which case, what it
+        // expects of the policy, and which policy that is.
         id: fixture.id,
         section: "fixture",
-        kind: fixture.coverage.policy_id,
-        text: fixture.id,
+        kind: fixture.coverage.expectation,
+        text: fixture.coverage.policy_id,
         passed: fixture.passed,
         source: { of: "fixture", fixture }
       })

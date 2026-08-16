@@ -14,6 +14,17 @@ const stamp = (iso: string) => {
   return `${at.toLocaleDateString("en-CA")} ${at.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
 };
 
+/**
+ * Green is a verdict, not a decoration.
+ *
+ * The first draft coloured every measurement that cleared its mark, and on a run that passes
+ * everything that is twenty-odd green numbers — which says nothing, and leaves a single failure
+ * nowhere to stand out. So the gate card announces the verdict in green and the run list marks
+ * each row, while the numbers themselves stay neutral and turn red only where a mark is missed.
+ */
+const MEASURED = "text-grayscale-white";
+const MISSED = "text-verdict-block";
+
 /** One measured number against the mark it has to clear (docs/benchmark-gate.md 12.2). */
 function Metric({
   label,
@@ -33,17 +44,50 @@ function Metric({
     <div className="flex flex-col gap-2 rounded-lg bg-grayscale-900 p-3 shadow-[inset_0_0_0_1px_var(--primitive-color-grayscale-800)]">
       <span className="flex items-baseline justify-between gap-2">
         <span className="text-body-text-b3-md text-grayscale-300">{label}</span>
-        <span className={cn("text-body-text-b2-bd", passed ? "text-verdict-allow" : "text-verdict-block")}>{value}</span>
+        <span className={cn("text-body-text-b2-bd", passed ? MEASURED : MISSED)}>{value}</span>
       </span>
       {/* The bar carries the reading; the number beside it is what a reader quotes. */}
       <span className="h-1 w-full overflow-hidden rounded-full bg-(--primitive-opacity-white-alpha-10)">
         <span
-          className={cn("block h-full rounded-full", passed ? "bg-verdict-allow" : "bg-verdict-block")}
+          className={cn("block h-full rounded-full", passed ? "bg-grayscale-300" : "bg-verdict-block")}
           style={{ width: `${Math.min(100, Math.max(0, fill * 100))}%` }}
         />
       </span>
       <span className="text-caption-text-c-rg text-(--primitive-opacity-white-alpha-50)">{threshold}</span>
     </div>
+  );
+}
+
+/**
+ * The same fraction the row states, read at a glance. A ring rather than a bar because these sit
+ * in a column of eleven: a bar would make eleven near-identical full lines, where a ring that is
+ * short by a slice is visible at 20px.
+ */
+function Donut({ value, missed }: { value: number; missed: boolean }) {
+  const radius = 7;
+  const circumference = 2 * Math.PI * radius;
+  return (
+    <svg viewBox="0 0 20 20" className="size-5 flex-none -rotate-90" aria-hidden>
+      <circle
+        cx="10"
+        cy="10"
+        r={radius}
+        fill="none"
+        strokeWidth="3"
+        className="stroke-(--primitive-opacity-white-alpha-10)"
+      />
+      <circle
+        cx="10"
+        cy="10"
+        r={radius}
+        fill="none"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeDasharray={`${circumference * Math.min(1, Math.max(0, value))} ${circumference}`}
+        // The console's own blue — the one the primary buttons and the selected rows use.
+        className={missed ? "stroke-verdict-block" : "stroke-blue-800"}
+      />
+    </svg>
   );
 }
 
@@ -156,11 +200,12 @@ export function ResultPanel({
               <span
                 className={cn(
                   "w-14 flex-none text-right text-body-text-b3-md",
-                  row.recall >= th.recall ? "text-verdict-allow" : "text-verdict-block"
+                  row.recall >= th.recall ? MEASURED : MISSED
                 )}
               >
                 {percent(row.recall)}
               </span>
+              <Donut value={row.recall} missed={row.recall < th.recall} />
             </li>
           ))}
         </ul>
