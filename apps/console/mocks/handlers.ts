@@ -404,11 +404,17 @@ export const handlers = [
       // it a tick later, so the count visibly changes between the 10s /overview polls. The
       // ledger moves with the event, so the next /overview agrees with what was just sent.
       // An empty console has no approvals to raise, so the stream stays quiet there.
+      //
+      // Once per connection, not on a loop. The pair is a demonstration that the badge follows
+      // the stream, and one showing makes it; repeating it every third tick also put a card into
+      // SCR-402's queue and took it out again for as long as the screen was open, which reads as
+      // the list glitching rather than as an approval arriving. Same reasoning as the reload
+      // event below — a call to action that arrives every few seconds is noise.
       if (readScenario() !== "empty") {
-        if (seq % 3 === 0) {
+        if (seq === 0) {
           raiseApproval();
           client.send({ event: "approval.created", data: { id: `apr-${seq}` } });
-        } else if (seq % 3 === 1) {
+        } else if (seq === 1) {
           resolveRaised();
           client.send({ event: "approval.resolved", data: { id: `apr-${seq - 1}` } });
         }
