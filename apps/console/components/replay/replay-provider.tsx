@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getSessions, getSessionTimeline } from "@/lib/api/client";
 import type { EventDetail, SessionSummary, TimelineEvent } from "@/lib/api/types";
 import { useResource, type Resource } from "@/lib/api/use-resource";
@@ -63,8 +63,17 @@ export function ReplayProvider({
   const details = timeline.data?.details ?? {};
 
   const [eventOverride, setEventOverride] = useState<string | undefined>(initialEventId);
-  // Reset the manual selection when the session (and therefore the timeline) changes.
-  useEffect(() => setEventOverride(undefined), [sessionId]);
+  // Reset the selection when the session (and therefore the timeline) changes — but only when it
+  // actually changes. Firing on mount as well threw away every `?event=` deep link before its
+  // timeline had even loaded, so a link from SCR-101 always opened on the session's first verdict
+  // instead of the event it named (spec §3). It looked correct while the only verdict a fixture
+  // had was the one being linked to (GMCP-117).
+  const shownSession = useRef(sessionId);
+  useEffect(() => {
+    if (shownSession.current === sessionId) return;
+    shownSession.current = sessionId;
+    setEventOverride(undefined);
+  }, [sessionId]);
 
   const selectedEventId =
     eventOverride && events.some((event) => event.id === eventOverride) ? eventOverride : defaultEventId(events);
