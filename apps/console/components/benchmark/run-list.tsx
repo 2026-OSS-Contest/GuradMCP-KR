@@ -76,12 +76,13 @@ export function RunList({
                     itself was the first draft, and it put every unreached sample under 4.5:1 —
                     on a screen whose whole point is that the samples can be read (NFR-08).
 
-                    The tick is neutral, not green: on a run that passes it is 245 marks, and 245
-                    green marks leave a single red one nowhere to stand out. */}
+                    The tick is white, not green: on a run that passes it is 245 marks, and 245
+                    green marks leave a single red one nowhere to stand out. The green is spent
+                    once, on the gate card that lands when the cascade finishes. */}
                 <span className="flex size-5 flex-none items-center justify-center">
                   {done ? (
                     row.passed ? (
-                      <CheckMarkIcon className="text-grayscale-400" aria-hidden />
+                      <CheckMarkIcon className="text-grayscale-white" aria-hidden />
                     ) : (
                       <VerdictBlockIcon className="h-5 w-4 text-verdict-block" aria-hidden />
                     )

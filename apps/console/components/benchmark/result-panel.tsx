@@ -151,7 +151,9 @@ export function ResultPanel({
       </div>
 
       <Section title={t("quality")}>
-        <div className="grid grid-cols-2 gap-2">
+        {/* Two up while the panel holds its full width; one column once the window has taken
+            that away, where a two-up pair would be two 130px boxes with a percentage in each. */}
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
           <Metric
             label={t("metric.recall")}
             value={percent(m.recall)}

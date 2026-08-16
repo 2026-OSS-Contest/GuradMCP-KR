@@ -75,14 +75,17 @@ export function Benchmark() {
           {t("error")}
         </p>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
-          {/* The list takes the room; the panel beside it is a fixed reading column, the same
-              width the other screens give their detail panel. */}
+        // The two never stack. Reading the result beside the rows it came from is the whole
+        // composition, and a narrow window is exactly where a reader is most likely to lose
+        // track of which list the numbers belong to — so both columns simply get narrower. The
+        // panel keeps the 347px the other screens give their detail column until there is no
+        // longer room, then shrinks with the window rather than dropping below it.
+        <div className="flex min-h-0 flex-1 gap-4">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-(--primitive-radius-rounded-2xl) bg-grayscale-900 p-4">
             <RunList rows={rows} checked={checked} state={state} onSelect={setOpened} />
           </div>
 
-          <div className="flex min-h-0 flex-col lg:w-86.75 lg:flex-none">
+          <div className="flex min-h-0 w-86.75 max-w-2/5 min-w-56 flex-col">
             {report.data && state === "done" ? (
               <ResultPanel report={report.data} checks={rows.length} command={COMMAND} />
             ) : (
