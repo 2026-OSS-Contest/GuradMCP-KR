@@ -1,24 +1,42 @@
-// Approval backend interface (§4.5). The Control Plane approval console
-// (GMCP-82) does not exist yet; this file fixes the integration point so it
-// can be swapped in later without touching the action router.
+// Approval backend interface (§4.5). `./../controlPlane/approvalBackend.ts` (GMCP-26) is the
+// real Control Plane-backed implementation; this file fixes the integration point the action
+// router depends on, plus the fallback used when no Control Plane is configured.
 import { randomUUID } from "node:crypto";
 import type { Direction } from "@guardmcp/policy-engine";
+import type { MaskPreview, RiskTag } from "../pipeline/approvalPreview.js";
 
 export type ApprovalDecision = "block" | "approve" | "approve_masked" | "expired";
 export type ApprovalRequestId = string;
 
 export interface ApprovalRequestInput {
   eventRef: string;
+  sessionId: string;
   direction: Direction;
   toolName: string;
   riskScore: number;
   matchedPolicyIds: string[];
+  /** The policy whose action decided this verdict (§5.1 Approval Card's Policy Chip). */
+  policyId: string;
+  /** Human-readable risk reason shown on the card. */
+  message: string;
+  /** The Tool Call's own arguments, still legitimately in flight pre-decision — unlike a
+   *  resolved GuardEvent, which never carries them (NFR-04). */
+  arguments?: Record<string, unknown> | undefined;
+  riskTags: RiskTag[];
+  /** Only present when the deciding policy allows masked approval (NFR-04: no raw preview otherwise). */
+  maskPreview?: MaskPreview | undefined;
+}
+
+/** `decidedBy` is who (or what) settled it — a reviewer's id, or a fail-closed system actor. */
+export interface ApprovalOutcome {
+  decision: ApprovalDecision;
+  decidedBy?: string;
 }
 
 export interface ApprovalBackend {
   submit(req: ApprovalRequestInput): Promise<ApprovalRequestId>;
   /** Resolves with the operator's decision, or "expired" once `timeoutMs` elapses unresolved (FR-APR-03). */
-  awaitDecision(id: ApprovalRequestId, timeoutMs: number): Promise<ApprovalDecision>;
+  awaitDecision(id: ApprovalRequestId, timeoutMs: number): Promise<ApprovalOutcome>;
 }
 
 /**
@@ -34,15 +52,15 @@ export class InMemoryApprovalBackend implements ApprovalBackend {
     return randomUUID();
   }
 
-  async awaitDecision(id: ApprovalRequestId, timeoutMs: number): Promise<ApprovalDecision> {
+  async awaitDecision(id: ApprovalRequestId, timeoutMs: number): Promise<ApprovalOutcome> {
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.#pending.delete(id);
-        resolve("expired");
+        resolve({ decision: "expired" });
       }, timeoutMs);
       this.#pending.set(id, (decision) => {
         clearTimeout(timer);
-        resolve(decision);
+        resolve({ decision });
       });
     });
   }
@@ -69,8 +87,8 @@ export function createAutoExpireApprovalBackend(): ApprovalBackend {
     async submit(): Promise<ApprovalRequestId> {
       return randomUUID();
     },
-    async awaitDecision(): Promise<ApprovalDecision> {
-      return "expired";
+    async awaitDecision(): Promise<ApprovalOutcome> {
+      return { decision: "expired" };
     }
   };
 }

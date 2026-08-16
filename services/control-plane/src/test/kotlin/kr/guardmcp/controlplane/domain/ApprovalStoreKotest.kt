@@ -15,7 +15,7 @@ class ApprovalStoreKotest : StringSpec({
     "created approvals expire 120 seconds after request" {
         val store = storeAt(now)
         val approval = store.create(
-            sessionId = DemoSeed.SESSION_PII_ID,
+            sessionId = DemoSeed.SESSION_PII_ID.toString(),
             toolName = "send_email",
             arguments = mapOf("to" to "partner@external.example"),
             riskReason = "External email delivery requires human approval",
@@ -25,6 +25,53 @@ class ApprovalStoreKotest : StringSpec({
 
         approval.status shouldBe ApprovalStatus.PENDING
         approval.expiresAt shouldBe now.plusSeconds(120)
+    }
+
+    "a non-UUID gateway session id is accepted as-is" {
+        val store = storeAt(now)
+        val approval = store.create(
+            sessionId = "req-1",
+            toolName = "send_email",
+            arguments = mapOf("to" to "outside@example.net"),
+            riskReason = "External email delivery requires human approval",
+            policyId = "approve_external_email_with_secret",
+            ttl = Duration.ofSeconds(120),
+        )
+
+        approval.sessionId shouldBe "req-1"
+    }
+
+    "sweepExpired fails an unresolved approval closed once its deadline passes, and wipes its mask preview (NFR-04)" {
+        val store = storeAt(now)
+        val pending = store.create(
+            sessionId = "req-1",
+            toolName = "send_email",
+            arguments = mapOf("to" to "outside@example.net"),
+            riskReason = "External email delivery requires human approval",
+            policyId = "approve_external_email_with_secret",
+            ttl = Duration.ofSeconds(-1), // already past its deadline as of `now`
+            maskPreview = mapOf("raw" to listOf(mapOf("sensitive" to "sk-ant-demo"))),
+        )
+
+        store.sweepExpired()
+        val expired = store.get(pending.id)!!
+
+        expired.status shouldBe ApprovalStatus.EXPIRED
+        expired.decidedBy shouldBe "system:timeout"
+        expired.maskPreview shouldBe null
+    }
+
+    "decide() clears the mask preview once a human decision lands (NFR-04)" {
+        val store = storeAt(now)
+        val created = store.create(
+            sessionId = "req-1", toolName = "send_email", arguments = emptyMap(),
+            riskReason = "x", policyId = null, ttl = Duration.ofSeconds(120),
+            maskPreview = mapOf("raw" to listOf(mapOf("sensitive" to "sk-ant-demo"))),
+        )
+
+        val decided = store.decide(created.id, ApprovalDecision.APPROVE_MASKED, "reviewer")
+
+        decided.maskPreview shouldBe null
     }
 
     "each decision maps to its terminal status" {

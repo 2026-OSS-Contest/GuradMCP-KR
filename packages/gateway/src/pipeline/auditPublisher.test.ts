@@ -223,7 +223,7 @@ describe("auditPublisher", () => {
       const deps: RouterDeps = {
         approvalBackend: {
           submit: async () => "req-1",
-          awaitDecision: async () => "approve"
+          awaitDecision: async () => ({ decision: "approve" })
         }
       };
 

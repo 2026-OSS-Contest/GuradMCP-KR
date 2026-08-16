@@ -86,7 +86,7 @@ curl --fail --silent --request POST http://localhost:3002/demo/consultation-log
 
 Agent가 사용하던 MCP endpoint를 게이트웨이 endpoint로 교체합니다. 로컬 데모의 기본 endpoint는 `http://localhost:3001/mcp`입니다. 정책팩은 `default`와 `korean-pii`가 활성화됩니다.
 
-이 데모는 정책 평가·요청/응답 마스킹·차단 경로를 검증합니다. 사람 승인 UI와 영구 audit/replay는 아직 없으므로 `require_approval` 판정은 upstream을 실행하지 않고 fail-closed 오류를 반환합니다. PostgreSQL/Redis는 기동·seed·health 경계를 검증하지만 현재 판정 이력을 저장하지 않습니다.
+이 데모는 정책 평가·요청/응답 마스킹·차단 경로를 검증합니다. `docker compose`가 `CONTROL_PLANE_URL`을 기본으로 주입하므로 `require_approval` 판정은 실제 Control Plane 승인으로 이어져, 운영자가 결정하거나(승인/마스킹 후 승인/거부) 120초 동안 무응답이면 자동으로 fail-closed 차단됩니다(`CONTROL_PLANE_URL`이 없으면 즉시 fail-closed). 사람 승인 UI, Replay 화면, 해시 체인은 아직 이 승인 이벤트와 연동되지 않았습니다 — 재현 절차와 한계는 [external-email 승인 데모](external-email-approval-demo.md)를 참고하세요. PostgreSQL/Redis는 기동·seed·health 경계를 검증하지만 현재 판정 이력을 저장하지 않습니다.
 
 ## 종료와 초기화
 

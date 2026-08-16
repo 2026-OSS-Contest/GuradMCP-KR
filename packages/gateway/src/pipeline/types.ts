@@ -31,6 +31,10 @@ export interface ToolCallContext {
   toolName: string;
   /** The exact serialized text that was inspected; `decision.detections[].start/end` are offsets into this string. */
   payload: string;
+  /** The Tool Call's own parsed arguments, when `payload` isn't simply their JSON serialization
+   *  (e.g. `send_email`'s body-only inspection text, §5.1) — carried through to the Approval Card
+   *  pre-decision (NFR-04: never persisted past that window). */
+  arguments?: Record<string, unknown> | undefined;
   sessionId: string;
   /** Upstream MCP server this call targeted (FR-GW-02 §3.3). */
   serverId: string;
