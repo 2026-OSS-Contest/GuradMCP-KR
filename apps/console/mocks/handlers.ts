@@ -37,13 +37,7 @@ import {
   overviewOf,
   recentEvents,
 } from "./data";
-import {
-  SESSIONS,
-  eventLookup,
-  policyDetail,
-  revealOf,
-  timelineOf,
-} from "./replay";
+import { eventLookup, revealOf, sessions, timelineOf } from "./replay";
 import { currentSettings, patchSettings } from "./settings";
 import { readScenario } from "./scenario";
 
@@ -221,7 +215,7 @@ export const handlers = [
   // SCR-301 Replay (GMCP-28 wire contract). Empty scenario has no recorded sessions.
   http.get("*/api/v1/sessions", async () =>
     respond({
-      items: readScenario() === "empty" ? [] : SESSIONS,
+      items: readScenario() === "empty" ? [] : sessions(),
       nextCursor: null,
     }),
   ),
@@ -348,9 +342,10 @@ export const handlers = [
     const id = String(params.id);
     await delay(LATENCY_MS);
     if (id in POLICY_YAML) return HttpResponse.json({ id, yaml: policyYaml(id) });
-    // The replay fixtures still reference older synthetic ids and their chips must resolve.
-    if (id.startsWith("mask_kr") || id.startsWith("deny_")) return HttpResponse.json(policyDetail(id));
-    // Anything else has no source to serve — which is every policy against a real gateway.
+    // Every id the timelines chip is a policy that exists on disk, so the catalogue above answers
+    // all of them; the fallback the replay fixtures used to need is gone with the synthetic ids
+    // they carried (GMCP-117). Anything else has no source to serve — which, against a real
+    // gateway, is every policy.
     return new HttpResponse(null, { status: 404 });
   }),
 
