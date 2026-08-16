@@ -30,6 +30,7 @@
     "test:e2e": "playwright test --config apps/console/playwright.config.ts",
     "bench": "tsx attack-lab/benchmark/run.ts",
     "attacklab": "tsx attack-lab/runner/run.ts",
+    "cli": "tsx packages/cli/src/index.ts",
     "policy:generate": "tsx scripts/compile-runtime-policies.ts",
     "policy:check-generated": "tsx scripts/compile-runtime-policies.ts --check",
     "policy:validate": "tsx scripts/validate-policies.ts && npm run policy:generate",
