@@ -1,6 +1,13 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
+/**
+ * The run is a 3.4s cascade before the report exists, which is most of the default 5s assertion
+ * budget on a machine with nothing else to do — and all of it on a loaded CI runner. Waiting for
+ * the gate card gets its own budget so a slow runner reads as slow rather than as broken.
+ */
+const RUN_MS = 15_000;
+
 // SCR-601 Benchmark (GMCP-61). The dev server mocks /api/v1/benchmark/report and
 // /benchmark/samples with a real `npm run bench` run, so these exercise the contracts the two
 // new endpoints will serve.
@@ -20,7 +27,7 @@ test("SCR-601 running the benchmark fills the result panel with the gate report"
   await page.getByRole("button", { name: "벤치마크 실행" }).click();
 
   // Every threshold is printed beside the number it judges.
-  await expect(page.getByRole("status").filter({ hasText: "게이트 통과" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "게이트 통과" })).toBeVisible({ timeout: RUN_MS });
   await expect(page.getByText("245건 측정")).toBeVisible();
   await expect(page.getByText("기준 90.0% 이상")).toBeVisible();
   await expect(page.getByText("기준 50ms 이하")).toBeVisible();
@@ -66,7 +73,7 @@ test("SCR-601 the finished report holds to WCAG 2.1 AA", async ({ page }) => {
   // colours on tinted grounds, and the bars — exists only after a run.
   await page.goto("/benchmark");
   await page.getByRole("button", { name: "벤치마크 실행" }).click();
-  await expect(page.getByText("npm run bench")).toBeVisible();
+  await expect(page.getByText("npm run bench")).toBeVisible({ timeout: RUN_MS });
 
   const { violations } = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])

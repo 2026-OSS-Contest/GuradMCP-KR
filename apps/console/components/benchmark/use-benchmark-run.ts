@@ -68,29 +68,34 @@ export function toRows(samples: BenchmarkSample[], report: BenchmarkReport): Run
 }
 
 /**
- * How fast the ticks run. The measurement itself takes under a second and the result is already
- * in hand before the first tick — this paces the *reading* of it, nothing else. 245 rows at 14ms
- * is a little over three seconds: long enough to watch, short enough to sit through twice.
+ * How long the reading takes. The measurement itself is already in hand before the first frame —
+ * this paces the *reading* of it, nothing else. Three and a half seconds is long enough to watch
+ * and short enough to sit through twice.
  */
-const STEP_MS = 14;
+const DURATION_MS = 3_400;
 
 export type RunState = "idle" | "running" | "done";
 
 /**
- * Walks the rows one at a time so the checks can be watched arriving.
+ * Walks the rows so the checks can be watched arriving.
  *
  * Nothing here decides a verdict — every row already carries the one the runner gave it. The pace
  * is a reading aid, so a reader who has asked not to be animated gets the finished list at once
  * rather than a faster version of the same wait.
+ *
+ * How far it has got is read from the clock rather than counted in ticks. A fixed step per timer
+ * callback makes the run take as long as the renders do: on a slow machine — CI, in the case that
+ * found this — 245 rows re-rendering per tick stretched a 3.4s cascade past five seconds. Frames
+ * may drop now, but the run still ends when it says it will.
  */
 export function useBenchmarkRun(rows: RunRow[]) {
   const [state, setState] = useState<RunState>("idle");
   const [checked, setChecked] = useState(0);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const frame = useRef<number | null>(null);
 
   const stop = useCallback(() => {
-    if (timer.current) clearInterval(timer.current);
-    timer.current = null;
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
   }, []);
 
   useEffect(() => stop, [stop]);
@@ -109,20 +114,19 @@ export function useBenchmarkRun(rows: RunRow[]) {
       return;
     }
 
-    // A step of one row per tick would take a frame each; stepping in proportion keeps the pace
-    // the same however long the list grows.
-    const perTick = Math.max(1, Math.ceil(rows.length / (3_400 / STEP_MS)));
-    timer.current = setInterval(() => {
-      setChecked((previous) => {
-        const next = previous + perTick;
-        if (next >= rows.length) {
-          stop();
-          setState("done");
-          return rows.length;
-        }
-        return next;
-      });
-    }, STEP_MS);
+    const started = performance.now();
+    const step = () => {
+      const elapsed = performance.now() - started;
+      if (elapsed >= DURATION_MS) {
+        stop();
+        setChecked(rows.length);
+        setState("done");
+        return;
+      }
+      setChecked(Math.ceil((elapsed / DURATION_MS) * rows.length));
+      frame.current = requestAnimationFrame(step);
+    };
+    frame.current = requestAnimationFrame(step);
   }, [rows.length, stop]);
 
   return { state, checked, start };

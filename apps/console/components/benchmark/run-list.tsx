@@ -1,10 +1,75 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { CheckMarkIcon, VerdictBlockIcon } from "@/components/icons";
 import type { RunRow, RunState } from "./use-benchmark-run";
 import { cn } from "@/lib/utils";
+
+/**
+ * One row, memoised.
+ *
+ * A frame of the run changes `done` for a couple of rows and `current` for two; without this,
+ * every frame re-renders all 245 — which on a slow machine costs more than the frame it is drawn
+ * in, and the cascade falls behind the clock it is paced by.
+ */
+const Row = memo(function Row({
+  row,
+  done,
+  lit,
+  onSelect
+}: {
+  row: RunRow;
+  done: boolean;
+  /** The row the run is on: it takes the ground a hover would, and gives it back. */
+  lit: boolean;
+  onSelect: (row: RunRow) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(row)}
+      className={cn(
+        "flex w-full items-center gap-3 rounded-sm py-1 text-left whitespace-nowrap hover:bg-(--primitive-opacity-white-alpha-6)",
+        lit && "bg-(--primitive-opacity-white-alpha-6)"
+      )}
+    >
+      {/* The verdict mark alone says whether a row has been reached. Dimming the row itself was
+          the first draft, and it put every unreached sample under 4.5:1 — on a screen whose whole
+          point is that they can be read (NFR-08).
+
+          The tick is white, not green: on a run that passes it is 245 marks, and 245 green marks
+          leave a single red one nowhere to stand out. The green is spent once, on the gate card
+          that lands when the cascade finishes. */}
+      <span className="flex size-5 flex-none items-center justify-center">
+        {done ? (
+          row.passed ? (
+            <CheckMarkIcon className="text-grayscale-white" aria-hidden />
+          ) : (
+            <VerdictBlockIcon className="h-5 w-4 text-verdict-block" aria-hidden />
+          )
+        ) : (
+          <span className="size-2 rounded-full bg-(--primitive-opacity-white-alpha-25)" aria-hidden />
+        )}
+      </span>
+      {/* One gutter width for every section, so the rows read as columns. The short ids (`p01`,
+          `T-01-a`) fit it; a fixture id — a whole case name — is the one thing here that is
+          elided, and the dialog has it whole. */}
+      <span
+        title={row.id}
+        className="w-24 flex-none truncate font-mono text-caption-mono-c-rg text-(--primitive-opacity-white-alpha-50)"
+      >
+        {row.id}
+      </span>
+      {row.kind && (
+        <span className="flex-none rounded-sm bg-(--primitive-opacity-white-alpha-10) px-2 py-px font-mono text-caption-mono-c-rg text-grayscale-200 shadow-[inset_0_0_0_1px_var(--primitive-opacity-white-alpha-10)]">
+          {row.kind}
+        </span>
+      )}
+      <span className="flex-none pr-2 text-body-text-b3-md text-grayscale-300">{row.text}</span>
+    </button>
+  );
+});
 
 /**
  * What is being measured, one row at a time.
@@ -79,55 +144,17 @@ export function RunList({
             </h3>
             <ul className="flex flex-col">
               {group.items.map(({ row, index }) => {
-                const done = index < checked;
-                // The row the run is on. It reads as the pointer moving down the list, which is
-                // what makes the cascade legible at a glance — and it is the row the list keeps
-                // scrolled into view.
+                // The row the run is on — the pointer moving down the list, and the row the list
+                // keeps scrolled into view, so the two agree.
                 const current = index === checked - 1;
                 return (
                   <li key={row.id} ref={current ? cursor : undefined}>
-                    <button
-                      type="button"
-                      onClick={() => onSelect(row)}
-                      className={cn(
-                        "flex w-full items-center gap-3 rounded-sm py-1 text-left whitespace-nowrap hover:bg-(--primitive-opacity-white-alpha-6)",
-                        current && state === "running" && "bg-(--primitive-opacity-white-alpha-6)"
-                      )}
-                    >
-                      {/* The verdict mark alone says whether a row has been reached. Dimming the
-                          row itself was the first draft, and it put every unreached sample under
-                          4.5:1 — on a screen whose whole point is that they can be read (NFR-08).
-
-                          The tick is white, not green: on a run that passes it is 245 marks, and
-                          245 green marks leave a single red one nowhere to stand out. The green
-                          is spent once, on the gate card that lands when the cascade finishes. */}
-                      <span className="flex size-5 flex-none items-center justify-center">
-                        {done ? (
-                          row.passed ? (
-                            <CheckMarkIcon className="text-grayscale-white" aria-hidden />
-                          ) : (
-                            <VerdictBlockIcon className="h-5 w-4 text-verdict-block" aria-hidden />
-                          )
-                        ) : (
-                          <span className="size-2 rounded-full bg-(--primitive-opacity-white-alpha-25)" aria-hidden />
-                        )}
-                      </span>
-                      {/* One gutter width for every section, so the rows read as columns. The
-                          short ids (`p01`, `T-01-a`) fit it; a fixture id — a whole case name —
-                          is the one thing here that is elided, and the dialog has it whole. */}
-                      <span
-                        title={row.id}
-                        className="w-24 flex-none truncate font-mono text-caption-mono-c-rg text-(--primitive-opacity-white-alpha-50)"
-                      >
-                        {row.id}
-                      </span>
-                      {row.kind && (
-                        <span className="flex-none rounded-sm bg-(--primitive-opacity-white-alpha-10) px-2 py-px font-mono text-caption-mono-c-rg text-grayscale-200 shadow-[inset_0_0_0_1px_var(--primitive-opacity-white-alpha-10)]">
-                          {row.kind}
-                        </span>
-                      )}
-                      <span className="flex-none pr-2 text-body-text-b3-md text-grayscale-300">{row.text}</span>
-                    </button>
+                    <Row
+                      row={row}
+                      done={index < checked}
+                      lit={current && state === "running"}
+                      onSelect={onSelect}
+                    />
                   </li>
                 );
               })}
