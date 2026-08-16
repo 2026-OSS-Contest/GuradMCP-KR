@@ -28,7 +28,7 @@ export function StreamTable({ rows }: { rows: StreamRow[] }) {
       ) : (
         <table className="w-full table-fixed border-collapse">
           <thead>
-            <tr className="bg-(--primitive-opacity-white-alpha-6) text-left text-body-text-b2-md text-grayscale-300">
+            <tr className="bg-(--primitive-opacity-white-alpha-6) text-left text-body-text-b2-md text-grayscale-200">
               <th scope="col" className="[font-weight:inherit] w-28 rounded-l-md px-4 py-3">{t("colTime")}</th>
               <th scope="col" className="[font-weight:inherit] px-4 py-3">{t("colToolCall")}</th>
               <th scope="col" className="[font-weight:inherit] w-56 px-4 py-3">{t("colVerdict")}</th>
@@ -66,7 +66,7 @@ export function StreamTable({ rows }: { rows: StreamRow[] }) {
 function StreamHeader() {
   const t = useTranslations("attackLab");
   return (
-    <div className="grid grid-cols-[8rem_1fr_16rem_12rem] rounded-md bg-(--primitive-opacity-white-alpha-6) text-body-text-b2-md text-grayscale-300">
+    <div className="grid grid-cols-[8rem_1fr_16rem_12rem] rounded-md bg-(--primitive-opacity-white-alpha-6) text-body-text-b2-md text-grayscale-200">
       <span className="px-4 py-3">{t("colTime")}</span>
       <span className="px-4 py-3">{t("colToolCall")}</span>
       <span className="px-4 py-3">{t("colVerdict")}</span>

@@ -115,7 +115,7 @@ export function AttackLab() {
                 aria-label={t(guarded ? "runGuarded" : "runUnguarded")}
                 className={cn(
                   "flex h-10 flex-none items-center justify-center rounded-xl px-5 text-body-text-b2-md text-grayscale-white transition-colors",
-                  guarded ? "bg-blue-800 hover:bg-blue-700" : "bg-grayscale-800 hover:bg-grayscale-700",
+                  guarded ? "bg-blue-800 hover:bg-blue-700" : "bg-(--primitive-opacity-white-alpha-25) hover:bg-white/30",
                   disabled && "cursor-not-allowed opacity-50"
                 )}
               >
@@ -130,8 +130,10 @@ export function AttackLab() {
         </span>
       </div>
 
-      {/* Sandbox notice (spec §5.2): the unguarded run never touches anything real. */}
-      <p className="flex flex-none items-center gap-2 rounded-lg bg-(--primitive-opacity-blue-alpha-25) px-4 py-3 text-body-text-b3-md text-grayscale-200">
+      {/* Sandbox notice (spec §5.2): the unguarded run never touches anything real. The frame's
+          Indicator is black at 50%, not the blue the run panes use — it reports on the sandbox
+          rather than on a verdict, so it stays out of the verdict palette. */}
+      <p className="flex flex-none items-center gap-4 rounded-lg bg-(--primitive-opacity-black-alpha-50) px-4 py-3 text-body-text-b3-md text-grayscale-300">
         <BannerInfoIcon className="size-4 flex-none" aria-hidden />
         {t("sandboxNotice")}
       </p>
