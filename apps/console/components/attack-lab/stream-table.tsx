@@ -21,7 +21,7 @@ export function StreamTable({ rows }: { rows: StreamRow[] }) {
         <>
           <StreamHeader />
           <p className="flex items-center justify-center gap-2 py-10 text-body-text-b2-md text-grayscale-white">
-            <BannerInfoIcon className="size-4 flex-none" aria-hidden />
+            <BannerInfoIcon className="size-4 flex-none text-(--primitive-color-yellow-100)" aria-hidden />
             {t("streamEmpty")}
           </p>
         </>
