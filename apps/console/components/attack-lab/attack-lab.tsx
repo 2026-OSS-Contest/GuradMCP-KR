@@ -134,7 +134,8 @@ export function AttackLab() {
           Indicator is black at 50%, not the blue the run panes use — it reports on the sandbox
           rather than on a verdict, so it stays out of the verdict palette. */}
       <p className="flex flex-none items-center gap-4 rounded-lg bg-(--primitive-opacity-black-alpha-50) px-4 py-3 text-body-text-b3-md text-grayscale-300">
-        <BannerInfoIcon className="size-4 flex-none" aria-hidden />
+        {/* Its own colour, a step below the label: the icon marks the notice, it does not carry it. */}
+        <BannerInfoIcon className="size-4 flex-none text-grayscale-500" aria-hidden />
         {t("sandboxNotice")}
       </p>
 
