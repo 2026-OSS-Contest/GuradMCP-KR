@@ -29,10 +29,18 @@ enum class ApprovalDecision(@get:JsonValue val wire: String) {
     }
 }
 
-/** Approval card: the tool call held for review plus the reason it was held. */
+/** Approval card: the tool call held for review plus the reason it was held.
+ *
+ * [riskTags]/[threatScore]/[maskPreview] are the pre-decision evidence a real Approval Card
+ * needs (§5.1 SCR-402: risk tags, risk gauge, mask-diff preview) — passed through opaquely
+ * (Jackson's generic `Any?` tree) rather than modeled field-by-field here, since this store has
+ * no reason to interpret their shape, only to hold and later clear it. [maskPreview] carries raw
+ * sensitive text and is legitimately in flight only while the approval is `PENDING` (NFR-04): it
+ * is cleared the moment a decision lands, in [decide] and [sweepExpired] alike.
+ */
 data class Approval(
     val id: UUID,
-    val sessionId: UUID,
+    val sessionId: String,
     val status: ApprovalStatus,
     val toolName: String,
     val arguments: Map<String, String>,
@@ -43,6 +51,9 @@ data class Approval(
     val decision: ApprovalDecision?,
     val decidedBy: String?,
     val decidedAt: Instant?,
+    val riskTags: List<Any?>? = null,
+    val threatScore: Int? = null,
+    val maskPreview: Any? = null,
 )
 
 class ApprovalNotFoundException(val id: UUID) : RuntimeException("approval $id not found")
@@ -58,7 +69,7 @@ class ApprovalStore(private val clock: Clock) {
     init {
         approvals[DemoSeed.APPROVAL_PENDING_ID] = Approval(
             id = DemoSeed.APPROVAL_PENDING_ID,
-            sessionId = DemoSeed.SESSION_PII_ID,
+            sessionId = DemoSeed.SESSION_PII_ID.toString(),
             status = ApprovalStatus.PENDING,
             toolName = "send_email",
             arguments = mapOf("to" to "partner@external.example", "subject" to "고객 명단 공유"),
@@ -73,18 +84,25 @@ class ApprovalStore(private val clock: Clock) {
     }
 
     fun list(status: ApprovalStatus?): List<Approval> = synchronized(lock) {
+        sweepExpiredLocked()
         approvals.values.filter { status == null || it.status == status }.sortedBy(Approval::requestedAt)
     }
 
-    fun get(id: UUID): Approval? = synchronized(lock) { approvals[id] }
+    fun get(id: UUID): Approval? = synchronized(lock) {
+        sweepExpiredLocked()
+        approvals[id]
+    }
 
     fun create(
-        sessionId: UUID,
+        sessionId: String,
         toolName: String,
         arguments: Map<String, String>,
         riskReason: String,
         policyId: String?,
         ttl: Duration,
+        riskTags: List<Any?>? = null,
+        threatScore: Int? = null,
+        maskPreview: Any? = null,
     ): Approval = synchronized(lock) {
         val now = clock.instant()
         val approval = Approval(
@@ -100,12 +118,16 @@ class ApprovalStore(private val clock: Clock) {
             decision = null,
             decidedBy = null,
             decidedAt = null,
+            riskTags = riskTags,
+            threatScore = threatScore,
+            maskPreview = maskPreview,
         )
         approvals[approval.id] = approval
         approval
     }
 
     fun decide(id: UUID, decision: ApprovalDecision, decidedBy: String): Approval = synchronized(lock) {
+        sweepExpiredLocked()
         val current = approvals[id] ?: throw ApprovalNotFoundException(id)
         if (current.status != ApprovalStatus.PENDING) throw ApprovalAlreadyDecidedException(current)
         val decided = current.copy(
@@ -117,10 +139,35 @@ class ApprovalStore(private val clock: Clock) {
             decision = decision,
             decidedBy = decidedBy,
             decidedAt = clock.instant(),
+            // NFR-04: raw preview text has no further legitimate use once a decision — human or
+            // fail-closed — has landed.
+            maskPreview = null,
         )
         approvals[id] = decided
         decided
     }
 
-    fun countPending(): Int = synchronized(lock) { approvals.values.count { it.status == ApprovalStatus.PENDING } }
+    fun countPending(): Int = synchronized(lock) {
+        sweepExpiredLocked()
+        approvals.values.count { it.status == ApprovalStatus.PENDING }
+    }
+
+    /** §5.1 Control Plane: 120s unresolved fails closed. Called by [ApprovalTimeoutScheduler]'s
+     *  1s tick, and opportunistically by every read/decide above, so staleness is bounded by
+     *  whichever comes first rather than only the scheduler's own cadence. */
+    fun sweepExpired(): Unit = synchronized(lock) { sweepExpiredLocked() }
+
+    private fun sweepExpiredLocked() {
+        val now = clock.instant()
+        for ((id, approval) in approvals) {
+            if (approval.status != ApprovalStatus.PENDING) continue
+            if (approval.expiresAt.isAfter(now)) continue
+            approvals[id] = approval.copy(
+                status = ApprovalStatus.EXPIRED,
+                decidedBy = "system:timeout",
+                decidedAt = now,
+                maskPreview = null,
+            )
+        }
+    }
 }

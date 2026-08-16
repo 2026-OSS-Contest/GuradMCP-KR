@@ -1,0 +1,58 @@
+policyId: block_untrusted_injection_response
+policyFile: ../../../../../policy-packs/default/policies/block-injection-response.yaml
+pack: default
+cases:
+  - name: "untrusted 서버 응답에서 고위험 인젝션이 탐지되면 차단된다"
+    input:
+      direction: response
+      tool: fetch_url
+      serverTrust: untrusted
+      args: {}
+      detections:
+        - type: INJECTION
+      riskScore: 95
+    expected:
+      verdict: block
+      matchedPolicyIds: [block_untrusted_injection_response]
+      severity: critical
+
+  - name: "INJECTION.OBFUSCATED 하위 타입도 차단된다"
+    input:
+      direction: response
+      tool: fetch_url
+      serverTrust: untrusted
+      args: {}
+      detections:
+        - type: INJECTION
+          subtype: OBFUSCATED
+      riskScore: 90
+    expected:
+      verdict: block
+      matchedPolicyIds: [block_untrusted_injection_response]
+      severity: critical
+
+  - name: "risk_score가 임계치(90) 미만이면 통과한다 (음성 케이스)"
+    input:
+      direction: response
+      tool: fetch_url
+      serverTrust: untrusted
+      args: {}
+      detections:
+        - type: INJECTION
+      riskScore: 50
+    expected:
+      verdict: allow
+      matchedPolicyIds: []
+
+  - name: "trusted 서버 응답은 동일한 탐지·점수여도 통과한다 (음성 케이스)"
+    input:
+      direction: response
+      tool: fetch_url
+      serverTrust: trusted
+      args: {}
+      detections:
+        - type: INJECTION
+      riskScore: 95
+    expected:
+      verdict: allow
+      matchedPolicyIds: []

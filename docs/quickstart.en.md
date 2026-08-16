@@ -93,7 +93,7 @@ In development mode, `demo-mcp-tools` reflects source edits. `demo-agent` is a c
 
 Replace the MCP endpoint used by the agent with the gateway endpoint. The local demo default is `http://localhost:3001/mcp`. The `default` and `korean-pii` packs are enabled.
 
-This demo verifies policy evaluation plus request/response masking and blocking. Human approval UI and durable audit/replay are not implemented, so `require_approval` returns a fail-closed error without invoking upstream. PostgreSQL and Redis prove startup, seed, and health boundaries but do not yet store verdict history.
+This demo verifies policy evaluation plus request/response masking and blocking. Since `docker compose` injects `CONTROL_PLANE_URL` by default, a `require_approval` verdict holds on a real Control Plane approval: an operator decides (approve, approve-masked, or block), or it fails closed automatically after 120 seconds with no response (without `CONTROL_PLANE_URL`, it fails closed immediately). The human approval UI, the Replay screen, and the hash chain are not yet wired to these approval events — see the [external-email approval demo](external-email-approval-demo.en.md) for the reproduction steps and limits. PostgreSQL and Redis prove startup, seed, and health boundaries but do not yet store verdict history.
 
 ## Stop or reset
 

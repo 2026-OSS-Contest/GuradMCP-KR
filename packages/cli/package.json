@@ -1,0 +1,16 @@
+{
+  "name": "@guardmcp/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "guardmcp CLI — deterministic demo/bench/policy-lint orchestration (GMCP-97)",
+  "bin": {
+    "guardmcp": "./bin/guardmcp.mjs"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "tsx": "^4.20.3"
+  }
+}

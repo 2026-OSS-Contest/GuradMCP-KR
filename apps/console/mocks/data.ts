@@ -11,6 +11,7 @@ export const SERVERS: McpServer[] = [
   {
     id: "file-server",
     name: "file_server",
+    endpoint: "http://file-mcp:8801/sse",
     connected: true,
     trust: "limited",
     tools: [
@@ -41,6 +42,7 @@ export const SERVERS: McpServer[] = [
   {
     id: "mail-server",
     name: "mail_server",
+    endpoint: "http://mail-mcp:8802/sse",
     connected: true,
     trust: "trusted",
     tools: [
@@ -73,6 +75,7 @@ export const SERVERS: McpServer[] = [
   {
     id: "db-server",
     name: "db_server",
+    endpoint: "http://db-mcp:8803/sse",
     connected: false,
     trust: "untrusted",
     tools: [
@@ -170,7 +173,7 @@ export function recentEvents(): SecurityEvent[] {
       sessionId: "s-0712",
       verdict: "warn",
       tool: "fetch_url",
-      target: "외부 URL",
+      target: "docs.example.com",
     },
     {
       id: "evt-6009",

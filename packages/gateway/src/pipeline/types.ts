@@ -15,6 +15,8 @@ import type {
 } from "@guardmcp/policy-engine";
 import type { Detection } from "../detect.js";
 import type { GuardBlockError } from "../errors/guard-block-error.js";
+import type { FailurePolicy } from "../settings/failurePolicyCache.js";
+import type { StageError } from "./pipelineRunner.js";
 
 export type {
   Action,
@@ -23,6 +25,8 @@ export type {
   Severity,
   ServerTrust,
   GuardBlockError,
+  FailurePolicy,
+  StageError,
 };
 
 /** Everything the router needs about the Tool Call being routed. */
@@ -31,6 +35,10 @@ export interface ToolCallContext {
   toolName: string;
   /** The exact serialized text that was inspected; `decision.detections[].start/end` are offsets into this string. */
   payload: string;
+  /** The Tool Call's own parsed arguments, when `payload` isn't simply their JSON serialization
+   *  (e.g. `send_email`'s body-only inspection text, §5.1) — carried through to the Approval Card
+   *  pre-decision (NFR-04: never persisted past that window). */
+  arguments?: Record<string, unknown> | undefined;
   sessionId: string;
   /** Upstream MCP server this call targeted (FR-GW-02 §3.3). */
   serverId: string;
@@ -62,6 +70,13 @@ export interface PolicyDecision {
     onTimeout: "block";
     allowMaskedApproval: boolean;
   };
+  /**
+   * Present only on a decision synthesized by the pipeline's fail-closed/fail-open boundary
+   * (NFR-03, GMCP-68 §4.2) — never set by the Policy Engine itself. Carried through to the
+   * emitted GuardEvent by `buildGuardEvent` (actionRouter.ts).
+   */
+  errorInfo?: StageError;
+  failurePolicyApplied?: FailurePolicy;
 }
 
 export type RoutedResult =
@@ -118,6 +133,14 @@ export interface GuardEvent {
   maskDiffRef?: string;
   decidedBy?: string;
   decidedAt?: string;
+  /**
+   * GMCP-68 §3.2: present only when this event resulted from a pipeline error/timeout instead of
+   * a normal verdict. Absent (never `null`) on every other event, matching this type's existing
+   * convention for optional fields (`normalizedPath`, `maskDiffRef`, ...).
+   */
+  errorInfo?: StageError;
+  /** The failure policy actually applied to produce this event's verdict; absent on a normal decision. */
+  failurePolicyApplied?: FailurePolicy;
   /**
    * NFR-04 opt-in only: populated by `buildGuardEvent` (actionRouter.ts) solely when
    * `AUDIT_STORE_RAW_PAYLOAD=true`. `./auditPublisher.ts` must be the only reader — it strips

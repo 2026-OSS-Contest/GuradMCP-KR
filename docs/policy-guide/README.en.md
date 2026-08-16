@@ -169,7 +169,7 @@ risk_score:
 
 Action precedence is `block > require_approval > warn > mask_then_allow > allow`. The placement of `warn` above `mask_then_allow` is the Appendix A v1 composition rule and is independent of severity.
 
-This section is the normative DSL v1 contract. The current demo gateway evaluates checked-in packs and applies `allow`, `warn`, `mask_then_allow`, and `block`; because no approval service exists yet, `require_approval` returns a fail-closed error without invoking upstream. Approval Cards and durable audit logs are future work and must not be assumed in the demo.
+This section is the normative DSL v1 contract. The current demo gateway evaluates checked-in packs and applies `allow`, `warn`, `mask_then_allow`, and `block`. In the demo environment, where `docker compose` injects `CONTROL_PLANE_URL` by default, `require_approval` holds on a real Control Plane approval: an operator decides (approve, approve-masked, or block), or it fails closed automatically after the timeout (120 seconds) with no response. Without `CONTROL_PLANE_URL` set, it fails closed immediately. Approval Cards now carry real risk tags and mask previews, but the console approval UI, Replay, and the hash chain are not yet wired to these approval events — see the [external-email approval demo](../external-email-approval-demo.en.md) for details. Durable audit logs are future work and must not be assumed in the demo.
 
 ## 5. Five severities
 
@@ -309,6 +309,17 @@ expected:
 
 Use a stable, unique `id`. `coverage.policy_id` names the actual policy and `coverage.expectation` is `match` or `not_match`; it must agree with `expected.matched_policy_ids`. All enum and tag values follow this guide. A benign fixture normally expects the pack default action and an empty `matched_policy_ids` list. Both fixtures must use synthetic content. In `npm run bench` output, confirm both `metrics.fixturePassRate` and `metrics.fixtureCoverageRate` are `1`, `metrics.authorFixtures` is at least twice `metrics.policyCount`, and the `fixtures` array names each added ID with `passed: true`.
 
+### Policy Unit Test Framework (deterministic policy unit tests)
+
+Where `npm run bench` (Benchmark Runner) measures statistical performance (recall/FPR), `packages/policy-engine/test/policy-table.test.ts` is a separate, lower-level gate that deterministically checks whether each individual policy decides exactly what its spec says. Every policy file under `policy-packs/default/` must have a matching case file, or the coverage script fails CI.
+
+1. Write `policy-packs/<pack>/policies/<policy-file>.yaml`.
+2. Write `packages/policy-engine/test/fixtures/<pack>/<policy-id>.cases.yaml` (the filename is the kebab-case spelling of `id`). Each policy needs at least one positive case (the policy matches and produces the stated action).
+3. Run `npm run test:policy --workspace @guardmcp/policy-engine` locally, then open the PR.
+4. Confirm the `policy-tests` CI workflow passes.
+
+See `docs/task-docs/GMCP-16/policy-unit-test-framework.md` §4 for the case file's 3-tuple schema (policy YAML + input context + expected verdict).
+
 ## 11. Author checklist
 
 - [ ] Is `id` globally unique and semantically stable?
@@ -319,6 +330,7 @@ Use a stable, unique `id`. `coverage.policy_id` names the actual policy and `cov
 - [ ] Is approval timeout fail-closed?
 - [ ] Are Korean and English explanations/examples updated together?
 - [ ] Do validation and the benchmark pass?
+- [ ] Did you add a `test:policy` case file with at least one positive case?
 
 Use the [author test](author-test.en.md) to verify that an external contributor can create a policy from documentation alone.
 

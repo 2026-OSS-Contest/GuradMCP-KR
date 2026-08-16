@@ -1,0 +1,43 @@
+policyId: warn_injection_request
+policyFile: ../../../../../policy-packs/default/policies/warn-injection-request.yaml
+pack: default
+cases:
+  - name: "요청 인자에서 인젝션 문구가 탐지되면 경고한다"
+    input:
+      direction: request
+      tool: send_message
+      serverTrust: trusted
+      args: {}
+      detections:
+        - type: INJECTION
+      riskScore: 45
+    expected:
+      verdict: warn
+      matchedPolicyIds: [warn_injection_request]
+      severity: medium
+
+  - name: "risk_score가 임계치(40) 미만이면 통과한다 (음성 케이스)"
+    input:
+      direction: request
+      tool: send_message
+      serverTrust: trusted
+      args: {}
+      detections:
+        - type: INJECTION
+      riskScore: 10
+    expected:
+      verdict: allow
+      matchedPolicyIds: []
+
+  - name: "response 방향으로는 매칭되지 않는다 (음성 케이스)"
+    input:
+      direction: response
+      tool: send_message
+      serverTrust: trusted
+      args: {}
+      detections:
+        - type: INJECTION
+      riskScore: 45
+    expected:
+      verdict: allow
+      matchedPolicyIds: []

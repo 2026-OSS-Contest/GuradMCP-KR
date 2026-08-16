@@ -78,14 +78,18 @@ export function RunPane({
             <p className="text-body-text-b1-md text-grayscale-white">{t("paneIdle")}</p>
           </div>
         ) : (
-          <ol role="log" aria-live="polite" className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-            {calls.map((call) => (
-              <ToolCallCard key={call.id} call={call} />
-            ))}
-            {running && calls.length === 0 && (
-              <li className="h-20 animate-pulse motion-reduce:animate-none rounded-lg bg-(--primitive-opacity-white-alpha-6)" />
-            )}
-          </ol>
+          // See recent-events: `role="log"` on the list itself would strip its list semantics.
+          // `p-1 -m-1`: see session-list — without it the scroll container clips the focus ring.
+          <div role="log" aria-live="polite" className="-m-1 flex min-h-0 flex-1 flex-col overflow-y-auto p-1">
+            <ol className="flex flex-col gap-2">
+              {calls.map((call) => (
+                <ToolCallCard key={call.id} call={call} />
+              ))}
+              {running && calls.length === 0 && (
+                <li className="h-20 animate-pulse motion-reduce:animate-none rounded-lg bg-(--primitive-opacity-white-alpha-6)" />
+              )}
+            </ol>
+          </div>
         )}
       </div>
     </section>

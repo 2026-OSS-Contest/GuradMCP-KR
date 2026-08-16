@@ -26,3 +26,7 @@ reports/*.html
 
 # Synthetic demo fixture — not a real secret, deliberately tracked (GMCP-19).
 !apps/demo-mcp-tools/sandbox/.env
+
+# The guardmcp CLI's npm "bin" entry, not Java/Gradle build output (GMCP-97).
+!packages/cli/bin/
+!packages/cli/bin/**

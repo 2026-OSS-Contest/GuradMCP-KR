@@ -11,6 +11,7 @@ import type {
   DetectionPreview,
   EventDetail,
   ApiErrorBody,
+  GatewaySettings,
   Overview,
   PolicyDetail,
   PolicyPack,
@@ -22,6 +23,7 @@ import type {
   ServerTrustChangeResult,
   ServersResponse,
   SessionsResponse,
+  SettingsUpdate,
   TimelineResponse,
 } from "./types";
 import {
@@ -193,6 +195,20 @@ export const previewDetection = (
  */
 export const getApprovals = (signal?: AbortSignal) =>
   get<Approval[]>("/approvals", signal);
+
+/**
+ * SCR-501 Settings (spec §5.7). Served for real by GMCP-68's `SettingsController`; MSW still
+ * answers it in development (`mocks/settings.ts`) whenever `NEXT_PUBLIC_API_BASE_URL` is unset.
+ */
+export const getSettings = (signal?: AbortSignal) => get<GatewaySettings>("/settings", signal);
+
+/** Each control sends only what it changed, so one never resends another's value. */
+export const updateSettings = (update: SettingsUpdate, signal?: AbortSignal) =>
+  putJson<GatewaySettings>("/settings", update, signal);
+
+// Retuning an upstream's trust tier goes through `putServerTrust` above — FR-GW-02's real
+// `PUT /servers/{id}/trust`, not the `PUT /servers/{id}` an earlier reading here assumed while
+// the endpoint was still unbuilt.
 
 /**
  * Resolve a held call. Throws `ApiError` with status 409 when someone else — or the 120s

@@ -53,7 +53,14 @@ class GatewayToolInvoker(
         }
         val response = httpClient.send(
             HttpRequest.newBuilder(URI.create("${properties.gatewayUrl}/mcp"))
-                .timeout(Duration.ofSeconds(5))
+                // A `require_approval` verdict can now genuinely hold the gateway's response
+                // open for its full `approval.timeout_seconds` (120s, §5.1 GMCP-26) before
+                // failing closed — e.g. T-01's malicious-README scenario sends the sandboxed
+                // .env's secret to an external address via send_email, which matches
+                // `approve_external_email_with_secret`. 5s used to be enough only because
+                // require_approval had nothing to wait on and auto-expired instantly; it does
+                // not anymore.
+                .timeout(Duration.ofSeconds(130))
                 .header("content-type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
                 .build(),

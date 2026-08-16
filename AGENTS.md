@@ -32,6 +32,7 @@ Do not claim capabilities that are not implemented. The current limitations docu
 - `apps/demo-mcp-tools`: synthetic demo MCP tools
 - `packages/gateway`: MCP gateway and generated runtime policy bundle
 - `packages/policy-engine`: policy parsing and evaluation
+- `packages/cli`: `guardmcp` CLI — demo/bench/policy-lint orchestration (see `docs/cli/README.md`)
 - `services/control-plane`: Kotlin/Spring control plane
 - `policy-packs`: source YAML policy packs
 - `attack-lab`: synthetic attack/benign datasets and benchmarks
