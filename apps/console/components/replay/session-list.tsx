@@ -117,7 +117,9 @@ export function SessionList() {
       ) : filtered.length === 0 ? (
         <p className="text-body-text-b3-md text-grayscale-400">{t("noResults")}</p>
       ) : (
-        <div className="flex flex-col gap-3 overflow-y-auto">
+        // `p-1 -m-1` leaves room for the 2px focus ring at its 2px offset without moving the list:
+        // a scroll container with no padding clips the ring on all four sides (GMCP-90).
+        <div className="-m-1 flex flex-col gap-3 overflow-y-auto p-1">
           {filtered.map((session) => (
             <SessionCard
               key={session.id}

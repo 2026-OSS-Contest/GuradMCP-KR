@@ -20,7 +20,10 @@ export function RawContent({ lines }: { lines: RawLine[] }) {
           <span className="min-w-0 break-all whitespace-pre-wrap">
             {line.parts.map((part, index) =>
               "sensitive" in part ? (
-                <span key={index} className="text-verdict-block underline decoration-1 underline-offset-2">
+                // red-400 rather than the verdict-block red: this panel's ground is a step
+                // lighter than the card's, where red-500 falls to 4.05:1. Not a Verdict Badge,
+                // so it is not bound to the verdict palette (spec §4.3).
+                <span key={index} className="text-red-400 underline decoration-1 underline-offset-2">
                   {part.sensitive}
                 </span>
               ) : (

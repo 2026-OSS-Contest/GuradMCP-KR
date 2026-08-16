@@ -8,10 +8,11 @@ import { labelOf, subtypeOf } from "@/lib/detection-labels";
 import { toVerdict } from "@/lib/verdict";
 import { cn } from "@/lib/utils";
 
-// Straight off the design: red-700 / yellow-600 grounds, white type on both.
+// The design's red-700 / yellow-600 grounds. White type holds on the red (AA) but not on the
+// yellow — it measured 2.10:1 there, so that chip takes near-black type instead, at 8.18:1.
 const TAG_TONE: Record<Verdict, string> = {
   block: "bg-red-700 text-grayscale-white",
-  warn: "bg-yellow-600 text-grayscale-white",
+  warn: "bg-yellow-600 text-grayscale-950",
   require_approval: "bg-(--primitive-opacity-require-approval-alpha-25) text-violet-100",
   allow: "bg-(--primitive-opacity-allow-alpha-10) text-verdict-allow"
 };

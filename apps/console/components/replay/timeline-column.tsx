@@ -33,7 +33,9 @@ const MARKER: Record<TimelineNodeType, ComponentType<SVGProps<SVGSVGElement>>> =
 
 const LABEL_TONE: Partial<Record<TimelineNodeType, string>> = {
   user: "text-(--primitive-opacity-white-alpha-75)",
-  agent: "text-blue-700"
+  // blue-600, not blue-700: on the timeline's `bg-grayscale-900` the darker step measured
+  // 3.64:1, under the 4.5:1 AA floor (NFR-08).
+  agent: "text-blue-600"
 };
 
 function hhmmss(iso: string): string {
@@ -187,7 +189,10 @@ export function TimelineColumn() {
           onClick={() => setPlaying((previous) => !previous)}
           aria-label={playing ? t("pause") : t("play")}
           aria-pressed={playing}
-          className="flex size-10 flex-none items-center justify-center rounded-xl bg-blue-800 transition-colors hover:bg-blue-700"
+          // The primitive (12px), not Tailwind's `rounded-xl` (16px): PlayControlIcon paints its
+          // own 12px rounded rect over the whole button, so at 16px the focus ring traced a
+          // corner the eye never sees. Pause is a small glyph, which is why only play showed it.
+          className="flex size-10 flex-none items-center justify-center rounded-(--primitive-radius-rounded-xl) bg-blue-800 transition-colors hover:bg-blue-700"
         >
           {playing ? <Pause className="size-5 fill-current" aria-hidden /> : <PlayControlIcon className="size-10" aria-hidden />}
         </button>
@@ -195,7 +200,8 @@ export function TimelineColumn() {
           type="button"
           onClick={() => events[0] && selectEvent(events[0].id)}
           aria-label={t("toStart")}
-          className="flex size-10 flex-none items-center justify-center rounded-xl bg-(--primitive-opacity-white-alpha-25) transition-colors hover:bg-white/30"
+          // Same 12px primitive — RewindControlIcon paints its own rounded rect too.
+          className="flex size-10 flex-none items-center justify-center rounded-(--primitive-radius-rounded-xl) bg-(--primitive-opacity-white-alpha-25) transition-colors hover:bg-white/30"
         >
           <RewindControlIcon className="size-10" aria-hidden />
         </button>
@@ -240,25 +246,28 @@ export function TimelineColumn() {
           {t("empty")}
         </div>
       ) : (
-        <ol
+        // See recent-events: `role="log"` on the list itself would strip its list semantics.
+        <div
           role="log"
           aria-live={live ? "polite" : "off"}
-          className="flex flex-1 flex-col gap-3 overflow-y-auto rounded-lg bg-grayscale-900 p-2"
+          className="flex flex-1 flex-col overflow-y-auto rounded-lg bg-grayscale-900 p-2"
         >
-          {events.map((event) => (
-            <li key={event.id}>
-              <NodeRow
-                event={event}
-                selected={event.id === selectedEventId}
-                onSelect={() => selectEvent(event.id)}
-                register={(el) => {
-                  if (el) rowRefs.current.set(event.id, el);
-                  else rowRefs.current.delete(event.id);
-                }}
-              />
-            </li>
-          ))}
-        </ol>
+          <ol className="flex flex-1 flex-col gap-3">
+            {events.map((event) => (
+              <li key={event.id}>
+                <NodeRow
+                  event={event}
+                  selected={event.id === selectedEventId}
+                  onSelect={() => selectEvent(event.id)}
+                  register={(el) => {
+                    if (el) rowRefs.current.set(event.id, el);
+                    else rowRefs.current.delete(event.id);
+                  }}
+                />
+              </li>
+            ))}
+          </ol>
+        </div>
       )}
     </section>
   );
