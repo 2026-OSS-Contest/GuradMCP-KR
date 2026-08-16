@@ -673,3 +673,138 @@ export interface PolicyStats {
   dryRun?: { wouldFire: number; windowDays: number };
 }
 
+
+// ── Benchmark (GMCP-61, SCR-601) ─────────────────────────────────────────────
+// `attack-lab/benchmark/run.ts` already writes exactly this report; these types are that file's
+// output, read back. Two endpoints serve it and neither exists on the control plane yet —
+// GET /benchmark/report and GET /benchmark/samples are the two the console needs built.
+//
+// The split matters: the report carries per-item results for the 40 scenarios and the 29 policy
+// fixtures, but for the 176 dataset samples it carries only aggregates (recall, fpr, and a list
+// of ids that were missed). A screen that ticks each sample as it goes therefore cannot get that
+// verdict from the report — which is why `/samples` returns each sample already judged.
+
+export interface BenchmarkMetrics {
+  recall: number;
+  fpr: number;
+  precision: number;
+  p95Ms: number;
+  averageMs: number;
+  payloadBytes: number;
+  blockRate: number;
+  scenarioPassRate: number;
+  fixturePassRate: number;
+  fixtureCoverageRate: number;
+  samples: number;
+  positives: number;
+  negatives: number;
+  labeledTypeCount: number;
+}
+
+/** The pass marks from `docs/benchmark-gate.md` 12.2. A metric is read against its own. */
+export interface BenchmarkThresholds {
+  recall: number;
+  fpr: number;
+  p95Ms: number;
+  blockRate: number;
+  scenarioPassRate: number;
+  fixturePassRate: number;
+  fixtureCoverageRate: number;
+  koreanServiceTokenRecall: number;
+  koreanServiceTokenFpr: number;
+  highEntropyRecall: number;
+  highEntropyFpr: number;
+}
+
+export interface BenchmarkTypeRecall {
+  type: string;
+  total: number;
+  detected: number;
+  recall: number;
+}
+
+/** A dataset measured on its own: the Korean service tokens and the high-entropy secrets. */
+export interface BenchmarkDatasetResult {
+  samples: number;
+  positives: number;
+  negatives: number;
+  recall: number;
+  fpr: number;
+  /** Ids of the labelled positives this run failed to detect. */
+  misses: string[];
+}
+
+/** What the format checks are worth: the same negatives measured with them off, then on. */
+export interface BenchmarkValidationImpact {
+  fprWithoutValidation: number;
+  fprWithValidation: number;
+  falsePositivesPrevented: number;
+  fprReduction: number;
+}
+
+export interface BenchmarkScenario {
+  /** The probe id from `attack-lab/scenarios/threats.json` — `T-…` attacks, `B-…` benign. */
+  id: string;
+  passed: boolean;
+  expectedBlocked: boolean;
+  actualBlocked: boolean;
+  /**
+   * The probe itself, and the threat it belongs to. The report the runner writes carries neither:
+   * both live in `attack-lab/scenarios/{threats,catalog}.json`, so the endpoint has to join them
+   * before answering. Optional because a report read straight off disk will not have them, and
+   * the screen then shows the id alone.
+   */
+  text?: string;
+  /** Tool arguments the probe is sent with, where it has any. */
+  args?: Record<string, string>;
+  /** Only the catalogued families T-01…T-09; the later probes have no catalog entry. */
+  threat?: { id: string; name: string; summary: string; owasp: string[] };
+}
+
+export interface BenchmarkFixture {
+  id: string;
+  passed: boolean;
+  coverage: { policy_id: string; expectation: string };
+  expected: { action: string; matched_policy_ids: string[] };
+  actual: { action: string; matched_policy_ids: string[] };
+}
+
+export interface BenchmarkFixtureCoverage {
+  policyId: string;
+  positive: boolean;
+  negative: boolean;
+}
+
+export interface BenchmarkReport {
+  generatedAt: string;
+  metrics: BenchmarkMetrics;
+  thresholds: BenchmarkThresholds;
+  perTypeRecall: BenchmarkTypeRecall[];
+  koreanServiceTokens: BenchmarkDatasetResult;
+  highEntropySecrets: BenchmarkDatasetResult;
+  validationImpact: BenchmarkValidationImpact;
+  scenarios: BenchmarkScenario[];
+  fixtures: BenchmarkFixture[];
+  fixtureCoverage: BenchmarkFixtureCoverage[];
+  /** Every threshold met. The runner exits non-zero when this is false. */
+  passed: boolean;
+}
+
+/** Which dataset a sample came from — the four under `attack-lab/datasets/`. */
+export type BenchmarkSampleGroup = "pii" | "injection" | "serviceToken" | "entropy";
+
+export interface BenchmarkSample {
+  id: string;
+  group: BenchmarkSampleGroup;
+  /** True when the sample is a labelled positive: something the detector is meant to catch. */
+  label: boolean;
+  /** The label's own subdivision — a PII type, an injection subtype, a credential name. */
+  kind: string | null;
+  text: string;
+  /** Whether this run caught it. Always false for a negative, which is nothing to catch. */
+  detected: boolean;
+}
+
+export interface BenchmarkSamplesResponse {
+  samples: BenchmarkSample[];
+}
