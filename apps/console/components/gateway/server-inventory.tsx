@@ -191,10 +191,15 @@ export function ServerInventory({
           ))}
         </div>
       ) : (
-        <div className="flex flex-col">
-          {servers.map((server, index) => (
-            <ServerAccordion key={server.id} server={server} defaultOpen={index === 0} />
-          ))}
+        // Scrolls within the panel rather than growing it: an expanded server runs to a dozen
+        // tools. `p-3 -m-3`: see session-list — without it the scroll container clips the focus
+        // ring on the accordion headers.
+        <div className="-m-3 flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
+          <div className="flex flex-col">
+            {servers.map((server, index) => (
+              <ServerAccordion key={server.id} server={server} defaultOpen={index === 0} />
+            ))}
+          </div>
         </div>
       )}
     </section>
