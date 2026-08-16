@@ -233,6 +233,21 @@ export const BannerInfoIcon = (props: P) => (
   </svg>
 );
 
+// SCR-301 reveal modal — the two column markers, extracted from the frame's own rasters
+// (`…-원문-열람-계속-클릭-시`). The masked one dropped its clipPath: the arrow is wholly inside the
+// viewBox, so it clipped nothing and only risked an id collision with a second instance.
+export const RevealRawIcon = (props: P) => (
+  <svg {...props} width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M6.6665 13.3333C7.58317 13.3333 8.36789 13.0069 9.02067 12.3542C9.67345 11.7014 9.99984 10.9167 9.99984 10C9.99984 9.08333 9.67345 8.29861 9.02067 7.64583C8.36789 6.99306 7.58317 6.66667 6.6665 6.66667C5.74984 6.66667 4.96512 6.99306 4.31234 7.64583C3.65956 8.29861 3.33317 9.08333 3.33317 10C3.33317 10.9167 3.65956 11.7014 4.31234 12.3542C4.96512 13.0069 5.74984 13.3333 6.6665 13.3333ZM6.6665 15C5.27762 15 4.09706 14.5139 3.12484 13.5417C2.15262 12.5694 1.6665 11.3889 1.6665 10C1.6665 8.61111 2.15262 7.43056 3.12484 6.45833C4.09706 5.48611 5.27762 5 6.6665 5C7.9165 5 9.00345 5.39583 9.92734 6.1875C10.8507 6.97917 11.4096 7.97222 11.604 9.16667H18.3332V10.8333H11.604C11.4096 12.0278 10.8507 13.0208 9.92734 13.8125C9.00345 14.6042 7.9165 15 6.6665 15Z" fill="currentColor" />
+  </svg>
+);
+
+export const RevealMaskedIcon = (props: P) => (
+  <svg {...props} width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M4.16683 10.8333H13.4752L9.4085 14.8999C9.0835 15.2249 9.0835 15.7583 9.4085 16.0833C9.7335 16.4083 10.2585 16.4083 10.5835 16.0833L16.0752 10.5916C16.4002 10.2666 16.4002 9.7416 16.0752 9.4166L10.5918 3.9166C10.2668 3.5916 9.74183 3.5916 9.41683 3.9166C9.09183 4.2416 9.09183 4.7666 9.41683 5.0916L13.4752 9.1666H4.16683C3.7085 9.1666 3.3335 9.5416 3.3335 9.99994C3.3335 10.4583 3.7085 10.8333 4.16683 10.8333Z" fill="currentColor" />
+  </svg>
+);
+
 // SCR-501 Settings.
 export const TagWarningIcon = (props: P) => (
   <svg {...props} viewBox="0 0 16 20" fill="none" xmlns="http://www.w3.org/2000/svg">

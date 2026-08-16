@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { Info, X } from "lucide-react";
 import type { RevealContent } from "@/lib/api/types";
+import { RevealMaskedIcon, RevealRawIcon } from "@/components/icons";
 import { MaskedContent } from "./masked-content";
 
 /**
@@ -58,8 +59,9 @@ export function RevealModal({ content, onClose }: { content: RevealContent; onCl
 
         <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto md:grid-cols-2">
           <section className="flex flex-col gap-2">
-            <h3 className="flex items-center gap-2 text-body-text-b3-md text-red-300">
-              <span aria-hidden>○–</span>
+            {/* The frame carries the colour on the icon and leaves the label white and bold. */}
+            <h3 className="flex items-center gap-2 text-body-text-b3-bd text-grayscale-white">
+              <RevealRawIcon className="size-5 flex-none text-red-500" aria-hidden />
               {t("raw")}
             </h3>
             {/* Same numbered-line layout as MaskedContent so a raw line and its masked
@@ -78,8 +80,8 @@ export function RevealModal({ content, onClose }: { content: RevealContent; onCl
             </div>
           </section>
           <section className="flex flex-col gap-2">
-            <h3 className="flex items-center gap-2 text-body-text-b3-md text-green-500">
-              <span aria-hidden>→</span>
+            <h3 className="flex items-center gap-2 text-body-text-b3-bd text-grayscale-white">
+              <RevealMaskedIcon className="size-5 flex-none text-green-700" aria-hidden />
               {t("masked")}
             </h3>
             <div className="rounded-lg bg-(--primitive-opacity-allow-alpha-10) p-3">
