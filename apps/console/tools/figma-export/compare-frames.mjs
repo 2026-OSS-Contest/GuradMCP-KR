@@ -344,6 +344,15 @@ function renderReport(rows) {
           const pair = (item) =>
             `<span class="t">${esc(item.text.length > 80 ? item.text.slice(0, 80) + "…" : item.text)}</span>` +
             `<span class="pair"><b>프레임</b> ${esc(item.figma)} <b>화면</b> ${esc(item.app)}</span>`;
+          const compare_ = row.figmaShot && row.appShot
+            ? `<figure class="cmp" style="aspect-ratio:${row.shotW}/${row.shotH}">
+                 <img class="under" src="${row.appShot}" alt="화면" loading="lazy" />
+                 <img class="over" src="${row.figmaShot}" alt="프레임" loading="lazy" />
+                 <span class="handle"></span>
+                 <input type="range" min="0" max="100" value="50" aria-label="프레임과 화면 사이를 문질러 비교" />
+                 <figcaption><b>왼쪽 프레임</b> · <b>오른쪽 화면</b> — 손잡이를 드래그하세요. 사진을 누르면 두 장을 번갈아 깜빡입니다.</figcaption>
+               </figure>`
+            : "";
           const inner =
             list("빠진 문구 — 프레임에 있고 화면에 없음", "missing", row.missing, esc) +
             list("남는 문구 — 화면에 있고 프레임에 없음", "extra", row.extra, esc) +
@@ -368,7 +377,7 @@ function renderReport(rows) {
           return `<details class="state${n ? "" : " clean"}"${n ? " open" : ""}>
             <summary><span class="name">${esc(row.state)}</span>
             <span class="meta">${esc(row.path)} @ ${row.width}${row.scenario ? ` · ${row.scenario}` : ""}</span>
-            <span class="badge${n ? "" : " ok"}">${n || "일치"}</span></summary>${inner || '<p class="none">차이 없음</p>'}${samples_}${soft_}</details>`;
+            <span class="badge${n ? "" : " ok"}">${n || "일치"}</span></summary>${compare_}${inner || '<p class="none">차이 없음</p>'}${samples_}${soft_}</details>`;
         })
         .join("");
       return `<section><h2>${esc(screen)} <span class="n">${count}</span></h2>${states}</section>`;
@@ -406,6 +415,16 @@ li{margin:.15rem 0;font-size:.9rem;overflow-wrap:anywhere}
 .pair{display:block;color:var(--muted);font-size:.82rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .pair b{font-weight:600;color:var(--fg)}
 .none{color:var(--muted);margin:.6rem 0 .2rem;font-size:.9rem}
+.cmp{position:relative;margin:.9rem 0 .4rem;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#000;--wipe:50%}
+.cmp img{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;display:block}
+.cmp .over{clip-path:inset(0 calc(100% - var(--wipe)) 0 0)}
+.cmp.blink .over{clip-path:none;animation:blink 1.4s steps(1,end) infinite}
+@keyframes blink{0%,50%{opacity:1}50.01%,100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.cmp.blink .over{animation:none;opacity:1}}
+.cmp .handle{position:absolute;top:0;bottom:0;left:var(--wipe);width:2px;background:#f43f5e;pointer-events:none;box-shadow:0 0 0 1px rgba(0,0,0,.4)}
+.cmp.blink .handle{display:none}
+.cmp input[type=range]{position:absolute;inset:auto 0 0 0;width:100%;margin:0;opacity:0;height:100%;cursor:ew-resize}
+.cmp figcaption{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.66);color:#fff;font-size:.75rem;padding:.3rem .6rem;pointer-events:none}
 </style>
 <div class="wrap">
 <h1>피그마 프레임 대조 리포트</h1>
@@ -414,7 +433,22 @@ li{margin:.15rem 0;font-size:.9rem;overflow-wrap:anywhere}
 아래로 접어 둔 <b>크기 · padding · 위치 ${softTotal}건</b>과 <b>샘플 데이터 ${samples}건</b>은 목 데이터가 디자인 샘플과 달라서 생기는 잡음이 섞여 있습니다.
 문구는 <code>messages/ko.json</code>에 있으면 화면 문구, 없으면 목 데이터로 갈랐습니다.</p>
 ${body}
-</div>`;
+</div>
+<script>
+// Wiping is how a difference in a box or a colour becomes visible at a glance; blinking is how a
+// small shift in position becomes visible. Both beat reading two pictures side by side.
+for (const cmp of document.querySelectorAll(".cmp")) {
+  const range = cmp.querySelector("input");
+  range.addEventListener("input", () => {
+    cmp.classList.remove("blink");
+    cmp.style.setProperty("--wipe", range.value + "%");
+  });
+  cmp.addEventListener("click", (event) => {
+    if (event.target === range) return;
+    cmp.classList.toggle("blink");
+  });
+}
+</script>`;
 }
 
 const REPORT = (() => {
@@ -426,6 +460,13 @@ const selected = only ? FRAMES.filter((f) => f.frame.includes(only)) : FRAMES;
 if (!selected.length) {
   console.error(`No frame matches "${only}".`);
   process.exit(1);
+}
+
+/** A JPEG data URI. Quality 55 keeps a 1280-wide dark screen near 65KB, so 36 states of both
+ *  sides stay well inside what a single self-contained page can carry. */
+async function shoot(page, locator, clip) {
+  const buffer = await (locator ?? page).screenshot({ type: "jpeg", quality: 55, ...(clip ? { clip } : {}) });
+  return `data:image/jpeg;base64,${buffer.toString("base64")}`;
 }
 
 const browser = await chromium.launch();
@@ -445,6 +486,11 @@ for (const entry of selected) {
   await page.goto(pathToFileURL(file).href);
   await page.waitForTimeout(300);
   const figma = await page.evaluate(SCRAPE, "figma");
+  // The draft's frame is a fixed-size box at 0,0, so shooting it and then shooting the screen
+  // clipped to the same box gives two images that overlay pixel for pixel — which is what makes
+  // a wipe between them readable at all.
+  const frameBox = REPORT ? await page.locator("body > div").first().boundingBox() : null;
+  const figmaShot = frameBox ? await shoot(page, page.locator("body > div").first()) : null;
 
   await page.setViewportSize({ width: entry.width, height: 1400 });
   if (entry.scenario) {
@@ -456,10 +502,13 @@ for (const entry of selected) {
   if (entry.state) await entry.state(page).catch((error) => console.log(`   ! state failed: ${error.message}`));
   await page.waitForTimeout(600);
   const app = await page.evaluate(SCRAPE, "app");
+  const appShot = frameBox
+    ? await shoot(page, null, { x: 0, y: 0, width: Math.round(frameBox.width), height: Math.round(frameBox.height) })
+    : null;
 
   const result = compare(figma, app);
   const { missing, sample, extra, type, color, boxes, position } = result;
-  report.push({ ...entry, state: entry.frame.split('/').pop(), ...result });
+  report.push({ ...entry, state: entry.frame.split('/').pop(), ...result, figmaShot, appShot, shotW: frameBox && Math.round(frameBox.width), shotH: frameBox && Math.round(frameBox.height) });
   frames += 1;
   findings += missing.length + extra.length + type.length + color.length + boxes.length + position.length;
 
