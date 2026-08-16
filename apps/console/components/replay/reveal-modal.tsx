@@ -66,14 +66,17 @@ export function RevealModal({ content, onClose }: { content: RevealContent; onCl
             </h3>
             {/* Same numbered-line layout as MaskedContent so a raw line and its masked
                 counterpart share a row height and stay aligned across the two columns. */}
-            <div className="rounded-lg bg-(--primitive-opacity-black-alpha-75) p-3">
-              <div className="flex flex-col gap-1 font-mono text-body-mono-b3-rg text-grayscale-200">
+            {/* Scrolls sideways rather than wrapping: the two columns are read line against line,
+                and a line that wraps on one side and not the other puts every row below it out of
+                step — which is the whole point of showing them side by side. */}
+            <div className="overflow-x-auto rounded-lg bg-(--primitive-opacity-black-alpha-75) p-3">
+              <div className="flex w-max flex-col gap-1 font-mono text-body-mono-b3-rg text-grayscale-200">
                 {content.raw.split("\n").map((text, index) => (
                   <div key={index} className="flex gap-2">
                     <span className="flex-none text-(--primitive-opacity-white-alpha-50)">
                       {String(index + 1).padStart(2, "0")}
                     </span>
-                    <span className="min-w-0 break-words whitespace-pre-wrap">{text}</span>
+                    <span className="whitespace-pre">{text}</span>
                   </div>
                 ))}
               </div>
@@ -84,8 +87,8 @@ export function RevealModal({ content, onClose }: { content: RevealContent; onCl
               <RevealMaskedIcon className="size-5 flex-none text-green-700" aria-hidden />
               {t("masked")}
             </h3>
-            <div className="rounded-lg bg-(--primitive-opacity-allow-alpha-10) p-3">
-              <MaskedContent lines={content.masked} />
+            <div className="overflow-x-auto rounded-lg bg-(--primitive-opacity-allow-alpha-10) p-3">
+              <MaskedContent lines={content.masked} nowrap />
             </div>
           </section>
         </div>
