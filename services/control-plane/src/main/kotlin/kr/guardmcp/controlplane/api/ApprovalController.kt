@@ -4,7 +4,6 @@ import kr.guardmcp.controlplane.domain.Approval
 import kr.guardmcp.controlplane.domain.ApprovalDecision
 import kr.guardmcp.controlplane.domain.ApprovalStatus
 import kr.guardmcp.controlplane.domain.ApprovalStore
-import kr.guardmcp.controlplane.domain.GuardEventStore
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -17,13 +16,22 @@ import org.springframework.web.bind.annotation.RestController
 import java.time.Duration
 import java.util.UUID
 
-/** Optional fields are nullable: the JSON mapper passes null for absent keys, normalized in the controller. */
+/** Optional fields are nullable: the JSON mapper passes null for absent keys, normalized in the
+ *  controller. `sessionId` is the gateway's own session id (§5.1 GMCP-26), not necessarily a
+ *  UUID — e.g. `req-1` or a demo script's own ad hoc id — so unlike the demo-seeded sessions
+ *  elsewhere in this service, it is never validated against a pre-registered session; a Tool
+ *  Call held for approval is real evidence of a session on its own. `riskTags`/`threatScore`/
+ *  `maskPreview` are the Approval Card's pre-decision evidence (§5.1 SCR-402), passed straight
+ *  through to [ApprovalStore] uninterpreted. */
 data class ApprovalCreateRequest(
-    val sessionId: UUID,
+    val sessionId: String,
     val toolName: String,
     val arguments: Map<String, String>?,
     val riskReason: String,
     val policyId: String?,
+    val riskTags: List<Any?>? = null,
+    val threatScore: Int? = null,
+    val maskPreview: Any? = null,
 )
 
 data class ApprovalDecisionRequest(
@@ -35,7 +43,6 @@ data class ApprovalDecisionRequest(
 @RequestMapping("/api/v1")
 class ApprovalController(
     private val approvalStore: ApprovalStore,
-    private val eventStore: GuardEventStore,
 ) {
     @GetMapping("/approvals")
     fun approvals(@RequestParam(required = false) status: String?): List<Approval> {
@@ -49,8 +56,8 @@ class ApprovalController(
     @PostMapping("/approvals")
     @ResponseStatus(HttpStatus.CREATED)
     fun create(@RequestBody request: ApprovalCreateRequest): Approval {
-        if (eventStore.session(request.sessionId) == null) {
-            throw ApiException(HttpStatus.NOT_FOUND, "session_not_found", "session ${request.sessionId} not found")
+        if (request.sessionId.isBlank()) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "invalid_session_id", "sessionId must not be blank")
         }
         if (request.toolName.isBlank()) {
             throw ApiException(HttpStatus.BAD_REQUEST, "invalid_tool_name", "toolName must not be blank")
@@ -65,6 +72,9 @@ class ApprovalController(
             riskReason = request.riskReason,
             policyId = request.policyId,
             ttl = APPROVAL_TTL,
+            riskTags = request.riskTags,
+            threatScore = request.threatScore,
+            maskPreview = request.maskPreview,
         )
     }
 

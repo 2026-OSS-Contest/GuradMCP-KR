@@ -1,0 +1,53 @@
+policyId: require_approval_untrusted_high_risk_tool
+policyFile: ../../../../../policy-packs/default/policies/require-approval-untrusted-high-risk-tool.yaml
+pack: default
+cases:
+  - name: "untrusted 서버로 향하는 send_* 호출은 승인이 필요하다"
+    input:
+      direction: request
+      tool: send_webhook
+      serverTrust: untrusted
+      args: {}
+      detections: []
+      riskScore: 0
+    expected:
+      verdict: require_approval
+      matchedPolicyIds: [require_approval_untrusted_high_risk_tool]
+      severity: high
+
+  - name: "탐지나 위험 점수가 전혀 없어도 tool/server_trust만으로 매칭된다"
+    input:
+      direction: request
+      tool: send_email
+      serverTrust: untrusted
+      args: {}
+      detections: []
+      riskScore: 0
+    expected:
+      verdict: require_approval
+      matchedPolicyIds: [require_approval_untrusted_high_risk_tool]
+      severity: high
+
+  - name: "trusted 서버로 향하는 동일 호출은 통과한다 (음성 케이스)"
+    input:
+      direction: request
+      tool: send_webhook
+      serverTrust: trusted
+      args: {}
+      detections: []
+      riskScore: 0
+    expected:
+      verdict: allow
+      matchedPolicyIds: []
+
+  - name: "send_* 글롭에 속하지 않는 도구는 통과한다 (음성 케이스)"
+    input:
+      direction: request
+      tool: read_file
+      serverTrust: untrusted
+      args: {}
+      detections: []
+      riskScore: 0
+    expected:
+      verdict: allow
+      matchedPolicyIds: []

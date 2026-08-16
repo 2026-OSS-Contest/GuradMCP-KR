@@ -9,7 +9,7 @@ Two pieces:
 - `plugin/` — a local (unpublished) Figma plugin that reads `figma.variables.*` and
   POSTs them to the bridge. Plain JS, no build step.
 - `bridge/server.mjs` — a dependency-free Node HTTP server that writes the tokens to
-  `apps/console/app/tokens.css`.
+  `packages/design-tokens/tokens.css`.
 
 ## Usage
 
@@ -19,7 +19,7 @@ Two pieces:
    npm run figma:bridge
    ```
 
-   Listens on `http://localhost:3999` and writes `apps/console/app/tokens.css`.
+   Listens on `http://localhost:3999` and writes `packages/design-tokens/tokens.css`.
 
 2. **Load the plugin** in the Figma desktop app:
 
@@ -29,7 +29,8 @@ Two pieces:
 3. **Run it** with your design file open: **Plugins → Development → GuardMCP Token Sync**,
    then click **Sync tokens → repo**.
 
-`tokens.css` is regenerated on each run. `app/globals.css` imports `tokens.css` before
+`tokens.css` is regenerated on each run. `app/globals.css` imports it from the
+`@guardmcp/design-tokens` workspace package before
 `theme.css`, so the primitives are defined by the time the `@theme` mapping references them.
 
 ## Exporting screens and components

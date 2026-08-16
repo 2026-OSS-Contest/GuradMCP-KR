@@ -7,7 +7,7 @@
 GuardMCP-KR은 AI Agent와 MCP 서버 사이에서 요청과 응답을 검사하는 한국어 개인정보 보호형 오픈소스 보안 게이트웨이입니다. YAML 정책, 한국형 PII·Secret·프롬프트 인젝션 탐지 결과와 위험 점수를 함께 평가해 `allow`, `warn`, `mask_then_allow`, `require_approval`, `block` 중 하나를 결정합니다.
 
 > [!IMPORTANT]
-> 이 저장소는 초기 데모 단계입니다. Gateway는 체크인된 `default`/`korean-pii` 정책팩을 실제로 평가하지만, 사람 승인 UI·Replay·영구 감사 저장은 아직 구현되지 않았습니다. `require_approval`은 데모에서 fail-closed로 거부됩니다. 실제 개인정보나 운영 자격증명에는 사용하지 마세요.
+> 이 저장소는 초기 데모 단계입니다. Gateway는 체크인된 `default`/`korean-pii` 정책팩을 실제로 평가합니다. `docker compose`가 `CONTROL_PLANE_URL`을 기본으로 주입하는 데모 환경에서는 `require_approval` 판정이 실제 Control Plane 승인으로 이어져, 운영자가 결정하거나(승인/마스킹 후 승인/거부) 120초 동안 무응답이면 자동으로 fail-closed 차단됩니다. `CONTROL_PLANE_URL`이 설정돼 있지 않으면 즉시 fail-closed로 거부합니다. 콘솔 승인 UI·Replay 화면·해시 체인은 아직 이 승인 이벤트와 연동되지 않았습니다(자세한 한계는 [external-email 승인 데모](docs/external-email-approval-demo.md) 참고). 실제 개인정보나 운영 자격증명에는 사용하지 마세요.
 
 ## 5분 Quick Start
 
@@ -84,11 +84,13 @@ npm run bench
 | 고엔트로피 자격증명 안전망 | [열기](docs/high-entropy-secrets.md) | [Open](docs/high-entropy-secrets.en.md) |
 | 한국어 개인정보 마스킹 데모 | [열기](docs/korean-pii-demo.md) | [Open](docs/korean-pii-demo.en.md) |
 | .env 유출 공격 데모 | [열기](docs/env-leak-demo.md) | [Open](docs/env-leak-demo.en.md) |
+| 외부 이메일 승인 데모 | [열기](docs/external-email-approval-demo.md) | [Open](docs/external-email-approval-demo.en.md) |
 | 벤치마크 게이트 | [열기](docs/benchmark-gate.md) | [Open](docs/benchmark-gate.en.md) |
 | 벤치마크 결과 정리 | [열기](docs/benchmark-results.md) | [Open](docs/benchmark-results.md) |
 | 공격 시나리오 카탈로그 | [열기](docs/attack-scenarios.md) | [Open](docs/attack-scenarios.en.md) |
 | Attack Lab 러너 | [열기](docs/attack-lab-runner.md) | [Open](docs/attack-lab-runner.en.md) |
 | 정답 라벨 데이터셋 | [열기](attack-lab/datasets/README.md) | [Open](attack-lab/datasets/README.en.md) |
+| guardmcp CLI | [열기](docs/cli/README.md) | [Open](docs/cli/README.en.md) |
 | 기여 가이드 | [열기](CONTRIBUTING.md#한국어) | [Open](CONTRIBUTING.md#english) |
 | 개발 워크플로 | [열기](docs/contributing/development-workflow.md) | [Open](docs/contributing/development-workflow.en.md) |
 | 커밋 컨벤션 | [열기](docs/contributing/commit-convention.md) | [Open](docs/contributing/commit-convention.en.md) |

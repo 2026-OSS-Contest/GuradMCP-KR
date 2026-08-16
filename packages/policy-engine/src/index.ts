@@ -49,6 +49,16 @@ export {
   type ParsePolicyFileResult,
 } from "./loader/parsePolicyFile.js";
 export {
+  parseYamlWithSchema,
+  type YamlValidationResult,
+} from "./loader/parseYaml.js";
+export {
+  packManifestSchema,
+  policyFileSchema,
+  type PackManifestInput,
+  type PolicyFileInput,
+} from "./loader/policySchema.js";
+export {
   scanPackDirectories,
   findManifestPath,
   listYamlFilesFlat,

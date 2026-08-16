@@ -42,6 +42,7 @@ import {
   revealOf,
   timelineOf,
 } from "./replay";
+import { currentSettings, patchSettings } from "./settings";
 import { readScenario } from "./scenario";
 
 // Long enough that a slow render is visible, short enough that the 500ms skeleton rule
@@ -76,8 +77,34 @@ export const handlers = [
   }),
 
   http.get("*/api/v1/servers", async () =>
+    // The trust handler below writes back into `SERVERS`, so the inventory has to read from the
+    // same array — a second mutable copy would let the table and the change disagree.
     respond({ servers: readScenario() === "empty" ? [] : SERVERS }),
   ),
+
+  // SCR-501 Settings (spec §5.7). GMCP-68's `SettingsController` serves this for real; the mock
+  // stands in for it under MSW (dev/e2e), same as every other handler in this file.
+  http.get("*/api/v1/settings", async () => {
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    return HttpResponse.json(currentSettings());
+  }),
+
+  http.put("*/api/v1/settings", async ({ request }) => {
+    const update = (await request.json()) as Record<string, unknown>;
+    await delay(LATENCY_MS);
+    if (readScenario() === "offline") return HttpResponse.error();
+    // Mirrors the real SettingsController's server-side guard (GMCP-68 REQ-08): the client's own
+    // checkbox already gates this, but the mock has to enforce it too or a client bug that drops
+    // `riskAcknowledged` would look identical to a correct one under every existing test.
+    if (update.failMode === "fail_open" && update.riskAcknowledged !== true) {
+      return HttpResponse.json(
+        { code: "risk_not_acknowledged", message: "fail_open requires riskAcknowledged=true" },
+        { status: 400 }
+      );
+    }
+    return HttpResponse.json(patchSettings(update));
+  }),
 
   // FR-GW-02 §5.1: downgrade applies immediately; an upgrade needs a follow-up confirmed:true
   // request or 409s with an impact summary. Mirrors services/control-plane's ServerController.

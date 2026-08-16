@@ -186,7 +186,7 @@ export function PolicyBuilder() {
 
   if (packs.length === 0) {
     return (
-      <div className="flex flex-1 flex-col">
+      <div data-scr="SCR-302" className="flex flex-1 flex-col">
         {reloaded && <ReloadBanner onRefresh={refresh} />}
         <PolicyEmpty />
       </div>
@@ -194,7 +194,7 @@ export function PolicyBuilder() {
   }
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div data-scr="SCR-302" className="flex flex-1 flex-col">
       {reloaded && <ReloadBanner onRefresh={refresh} />}
       {notice && (
         <p

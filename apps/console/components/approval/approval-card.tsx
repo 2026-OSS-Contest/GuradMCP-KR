@@ -12,12 +12,13 @@ import { cn } from "@/lib/utils";
 /** Spec §5.6: the countdown starts flashing once the call has less than this left. */
 const WARN_AT_MS = 20_000;
 
-// Straight off the design: red-700 / yellow-600 grounds, white type on both.
+// The design's red-700 / yellow-600 grounds. White type holds on the red (AA) but not on the
+// yellow — it measured 2.10:1 there, so those chips take near-black type instead, at 8.18:1.
 const TAG_TONE: Record<string, string> = {
   SECRET: "bg-red-700 text-grayscale-white",
   RRN: "bg-red-700 text-grayscale-white",
-  PHONE: "bg-yellow-600 text-grayscale-white",
-  INJECTION: "bg-yellow-600 text-grayscale-white"
+  PHONE: "bg-yellow-600 text-grayscale-950",
+  INJECTION: "bg-yellow-600 text-grayscale-950"
 };
 
 function remainingMs(expiresAt: string): number {

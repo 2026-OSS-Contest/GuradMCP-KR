@@ -10,11 +10,15 @@ const PORT = 3999;
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CONSOLE_ROOT = resolve(HERE, "../../.."); // apps/console
 const REPO_ROOT = resolve(CONSOLE_ROOT, "../.."); // repo root
-const OUT_FILE = resolve(CONSOLE_ROOT, "app/tokens.css");
+// 기획서 10.7: the primitives ship as their own workspace package so docs, reports and the
+// console share one palette. fonts.css stays in the app — only the tokens moved.
+const OUT_FILE = resolve(REPO_ROOT, "packages/design-tokens/tokens.css");
 const DEBUG_FILE = resolve(HERE, "..", ".last-payload.json");
 const EXPORT_DIR = resolve(CONSOLE_ROOT, "tools/figma-export/out");
-// tokens.css sits three levels above out/ (out → figma-export → tools → apps/console).
-const TOKENS_DEPTH = 3;
+// apps/console sits three levels above out/ (out → figma-export → tools → apps/console),
+// which is where fonts.css lives; the tokens package is two more levels up at the repo root.
+const CONSOLE_DEPTH = 3;
+const TOKENS_PREFIX = "../../packages/design-tokens/";
 const rel = (p) => relative(REPO_ROOT, p);
 
 // CSS identifiers stay ASCII — they become custom-property names in tokens.css and must keep
@@ -327,14 +331,14 @@ function genNode(node, rules, seq, abs, parentDir) {
 function structureToHtml(structure, title, depth) {
   const rules = [];
   const body = genNode(structure, rules, { i: 0 });
-  const up = "../".repeat(TOKENS_DEPTH + depth);
+  const up = "../".repeat(CONSOLE_DEPTH + depth);
   return (
     `<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8" />\n<title>${escapeHtml(title)}</title>\n` +
-    `<!-- Draft auto-generated from Figma. Tokens referenced via var(--...) resolve against app/tokens.css. -->\n` +
+    `<!-- Draft auto-generated from Figma. Tokens referenced via var(--...) resolve against packages/design-tokens/tokens.css. -->\n` +
     // fonts.css carries the @font-face rules. Without it every draft silently falls back to a
     // system font, so nothing the design measured — text width, and any box hugging it — lines up.
     `<link rel="stylesheet" href="${up}app/fonts.css" />\n` +
-    `<link rel="stylesheet" href="${up}app/tokens.css" />\n` +
+    `<link rel="stylesheet" href="${up}${TOKENS_PREFIX}tokens.css" />\n` +
     // border-box: Figma's widths already include padding and stroke, so the browser default
     // (content-box) inflates every fixed-size frame that has either.
     // No body padding: the frame has to start at 0,0 so the draft can be laid over the .png
@@ -426,7 +430,7 @@ const server = createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return void res.writeHead(204).end();
   // Exact routes only: an unmatched path must never fall through to the tokens writer,
-  // which would clobber app/tokens.css with whatever body it was handed.
+  // which would clobber packages/design-tokens/tokens.css with whatever body it was handed.
   const route = (req.url || "").split("?")[0].replace(/\/+$/, "");
   const HANDLERS = {
     "/tokens": handleTokens,

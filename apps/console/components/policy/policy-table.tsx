@@ -10,11 +10,14 @@ import { toVerdict } from "@/lib/verdict";
 import { cn } from "@/lib/utils";
 
 /** Severity ink, straight off the design's text fills. */
+// One step brighter than the palette's mid tones, because the selected row's `bg-grayscale-800`
+// is the worst ground these sit on: green-700 measured 4.37:1 there, blue-600 4.49:1 and red-500
+// 4.05:1, all under the 4.5:1 AA floor (NFR-08). Yellow already cleared it and is left alone.
 const SEVERITY_INK: Record<Severity, string> = {
-  low: "text-green-700",
-  medium: "text-blue-600",
+  low: "text-green-600",
+  medium: "text-blue-500",
   high: "text-yellow-500",
-  critical: "text-red-500"
+  critical: "text-red-400"
 };
 
 export interface PolicyTableProps {

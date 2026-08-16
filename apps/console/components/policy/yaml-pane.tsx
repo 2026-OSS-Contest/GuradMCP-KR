@@ -123,7 +123,10 @@ export function YamlPane({ policy, yaml, loading, unavailable, stats, demo }: Ya
           ) : loading && !yaml ? (
             <p className="text-body-text-b3-rg text-grayscale-400">{t("yaml.loading")}</p>
           ) : (
-            <pre className="text-body-mono-b3-rg overflow-x-auto whitespace-pre-wrap">
+            // A scrollable region has to be reachable by keyboard, or its overflow is only ever
+            // readable with a pointer (WCAG 2.1.1). No `role="region"` here — the enclosing
+            // section already is one, and a second with the same name breaks its addressability.
+            <pre tabIndex={0} className="text-body-mono-b3-rg overflow-x-auto whitespace-pre-wrap">
               <code>
                 {parse(yaml ?? "").map((line, index) => (
                   <span key={index} className="block">
