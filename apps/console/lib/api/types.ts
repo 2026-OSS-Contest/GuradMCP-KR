@@ -488,8 +488,14 @@ export interface AttackRun {
 // OpenAPI `GuardAction`/`Severity`, so these mirror the wire format rather than the UI's
 // `Verdict`; `toVerdict()` in `lib/verdict.ts` bridges the two.
 
-/** The control plane's verdict vocabulary. `mask_then_allow` is the UI's `warn`. */
-export type GuardAction = "allow" | "mask_then_allow" | "require_approval" | "block";
+/**
+ * The control plane's verdict vocabulary (`domain/GuardAction.kt`), which is wider than the UI's
+ * four. Both `warn` and `mask_then_allow` land on the UI's `warn`: the DSL separates recording a
+ * finding from rewriting the payload, and the rail has one colour for "went through, with
+ * something on the record". `warn` was missing here until GMCP-117 — a policy carrying it (the
+ * shipped `warn_injection_request` does) fell through `toVerdict`'s default and drew as 허용.
+ */
+export type GuardAction = "allow" | "warn" | "mask_then_allow" | "require_approval" | "block";
 export type Severity = "low" | "medium" | "high" | "critical";
 
 /** Which side of a tool call the text came from — the policies differ by direction. */
