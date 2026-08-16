@@ -140,8 +140,6 @@
       "detections": "Detections",
       "detectionUnit": "",
       "detectionList": "Detection list",
-      "expand": "Expand",
-      "collapse": "Collapse",
       "chainVerified": "Chain verified",
       "chainFailed": "Chain verification failed",
       "reveal": "Reveal original",

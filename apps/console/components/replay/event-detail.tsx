@@ -157,7 +157,6 @@ function ConfirmRevealModal({ onCancel, onConfirm, pending }: { onCancel: () => 
  */
 export function EventDetailPanel({ detail }: { detail: EventDetail }) {
   const t = useTranslations("replay.detail");
-  const [maskExpanded, setMaskExpanded] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [revealed, setRevealed] = useState<RevealContent | null>(null);
@@ -166,7 +165,6 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
   useEffect(() => {
     setConfirmOpen(false);
     setRevealed(null);
-    setMaskExpanded(false);
   }, [detail.id]);
 
   const confirmReveal = async () => {
@@ -303,21 +301,16 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
         {/* Tool call / result — direction verdict. */}
         {detail.direction && <Direction direction={detail.direction} kind={detail.kind} />}
 
-        {/* Verdict — mask diff. */}
+        {/* Verdict — mask diff. The frame heads it with a 상세 보기 button; it is not here, because
+            what that button opens is unsettled. The frame behind it shows a modal carrying the raw
+            phone, account and RRN values with no confirmation — the audit gate 화면설계서 5.3 no.5
+            puts in front of 원문 열람, skipped. Until the designer says which it is, a button that
+            only relabels itself is worse than none: the clamp it used to release never engaged at
+            the sizes this diff runs to, so it changed nothing on screen. */}
         {detail.maskDiff && (
           <section className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-              <SectionHeading>Mask Diff</SectionHeading>
-              <button
-                type="button"
-                onClick={() => setMaskExpanded((previous) => !previous)}
-                aria-expanded={maskExpanded}
-                className="flex h-[29px] items-center rounded-lg bg-(--primitive-opacity-white-alpha-25) px-3 text-body-text-b3-md transition-colors hover:bg-white/30"
-              >
-                {maskExpanded ? t("collapse") : t("expand")}
-              </button>
-            </div>
-            <MaskDiffView diff={detail.maskDiff} expanded={maskExpanded} />
+            <SectionHeading>Mask Diff</SectionHeading>
+            <MaskDiffView diff={detail.maskDiff} />
           </section>
         )}
 

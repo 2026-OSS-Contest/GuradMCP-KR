@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 /**
  * Mask Diff View (spec §5.3 no.4④): the text before masking (red) over the masked result
  * (green). Masked replacement tokens in the "after" block are shown as chips, mirroring the
- * design. `expanded` drops the line clamp so the whole diff is readable.
+ * design. It runs to its full height — the panel around it is what scrolls.
  */
 function DiffLines({ text, masked }: { text: string; masked: boolean }) {
   return (
@@ -31,9 +31,9 @@ function DiffLines({ text, masked }: { text: string; masked: boolean }) {
   );
 }
 
-export function MaskDiffView({ diff, expanded }: { diff: MaskDiff; expanded: boolean }) {
+export function MaskDiffView({ diff }: { diff: MaskDiff }) {
   return (
-    <div className={cn("flex flex-col gap-0 rounded-lg bg-(--primitive-opacity-black-alpha-75) p-2", !expanded && "max-h-72 overflow-hidden")}>
+    <div className="flex flex-col gap-0 rounded-lg bg-(--primitive-opacity-black-alpha-75) p-2">
       <div className="flex items-start gap-2 rounded-t-sm bg-(--primitive-opacity-block-alpha-10) p-2">
         {/* The frame's own marker, the same glyph the reveal modal heads its raw column with. It
             is drawn there on a 20-unit grid and here on a 16-unit one inside the same 20-tall box,
