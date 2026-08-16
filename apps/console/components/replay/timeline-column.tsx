@@ -66,8 +66,15 @@ function NodeRow({
       aria-current={selected ? "true" : undefined}
       className={cn(
         "flex w-full items-start gap-4 rounded-lg px-3 py-2 text-left transition-colors",
-        event.verdict === "block" && "bg-(--primitive-opacity-block-alpha-6)",
-        selected && "shadow-[inset_0_0_0_1px_var(--primitive-opacity-white-alpha-25)]"
+        // Selection is the fill, and only the fill — across every frame exactly one row carries
+        // one, the one whose detail the panel is showing, and no row carries a stroke. A blocked
+        // verdict tints in its own colour; every other kind tints white. The block tint had been
+        // painted on that row permanently, which read as a property of the verdict rather than as
+        // the selection it is, and the selection itself was drawn as an inset border instead.
+        selected &&
+          (event.verdict === "block"
+            ? "bg-(--primitive-opacity-block-alpha-6)"
+            : "bg-(--primitive-opacity-white-alpha-6)")
       )}
     >
       <Marker className="size-10 flex-none" aria-hidden />
@@ -98,7 +105,8 @@ function NodeRow({
             {event.subtitle && <span className="break-words text-body-text-b1-md text-grayscale-white">{event.subtitle}</span>}
           </span>
         )}
-        <time className="text-caption-text-c-rg text-(--primitive-opacity-white-alpha-75)" dateTime={event.at}>
+        {/* Right-aligned, as the frame has it: the run reads down the right edge of the node. */}
+        <time className="text-right text-caption-text-c-rg text-(--primitive-opacity-white-alpha-75)" dateTime={event.at}>
           {hhmmss(event.at)}
         </time>
       </span>
