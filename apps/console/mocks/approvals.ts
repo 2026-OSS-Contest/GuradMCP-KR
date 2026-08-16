@@ -111,7 +111,7 @@ export function pendingCount(): number {
   return queue.length;
 }
 
-/** The stream raises a held call and resolves it a tick later; both act on this same queue. */
+/** The stream raises one held call per connection, into this same queue. */
 export function raiseApproval(): void {
   expire();
   queue.push(
@@ -126,11 +126,6 @@ export function raiseApproval(): void {
   );
 }
 
-/** Clears the call `raiseApproval` just added — the pair is what moves the badge and back. */
-export function resolveRaised(): void {
-  const raised = queue[queue.length - 1];
-  if (raised) decide(raised.id, "approve", "gateway");
-}
 
 const STATUS_BY_DECISION: Record<ApprovalDecision, Approval["status"]> = {
   block: "blocked",

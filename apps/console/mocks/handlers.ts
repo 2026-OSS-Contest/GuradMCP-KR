@@ -13,7 +13,7 @@ import {
   type ServersResponse,
   type ServerTrustChangeRequest,
 } from "@/lib/api/types";
-import { allApprovals, decide, raiseApproval, resetApprovals, resolveRaised } from "./approvals";
+import { allApprovals, decide, raiseApproval, resetApprovals } from "./approvals";
 import { ATTACK_SCENARIOS, attackRun } from "./attack-lab";
 import { acknowledgeToolDiff, allDiffsOf, pendingDiffsOf, reapproveToolDiffs } from "./tool-diffs";
 
@@ -405,19 +405,16 @@ export const handlers = [
       // ledger moves with the event, so the next /overview agrees with what was just sent.
       // An empty console has no approvals to raise, so the stream stays quiet there.
       //
-      // Once per connection, not on a loop. The pair is a demonstration that the badge follows
-      // the stream, and one showing makes it; repeating it every third tick also put a card into
-      // SCR-402's queue and took it out again for as long as the screen was open, which reads as
-      // the list glitching rather than as an approval arriving. Same reasoning as the reload
-      // event below — a call to action that arrives every few seconds is noise.
-      if (readScenario() !== "empty") {
-        if (seq === 0) {
-          raiseApproval();
-          client.send({ event: "approval.created", data: { id: `apr-${seq}` } });
-        } else if (seq === 1) {
-          resolveRaised();
-          client.send({ event: "approval.resolved", data: { id: `apr-${seq - 1}` } });
-        }
+      // Once per connection, and it stays. Raising a call and withdrawing it a tick later showed
+      // the badge moving both ways, but on SCR-402 it also put a card into the queue and took it
+      // out again — an approval that arrives and then vanishes reads as the list glitching, not
+      // as the gateway holding a call. Raised and left, the same event proves the badge follows
+      // the stream and the queue shows what the badge counts.
+      //
+      // `approval.resolved` still has a path in dev: deciding a card sends one.
+      if (readScenario() !== "empty" && seq === 0) {
+        raiseApproval();
+        client.send({ event: "approval.created", data: { id: `apr-${seq}` } });
       }
       // Someone edited a pack on disk and the gateway reloaded it. Rare on purpose: the SCR-302
       // banner it raises is a call to action, and one arriving every few seconds is noise.
