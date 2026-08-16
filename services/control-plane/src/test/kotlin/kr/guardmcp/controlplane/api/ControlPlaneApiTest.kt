@@ -138,7 +138,13 @@ class ControlPlaneApiTest : ApiTestSupport() {
 
     @Test
     fun `sessions list is sorted by startedAt descending and supports status and q filters`() {
-        val all = parseMap(get("/api/v1/sessions").body())
+        // Sibling test classes in this suite (AuditEventApiTest, ReplayLiveEventsApiTest) share
+        // this Postgres container and ingest their own live sessions with `startedAt: now()`,
+        // which always sort ahead of the seeded fixtures' fixed 2026-01-01 timestamp. The default
+        // `limit=20` page can fill up entirely with that live-session churn before ever reaching
+        // a seeded row, so every lookup below asks for the full `MAX_SESSION_LIMIT` page instead
+        // of relying on the unpaged default.
+        val all = parseMap(get("/api/v1/sessions?limit=100").body())
         val items = (all["items"] as List<*>).map { it as Map<*, *> }
         val startedAts = items.map { Instant.parse(it["startedAt"] as String) }
         assertEquals(startedAts.sortedDescending(), startedAts)
@@ -146,17 +152,17 @@ class ControlPlaneApiTest : ApiTestSupport() {
         // than the full result set is introduced (GMCP-80 §3.2).
         assertEquals(items.size, all["total"])
 
-        val live = parseMap(get("/api/v1/sessions?status=live").body())
+        val live = parseMap(get("/api/v1/sessions?status=live&limit=100").body())
         val liveItems = (live["items"] as List<*>).map { it as Map<*, *> }
         assertTrue(liveItems.isNotEmpty())
         assertTrue(liveItems.all { it["isLive"] == true })
 
-        val closed = parseMap(get("/api/v1/sessions?status=closed").body())
+        val closed = parseMap(get("/api/v1/sessions?status=closed&limit=100").body())
         val closedItems = (closed["items"] as List<*>).map { it as Map<*, *> }
         assertTrue(closedItems.isNotEmpty())
         assertTrue(closedItems.all { it["isLive"] == false })
 
-        val byTool = parseMap(get("/api/v1/sessions?q=read_file").body())
+        val byTool = parseMap(get("/api/v1/sessions?q=read_file&limit=100").body())
         val toolIds = (byTool["items"] as List<*>).map { (it as Map<*, *>)["sessionId"] }
         // Sessions projected from ingested audit events match this search too (GMCP-114), so the
         // assertion is that the seeded read_file session is found and an unrelated seeded session
@@ -387,27 +393,20 @@ class ControlPlaneApiTest : ApiTestSupport() {
         assertEquals(true, fileServer["connected"])
         assertEquals("limited", fileServer["trust"])
         assertNotNull(fileServer["endpoint"])
-        // apps/console/lib/api/types.ts's `ToolEntry`: name/risk/policies/snapshotChanged
+        // apps/console/lib/api/types.ts's `ToolEntry`: name/risk/policies/snapshotStatus
         // (GMCP-80 §3.1). file-server's read_file tool is high-risk and gated by a policy.
+        // No test in this suite ever approves or observes a snapshot for file-server's real
+        // "read_file" tool name (ToolSnapshotApiTest uses its own per-test tool names on
+        // SERVER_DB_ID to avoid exactly this kind of shared-state collision, per its header
+        // comment), so this tool's snapshotStatus is deterministically "unapproved" — the
+        // FR-GW-03 drift states themselves (in_sync/drift_detected/drift_acknowledged) are
+        // covered end to end by ToolSnapshotApiTest, including via this same GET /servers
+        // endpoint.
         val fileTools = fileServer["tools"] as List<*>
         val readFile = fileTools.map { it as Map<*, *> }.single { it["name"] == "read_file" }
         assertEquals("high", readFile["risk"])
         assertEquals(listOf("block_env_file_read"), readFile["policies"])
-        assertEquals(false, readFile["snapshotChanged"])
-    }
-
-    @Test
-    fun `a tool whose description changed since approval reports the Rug Pull diff`() {
-        val response = get("/api/v1/servers")
-
-        val servers = parseMap(response.body())["servers"] as List<*>
-        val mailServer = servers.map { it as Map<*, *> }.single { it["id"] == DemoSeed.SERVER_MAIL_ID.toString() }
-        val sendEmail = (mailServer["tools"] as List<*>).map { it as Map<*, *> }.single { it["name"] == "send_email" }
-
-        assertEquals(true, sendEmail["snapshotChanged"])
-        val diff = sendEmail["snapshotDiff"] as Map<*, *>
-        assertNotNull(diff["before"])
-        assertNotNull(diff["after"])
+        assertEquals("unapproved", (readFile["snapshotStatus"] as Map<*, *>)["state"])
     }
 
     @Test
