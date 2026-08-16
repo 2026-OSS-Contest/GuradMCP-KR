@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { CheckMarkIcon, VerdictBlockIcon } from "@/components/icons";
 import type { RunRow, RunState } from "./use-benchmark-run";
+import { cn } from "@/lib/utils";
 
 /**
  * What is being measured, one row at a time.
@@ -55,7 +56,9 @@ export function RunList({
     // (which carries an implicit `aria-live="polite"`) would queue every one of them for reading.
     // The result panel announces the outcome once instead.
     <div data-testid="run-list" className="-mx-2 -mb-2 flex min-h-0 flex-1 flex-col overflow-auto px-2 pb-2">
-      <ul className="flex w-max min-w-full flex-col">
+      {/* The air between the groups sits here rather than on the heading: it is space
+          between two sections, and the first one wants none of it above. */}
+      <ul className="flex w-max min-w-full flex-col gap-6">
         {groups.map((group) => (
           <li key={group.section} className="flex flex-col">
             {/* The heading is what separates the groups, so it carries a ground of its own, one
@@ -66,7 +69,7 @@ export function RunList({
                 The scroll container carries no padding at the top: content scrolls through a
                 scroll container's padding, so a band stuck at `top-0` would leave those 8px
                 showing above it with rows sliding past in the gap. */}
-            <h3 className="sticky top-0 z-10 mt-4 mb-1 w-full border-y border-(--primitive-opacity-white-alpha-10) bg-grayscale-800 px-2 py-1.5 text-body-text-b3-md text-grayscale-200 first:mt-0">
+            <h3 className="sticky top-0 z-10 mb-1 w-full border-y border-(--primitive-opacity-white-alpha-10) bg-grayscale-800 px-2 py-1.5 text-body-text-b3-md text-grayscale-200">
               <span className="sticky left-0 inline-block">
                 {t(`section.${group.section}`)}{" "}
                 {/* grayscale-400 rather than white-alpha-50: on the band's lighter ground the
@@ -77,12 +80,19 @@ export function RunList({
             <ul className="flex flex-col">
               {group.items.map(({ row, index }) => {
                 const done = index < checked;
+                // The row the run is on. It reads as the pointer moving down the list, which is
+                // what makes the cascade legible at a glance — and it is the row the list keeps
+                // scrolled into view.
+                const current = index === checked - 1;
                 return (
-                  <li key={row.id} ref={index === checked - 1 ? cursor : undefined}>
+                  <li key={row.id} ref={current ? cursor : undefined}>
                     <button
                       type="button"
                       onClick={() => onSelect(row)}
-                      className="flex w-full items-center gap-3 rounded-sm py-1 text-left whitespace-nowrap hover:bg-(--primitive-opacity-white-alpha-6)"
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-sm py-1 text-left whitespace-nowrap hover:bg-(--primitive-opacity-white-alpha-6)",
+                        current && state === "running" && "bg-(--primitive-opacity-white-alpha-6)"
+                      )}
                     >
                       {/* The verdict mark alone says whether a row has been reached. Dimming the
                           row itself was the first draft, and it put every unreached sample under
