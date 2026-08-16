@@ -1,0 +1,10 @@
+name: default
+version: 1.0.0
+description: Fixture base pack for extends-chain resolution tests
+dsl_version: 1
+default_action: allow
+evaluation_strategy: severity-max
+extends: []
+policies:
+  - policies/block-env-file-read.yaml
+  - policies/warn-injection.yaml

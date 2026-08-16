@@ -6,7 +6,7 @@
 
 import { readFile, stat } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import type { Action, Policy } from "../types.js";
+import type { Action, EvaluationStrategy, Policy } from "../types.js";
 import { loadError, type PolicyLoadError } from "./errors.js";
 import { parsePolicyFile } from "./parsePolicyFile.js";
 import { parseYamlWithSchema } from "./parseYaml.js";
@@ -23,6 +23,9 @@ export interface PackState {
   name: string;
   description?: string;
   defaultAction: Action;
+  evaluationStrategy: EvaluationStrategy;
+  /** Parent pack references (`"default@^1.0.0"` or bare `"default"`), manifest `extends` (FR-POL-03 §4.3/§6). */
+  extends: string[];
   enabled: boolean;
   policies: Policy[];
   loadedAt: string;
@@ -111,6 +114,25 @@ export class PackRegistry {
       enabled: pack.enabled
     }));
   }
+
+  /**
+   * Flattens `packId`'s manifest `extends` chain into one policy list (FR-POL-03 §4.3, ported
+   * 1:1 from the Gateway's former `resolveRuntimePolicies` so swapping the static generated
+   * pack table for this runtime registry is not itself a behavior change). Parent policies come
+   * first; a child policy with the same `id` as an inherited one overrides it (`Map` dedup keeps
+   * the last write). `enabled`/`disabled` pack state is intentionally ignored here — this walks
+   * the manifest graph by id, independent of the runtime enable/disable toggle.
+   */
+  resolvePolicies(packId: string, resolving: Set<string> = new Set()): Policy[] {
+    if (resolving.has(packId)) throw new Error(`Policy pack cycle at ${packId}`);
+    const pack = this.packs.get(packId);
+    if (!pack) throw new Error(`Unknown policy pack ${packId}`);
+    const next = new Set(resolving).add(packId);
+    const inherited = pack.extends.flatMap((reference) =>
+      this.resolvePolicies(reference.split("@")[0] ?? reference, next)
+    );
+    return [...new Map([...inherited, ...pack.policies].map((policy) => [policy.id, policy])).values()];
+  }
 }
 
 export async function loadPolicyPacks(rootDir: string, options: LoadPolicyPacksOptions = {}): Promise<PackRegistry> {
@@ -136,6 +158,8 @@ export async function loadPolicyPacks(rootDir: string, options: LoadPolicyPacksO
     name: string;
     description?: string;
     defaultAction: Action;
+    evaluationStrategy: EvaluationStrategy;
+    extends: string[];
     enabled: boolean;
     errors: PolicyLoadError[];
   }
@@ -156,6 +180,8 @@ export async function loadPolicyPacks(rootDir: string, options: LoadPolicyPacksO
       meta = {
         name: entry.packId,
         defaultAction: "allow",
+        evaluationStrategy: "severity-max",
+        extends: [],
         enabled: true,
         errors: [
           loadError({
@@ -212,6 +238,8 @@ export async function loadPolicyPacks(rootDir: string, options: LoadPolicyPacksO
     name: meta.name,
     ...(meta.description !== undefined ? { description: meta.description } : {}),
     defaultAction: meta.defaultAction,
+    evaluationStrategy: meta.evaluationStrategy,
+    extends: meta.extends,
     enabled: meta.enabled,
     policies: finalPolicies.get(packId) ?? [],
     loadedAt,
@@ -242,7 +270,15 @@ async function loadPack(
   entry: PackDirectoryEntry,
   baseDir: string
 ): Promise<{
-  meta: { name: string; description?: string; defaultAction: Action; enabled: boolean; errors: PolicyLoadError[] };
+  meta: {
+    name: string;
+    description?: string;
+    defaultAction: Action;
+    evaluationStrategy: EvaluationStrategy;
+    extends: string[];
+    enabled: boolean;
+    errors: PolicyLoadError[];
+  };
   policies: { policy: Policy; filePath: string }[];
 }> {
   const errors: PolicyLoadError[] = [];
@@ -251,6 +287,8 @@ async function loadPack(
   let name = entry.packId;
   let description: string | undefined;
   let defaultAction: Action = "allow";
+  let evaluationStrategy: EvaluationStrategy = "severity-max";
+  let extendsRefs: string[] = [];
   let enabled = true;
   let declaredPolicyPaths: string[] | undefined;
 
@@ -276,6 +314,8 @@ async function loadPack(
         if (value.name !== undefined) name = value.name;
         if (value.description !== undefined) description = value.description;
         if (value.default_action !== undefined) defaultAction = value.default_action;
+        if (value.evaluation_strategy !== undefined) evaluationStrategy = value.evaluation_strategy;
+        if (value.extends !== undefined) extendsRefs = value.extends;
         if (value.enabled !== undefined) enabled = value.enabled;
         if (value.policies !== undefined) {
           declaredPolicyPaths = await resolveDeclaredPolicyPaths(entry, value.policies, displayManifestPath, errors);
@@ -334,7 +374,15 @@ async function loadPack(
   }
 
   return {
-    meta: { name, ...(description !== undefined ? { description } : {}), defaultAction, enabled, errors },
+    meta: {
+      name,
+      ...(description !== undefined ? { description } : {}),
+      defaultAction,
+      evaluationStrategy,
+      extends: extendsRefs,
+      enabled,
+      errors
+    },
     policies
   };
 }

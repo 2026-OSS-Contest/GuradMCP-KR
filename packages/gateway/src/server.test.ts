@@ -80,6 +80,19 @@ afterEach(async () => {
 });
 
 describe("gateway HTTP boundary", () => {
+  it("reports the active policy snapshot on /metrics (FR-POL-03: observable proof of the loaded policy state)", async () => {
+    const url = await listen(createServer(handler));
+    const response = await fetch(`${url}/metrics`);
+    const body = (await response.json()) as {
+      policy: { version: string; loadedAt: string; policyCount: number };
+    };
+
+    expect(response.status).toBe(200);
+    expect(typeof body.policy.version).toBe("string");
+    expect(new Date(body.policy.loadedAt).toString()).not.toBe("Invalid Date");
+    expect(body.policy.policyCount).toBeGreaterThan(0);
+  });
+
   it("rejects oversized JSON before parsing", async () => {
     const url = await listen(createServer(handler));
     const response = await fetch(`${url}/inspect`, {

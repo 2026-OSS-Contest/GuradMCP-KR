@@ -1,0 +1,10 @@
+id: warn_injection_request
+pack: default
+priority: 200
+match:
+  direction: request
+  detections:
+    any_of: [INJECTION]
+action: warn
+severity: medium
+message: Possible prompt injection detected in the request.
