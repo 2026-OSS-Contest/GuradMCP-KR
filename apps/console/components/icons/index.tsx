@@ -248,6 +248,23 @@ export const RevealMaskedIcon = (props: P) => (
   </svg>
 );
 
+// The disclosure chevron the frames draw on a card that opens — SCR-402's 마스킹 미리보기 among
+// them. Points down; a closed row rotates it rather than swapping in a second glyph, which is
+// what the frame does with the one icon it carries.
+export const DisclosureChevronIcon = (props: P) => (
+  <svg {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M8.11997 9.29055L12 13.1705L15.88 9.29055C16.27 8.90055 16.9 8.90055 17.29 9.29055C17.68 9.68055 17.68 10.3105 17.29 10.7005L12.7 15.2905C12.31 15.6805 11.68 15.6805 11.29 15.2905L6.69997 10.7005C6.30997 10.3105 6.30997 9.68055 6.69997 9.29055C7.08997 8.91055 7.72997 8.90055 8.11997 9.29055Z" fill="currentColor" />
+  </svg>
+);
+
+// The separator between a held call's tool and its target (SCR-402). A chevron of its own at
+// 20px, not the 24px disclosure one turned on its side — the frame draws two different glyphs.
+export const CaretRightIcon = (props: P) => (
+  <svg {...props} width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M7.74167 13.2331L10.975 9.99974L7.74167 6.76641C7.41667 6.44141 7.41667 5.91641 7.74167 5.59141C8.06667 5.26641 8.59167 5.26641 8.91667 5.59141L12.7417 9.41641C13.0667 9.74141 13.0667 10.2664 12.7417 10.5914L8.91667 14.4164C8.59167 14.7414 8.06667 14.7414 7.74167 14.4164C7.42501 14.0914 7.41667 13.5581 7.74167 13.2331Z" fill="currentColor" />
+  </svg>
+);
+
 // SCR-501 Settings.
 export const TagWarningIcon = (props: P) => (
   <svg {...props} viewBox="0 0 16 20" fill="none" xmlns="http://www.w3.org/2000/svg">

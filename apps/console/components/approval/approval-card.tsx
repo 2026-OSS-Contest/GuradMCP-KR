@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import type { Approval, ApprovalDecision } from "@/lib/api/types";
+import { CaretRightIcon, DisclosureChevronIcon, RevealMaskedIcon, RevealRawIcon } from "@/components/icons";
 import { MaskedContent } from "@/components/replay/masked-content";
 import { RawContent } from "./raw-content";
 import { Tag } from "@/components/ui/tag";
@@ -61,7 +61,7 @@ export function ApprovalCard({
           {approval.toolName}
           {target && (
             <>
-              <ChevronRight className="size-5 flex-none text-grayscale-400" aria-hidden />
+              <CaretRightIcon className="size-5 flex-none text-(--primitive-opacity-white-alpha-50)" aria-hidden />
               <span className="min-w-0 break-all text-(--primitive-opacity-white-alpha-75)">{target}</span>
             </>
           )}
@@ -110,15 +110,17 @@ export function ApprovalCard({
             aria-expanded={open}
             className="flex items-center gap-2 self-start text-body-text-b3-md text-grayscale-200 transition-colors hover:text-grayscale-white"
           >
-            {open ? <ChevronDown className="size-5" aria-hidden /> : <ChevronRight className="size-5" aria-hidden />}
+            <DisclosureChevronIcon className={cn("size-6 text-grayscale-300 transition-transform", !open && "-rotate-90")} aria-hidden />
             {t("maskPreview")}
           </button>
 
           {open && (
             <div className="grid gap-4 md:grid-cols-2">
               <section className="flex flex-col gap-2">
-                <h4 className="flex items-center gap-2 text-body-text-b3-md text-red-300">
-                  <span aria-hidden>○–</span>
+                {/* The same markers the reveal modal heads its columns with, and the same rule:
+                    the icon carries the colour, the label stays white and bold. */}
+                <h4 className="flex items-center gap-2 text-body-text-b3-bd text-grayscale-white">
+                  <RevealRawIcon className="size-5 flex-none text-red-500" aria-hidden />
                   {t("raw")}
                 </h4>
                 <div className="rounded-lg bg-(--primitive-opacity-block-alpha-6) p-3">
@@ -126,8 +128,8 @@ export function ApprovalCard({
                 </div>
               </section>
               <section className="flex flex-col gap-2">
-                <h4 className="flex items-center gap-2 text-body-text-b3-md text-green-500">
-                  <span aria-hidden>→</span>
+                <h4 className="flex items-center gap-2 text-body-text-b3-bd text-grayscale-white">
+                  <RevealMaskedIcon className="size-5 flex-none text-green-700" aria-hidden />
                   {t("masked")}
                 </h4>
                 <div className="rounded-lg bg-(--primitive-opacity-allow-alpha-10) p-3">
@@ -184,9 +186,11 @@ export function ApprovalCard({
   );
 }
 
+/** The shortcut letter beside a decision. Text, as the frame has it — SUIT at b2, not a mono
+ *  caption in a fixed square: the box hugs the letter with 4px either side. */
 function Keycap({ children }: { children: string }) {
   return (
-    <span className="flex size-6 flex-none items-center justify-center rounded-md bg-(--primitive-opacity-white-alpha-25) font-mono text-caption-mono-c-rg">
+    <span className="flex flex-none items-center rounded-lg bg-(--primitive-opacity-white-alpha-10) px-1 text-center text-body-text-b2-md text-grayscale-white">
       {children}
     </span>
   );
