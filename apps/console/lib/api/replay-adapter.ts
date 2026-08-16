@@ -50,15 +50,6 @@ export function toSessionsResponse(api: ApiSessionsResponse): SessionsResponse {
 }
 
 /**
- * Kinds that plausibly carry maskable original content. Reveal-eligibility is a client-side
- * policy, not part of the GMCP-28 timeline contract — POST /events/{id}/reveal is a separate,
- * still-unimplemented endpoint, so this only decides whether the button offers to try it.
- */
-function canReveal(kind: TimelineNodeType): boolean {
-  return kind === "user" || kind === "verdict" || kind === "result";
-}
-
-/**
  * A VERDICT or RESULT node carries no `toolName` of its own but is *about* the TOOL_CALL before
  * it, so the design titles the panel with that tool in mono (frames `…-guard-판정-단계`,
  * `…-tool-결과-단계`). A USER_INPUT or AGENT_STEP node is not — inheriting a sibling's tool name
@@ -133,7 +124,12 @@ export function toEventDetail(
     body: node.content,
     call: node.argsJson === undefined ? undefined : toCall(node.argsJson),
     direction: node.directionVerdict && toDirection(node.directionVerdict),
-    canReveal: canReveal(kind)
+    // 화면설계서 5.3 no.5 gates the reveal button on the operator's permission, and every
+    // node-type frame draws it — including the agent and tool-call ones this used to
+    // withhold it from, on a guess about which kinds "plausibly carry maskable content"
+    // that neither the spec nor the frames make. Permission is not something the timeline
+    // contract carries, so the button is offered wherever the design offers it.
+    canReveal: true
     // normalizedPath/reveal: no source in this API yet, left undefined — see the GMCP-28 wire
     // contract note in ./types.ts.
   };
