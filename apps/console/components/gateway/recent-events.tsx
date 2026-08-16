@@ -75,7 +75,7 @@ export function RecentEvents({ demoDisabled }: { demoDisabled: boolean }) {
 
   return (
     <div className={cn("flex flex-none flex-col gap-4", EVENTS_COLUMN)}>
-      <section className="flex min-h-0 flex-1 flex-col gap-4 rounded-lg bg-grayscale-900 p-4">
+      <section className="flex min-h-0 flex-1 flex-col gap-4 rounded-xl bg-grayscale-900 p-4">
         <h2 className="pb-3 text-body-text-b1-md text-grayscale-300 shadow-[inset_0_-1px_0_0_var(--primitive-opacity-white-alpha-10)]">
           {t("title")}
         </h2>
@@ -112,7 +112,7 @@ export function RecentEvents({ demoDisabled }: { demoDisabled: boolean }) {
         aria-disabled={demoDisabled}
         tabIndex={demoDisabled ? -1 : undefined}
         className={cn(
-          "flex h-12 flex-none items-center justify-center gap-2 rounded-lg bg-blue-800 px-6 text-body-text-b2-md transition-colors hover:bg-blue-700",
+          "flex h-12 flex-none items-center justify-center gap-2 rounded-xl bg-blue-800 px-6 text-body-text-b2-md transition-colors hover:bg-blue-700",
           demoDisabled && "pointer-events-none opacity-50"
         )}
       >

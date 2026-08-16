@@ -52,7 +52,7 @@ export function QuickStart({ policyPacks }: { policyPacks: string[] }) {
         <StepCard step={3} title={t("step3.title")} desc={t("step3.desc")}>
           <Link
             href="/demo"
-            className="flex h-12 items-center gap-2 rounded-lg bg-blue-800 px-6 text-body-text-b2-md transition-colors hover:bg-blue-700"
+            className="flex h-12 items-center gap-2 rounded-xl bg-blue-800 px-6 text-body-text-b2-md transition-colors hover:bg-blue-700"
           >
             {tCta("demo")}
             <CtaChevronIcon className="h-6 w-5 flex-none" aria-hidden />

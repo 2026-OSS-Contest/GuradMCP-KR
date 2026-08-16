@@ -43,16 +43,16 @@ export function ServerTable({ servers, onTrustChange, busy }: ServerTableProps) 
         <table className="w-full table-fixed border-collapse">
           <thead>
             <tr className="text-body-text-b2-md bg-(--primitive-opacity-white-alpha-6) text-left text-grayscale-300">
-              <th scope="col" className="w-[26%] rounded-l-lg px-4 py-3 font-normal">
+              <th scope="col" className="[font-weight:inherit] w-[26%] rounded-l-lg px-4 py-3">
                 {t("servers.name")}
               </th>
-              <th scope="col" className="w-[34%] px-4 py-3 font-normal">
+              <th scope="col" className="[font-weight:inherit] w-[34%] px-4 py-3">
                 {t("servers.endpoint")}
               </th>
-              <th scope="col" className="w-[20%] px-4 py-3 font-normal">
+              <th scope="col" className="[font-weight:inherit] w-[20%] px-4 py-3">
                 {t("servers.trust")}
               </th>
-              <th scope="col" className="w-[20%] rounded-r-lg px-4 py-3 font-normal">
+              <th scope="col" className="[font-weight:inherit] w-[20%] rounded-r-lg px-4 py-3">
                 {t("servers.snapshot")}
               </th>
             </tr>

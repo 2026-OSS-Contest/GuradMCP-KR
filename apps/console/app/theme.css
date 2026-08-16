@@ -79,7 +79,12 @@
 
 /* ── shadcn/ui semantic tokens (dark theme) ── */
 :root {
-  --radius: 0.75rem;
+  /* The design uses exactly four radii — 4 · 8 · 12 · 1000 — and shadcn derives Tailwind's whole
+     scale from this one number. At 0.75rem every step landed one too large (`rounded-lg` 12px
+     where the frames draw 8, `rounded-xl` 16 where they draw 12), which is why components had to
+     reach for `rounded-[4px]` and `rounded-(--primitive-radius-rounded-xl)` to get the design's
+     own values. At 0.5rem the scale lines up: sm 4, lg 8, xl 12. */
+  --radius: 0.5rem;
   --background: var(--primitive-color-grayscale-950);
   --foreground: var(--primitive-color-grayscale-white);
   --card: var(--primitive-color-grayscale-900);

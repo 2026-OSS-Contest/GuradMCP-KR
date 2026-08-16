@@ -112,9 +112,9 @@ export function ServerTrustSettings() {
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="text-caption-text-c-rg text-(--primitive-opacity-white-alpha-75)">
-              <th scope="col" className="px-3 py-2 font-normal">{t("columnName")}</th>
-              <th scope="col" className="px-3 py-2 font-normal">{t("columnConnection")}</th>
-              <th scope="col" className="px-3 py-2 font-normal">{t("columnTrust")}</th>
+              <th scope="col" className="[font-weight:inherit] px-3 py-2">{t("columnName")}</th>
+              <th scope="col" className="[font-weight:inherit] px-3 py-2">{t("columnConnection")}</th>
+              <th scope="col" className="[font-weight:inherit] px-3 py-2">{t("columnTrust")}</th>
             </tr>
           </thead>
           <tbody>

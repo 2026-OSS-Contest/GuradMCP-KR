@@ -164,7 +164,7 @@ export function ServerInventory({
   const tError = useTranslations("gateway.error");
 
   return (
-    <section id={INVENTORY_ANCHOR} className="flex min-w-0 flex-1 flex-col gap-4 rounded-lg bg-grayscale-900 p-4">
+    <section id={INVENTORY_ANCHOR} className="flex min-w-0 flex-1 flex-col gap-4 rounded-xl bg-grayscale-900 p-4">
       <h2 className="pb-3 text-body-text-b1-md text-grayscale-300 shadow-[inset_0_-1px_0_0_var(--primitive-opacity-white-alpha-10)]">
         {t("title")}
       </h2>

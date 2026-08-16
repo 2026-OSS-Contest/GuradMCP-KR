@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
  */
 function DiffLines({ text, masked }: { text: string; masked: boolean }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 font-mono text-caption-mono-c-rg">
+    <div className="flex min-w-0 flex-col gap-1 font-mono text-body-mono-b3-rg">
       {text.split("\n").map((line, index) => {
         const [key, ...rest] = line.split("=");
         const value = rest.join("=");
@@ -19,7 +19,7 @@ function DiffLines({ text, masked }: { text: string; masked: boolean }) {
             <span className="break-all">{key}=</span>
             {value &&
               (masked ? (
-                <span className="rounded-sm bg-(--primitive-opacity-white-alpha-10) px-1.5">{value}</span>
+                <span className="rounded-sm bg-(--primitive-opacity-white-alpha-10) px-1.5 text-caption-mono-c-rg">{value}</span>
               ) : (
                 <span className="break-all underline">{value}</span>
               ))}
@@ -34,13 +34,13 @@ export function MaskDiffView({ diff, expanded }: { diff: MaskDiff; expanded: boo
   return (
     <div className={cn("flex flex-col gap-0 rounded-lg bg-(--primitive-opacity-black-alpha-75) p-2", !expanded && "max-h-72 overflow-hidden")}>
       <div className="flex items-start gap-2 rounded-t-sm bg-(--primitive-opacity-block-alpha-10) p-2">
-        <span className="flex-none pt-0.5 font-mono text-caption-mono-c-rg text-red-300" aria-hidden>
+        <span className="flex-none pt-0.5 font-mono text-body-mono-b3-rg text-red-300" aria-hidden>
           −
         </span>
         <DiffLines text={diff.before} masked={false} />
       </div>
       <div className="flex items-start gap-2 rounded-b-sm bg-(--primitive-opacity-allow-alpha-10) p-2">
-        <span className="flex-none pt-0.5 font-mono text-caption-mono-c-rg text-green-500" aria-hidden>
+        <span className="flex-none pt-0.5 font-mono text-body-mono-b3-rg text-green-500" aria-hidden>
           →
         </span>
         <DiffLines text={diff.after} masked />

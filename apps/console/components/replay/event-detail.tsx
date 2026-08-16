@@ -22,13 +22,13 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 }
 
 /** 위협 점수 / 탐지 count panels. */
-function StatPanel({ label, value, suffix, danger }: { label: string; value: number | string; suffix?: string; danger?: boolean }) {
+function StatPanel({ label, value, suffix, suffixType, danger }: { label: string; value: number | string; suffix?: string; suffixType?: string; danger?: boolean }) {
   return (
-    <div className="flex flex-1 flex-col gap-2 rounded-sm bg-grayscale-900 px-3 py-2 shadow-[inset_0_0_0_1px_var(--primitive-color-grayscale-800)]">
+    <div className="flex flex-1 flex-col gap-2 rounded-lg bg-grayscale-900 px-3 py-2 shadow-[inset_0_0_0_1px_var(--primitive-color-grayscale-800)]">
       <span className="text-body-text-b3-md text-grayscale-300">{label}</span>
       <span className="flex items-end justify-end gap-1">
         <b className={cn("text-header-text-h-bd", danger ? "text-red-400" : "text-grayscale-white")}>{value}</b>
-        {suffix && <span className="pb-2 text-caption-text-c-md text-(--primitive-opacity-white-alpha-50)">{suffix}</span>}
+        {suffix && <span className={cn("pb-2 text-(--primitive-opacity-white-alpha-50)", suffixType ?? "text-caption-text-c-md")}>{suffix}</span>}
       </span>
     </div>
   );
@@ -87,7 +87,7 @@ function ConfirmRevealModal({ onCancel, onConfirm, pending }: { onCancel: () => 
         role="alertdialog"
         aria-labelledby="confirm-reveal-title"
         aria-describedby="confirm-reveal-body"
-        className="w-96 max-w-full rounded-lg bg-grayscale-900 p-6 shadow-xl shadow-black/50"
+        className="w-96 max-w-full rounded-xl bg-grayscale-900 p-6 shadow-xl shadow-black/50"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <h2 id="confirm-reveal-title" className="text-body-text-b1-bd text-grayscale-white">
@@ -100,7 +100,7 @@ function ConfirmRevealModal({ onCancel, onConfirm, pending }: { onCancel: () => 
           <button
             type="button"
             onClick={onCancel}
-            className="flex h-9 items-center rounded-lg bg-(--primitive-opacity-white-alpha-6) px-4 text-body-text-b3-md transition-colors hover:bg-white/10"
+            className="flex h-9 items-center rounded-xl bg-(--primitive-opacity-white-alpha-6) px-4 text-body-text-b2-md transition-colors hover:bg-white/10"
           >
             {t("cancel")}
           </button>
@@ -108,7 +108,7 @@ function ConfirmRevealModal({ onCancel, onConfirm, pending }: { onCancel: () => 
             type="button"
             onClick={onConfirm}
             disabled={pending}
-            className="flex h-9 items-center rounded-lg bg-blue-800 px-4 text-body-text-b3-md transition-colors hover:bg-blue-700 disabled:opacity-50"
+            className="flex h-9 items-center rounded-xl bg-blue-800 px-4 text-body-text-b2-md transition-colors hover:bg-blue-700 disabled:opacity-50"
           >
             {t("continue")}
           </button>
@@ -180,7 +180,7 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
         {detail.summary && (
           <section className="flex flex-col gap-2">
             <SectionHeading>{t("agentSummary")}</SectionHeading>
-            <p className="text-body-text-b3-rg text-grayscale-100">{detail.summary}</p>
+            <p className="text-body-text-b3-md text-grayscale-100">{detail.summary}</p>
           </section>
         )}
 
@@ -229,7 +229,7 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
         {/* Verdict — threat score and detection count. */}
         {(detail.threatScore !== undefined || (detail.detections && detail.detections.length > 0)) && (
           <div className="flex gap-4">
-            <StatPanel label={t("threatScore")} value={detail.threatScore ?? 0} suffix="/100" danger />
+            <StatPanel label={t("threatScore")} value={detail.threatScore ?? 0} suffix="/100" suffixType="text-body-text-b1-bd" danger />
             <StatPanel label={t("detections")} value={detail.detections?.length ?? 0} suffix={t("detectionUnit")} />
           </div>
         )}
@@ -294,7 +294,7 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
         <button
           type="button"
           onClick={() => setConfirmOpen(true)}
-          className="flex h-12 flex-none items-center justify-center gap-2 rounded-lg bg-blue-800 text-body-text-b2-md transition-colors hover:bg-blue-700"
+          className="flex h-12 flex-none items-center justify-center gap-2 rounded-xl bg-blue-800 text-body-text-b2-md transition-colors hover:bg-blue-700"
         >
           <Lock className="size-5 flex-none" aria-hidden />
           {t("reveal")}

@@ -33,7 +33,7 @@ export function RevealModal({ content, onClose }: { content: RevealContent; onCl
               <h2 id="reveal-modal-title" className="text-body-text-b1-md text-grayscale-300">
                 Mask Diff
               </h2>
-              <span className="flex items-center gap-1 rounded-full bg-(--primitive-opacity-white-alpha-25) px-2 py-0.5 text-body-text-b3-md text-grayscale-white">
+              <span className="flex items-center gap-1 rounded-full bg-(--primitive-opacity-white-alpha-25) px-2 py-0.5 text-caption-text-c-md text-grayscale-white">
                 {t("revealing")}
               </span>
             </span>
@@ -65,7 +65,7 @@ export function RevealModal({ content, onClose }: { content: RevealContent; onCl
             {/* Same numbered-line layout as MaskedContent so a raw line and its masked
                 counterpart share a row height and stay aligned across the two columns. */}
             <div className="rounded-lg bg-(--primitive-opacity-black-alpha-75) p-3">
-              <div className="flex flex-col gap-1 font-mono text-caption-mono-c-rg text-grayscale-200">
+              <div className="flex flex-col gap-1 font-mono text-body-mono-b3-rg text-grayscale-200">
                 {content.raw.split("\n").map((text, index) => (
                   <div key={index} className="flex gap-2">
                     <span className="flex-none text-(--primitive-opacity-white-alpha-50)">

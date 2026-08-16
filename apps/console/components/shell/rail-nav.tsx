@@ -51,13 +51,13 @@ export function RailNav({ defaultCollapsed = false }: { defaultCollapsed?: boole
               aria-current={active ? "page" : undefined}
               title={collapsed ? t(key) : undefined}
               className={cn(
-                "flex h-10 items-center gap-3 rounded-lg p-2 text-foreground/85 transition-colors hover:bg-white/5",
+                "flex h-10 items-center gap-3 rounded-lg p-2 text-grayscale-200 transition-colors hover:bg-white/5",
                 collapsed && "justify-center",
                 active && "bg-(--primitive-opacity-blue-alpha-25) text-foreground"
               )}
             >
               <Icon className="size-6 shrink-0" aria-hidden />
-              {!collapsed && <span className="text-base">{t(key)}</span>}
+              {!collapsed && <span className="text-body-text-b2-md">{t(key)}</span>}
             </Link>
           );
         })}

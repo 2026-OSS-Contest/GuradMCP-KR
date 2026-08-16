@@ -74,7 +74,7 @@ function NodeRow({
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         {event.type === "verdict" ? (
           <span className="flex flex-wrap items-center gap-2">
-            <VerdictBadge verdict={event.verdict ?? "allow"} size="sm" />
+            <VerdictBadge verdict={event.verdict ?? "allow"} size="md" />
             {event.policy && (
               <span className="max-w-full truncate rounded-[4px] bg-(--primitive-opacity-white-alpha-10) px-2 py-1 text-body-text-b3-md text-grayscale-white shadow-[inset_0_0_0_1px_var(--primitive-opacity-white-alpha-10)]">
                 {event.policy}
@@ -242,7 +242,7 @@ export function TimelineColumn() {
           ))}
         </div>
       ) : events.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center rounded-lg bg-grayscale-900 text-body-text-b3-md text-grayscale-400">
+        <div className="flex flex-1 items-center justify-center rounded-lg bg-grayscale-900 text-title-text-t2-bd text-grayscale-400">
           {t("empty")}
         </div>
       ) : (

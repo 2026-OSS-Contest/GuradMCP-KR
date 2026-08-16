@@ -139,7 +139,7 @@ export function SessionPicker() {
         aria-controls={open && hasList ? LIST_ID : undefined}
         className={cn(
           // inline-flex keeps the label on the status bar's baseline (see the chips above).
-          "inline-flex h-8 items-center gap-2 rounded-sm bg-(--primitive-opacity-white-alpha-6) py-1 pr-1 pl-3 transition-colors hover:bg-white/10",
+          "inline-flex h-8 items-center gap-2 rounded-lg bg-(--primitive-opacity-white-alpha-6) py-1 pr-1 pl-3 transition-colors hover:bg-white/10",
           open && "bg-white/10"
         )}
       >

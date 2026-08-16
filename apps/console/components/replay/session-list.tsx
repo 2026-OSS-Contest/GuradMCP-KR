@@ -96,7 +96,7 @@ export function SessionList() {
     <section className="flex w-66 flex-none flex-col gap-3 px-4 py-6 shadow-[inset_-1px_0_0_0_var(--primitive-color-grayscale-800)] min-[1920px]:w-[425px]">
       <h2 className="text-body-text-b3-md text-grayscale-300">{t("title")}</h2>
 
-      <label className="flex items-center gap-2 rounded-lg bg-(--primitive-opacity-white-alpha-6) py-2 pr-2 pl-3">
+      <label className="flex items-center gap-2 rounded-xl bg-(--primitive-opacity-white-alpha-6) py-2 pr-2 pl-3">
         <Search className="size-6 flex-none text-(--primitive-opacity-white-alpha-50)" aria-hidden />
         <input
           type="search"

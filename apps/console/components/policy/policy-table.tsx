@@ -57,22 +57,22 @@ export function PolicyTable({ policies, selected, onSelect, onToggle, stats, bus
         </colgroup>
         <thead>
           <tr className="text-body-text-b2-md border-b border-grayscale-800 text-left text-grayscale-300">
-            <th scope="col" className="truncate py-3 pr-2 font-normal">
+            <th scope="col" className="[font-weight:inherit] truncate py-3 pr-2">
               {t("table.id")}
             </th>
-            <th scope="col" className="truncate py-3 pr-2 font-normal">
+            <th scope="col" className="[font-weight:inherit] truncate py-3 pr-2">
               {t("table.priority")}
             </th>
-            <th scope="col" className="truncate py-3 pr-2 font-normal">
+            <th scope="col" className="[font-weight:inherit] truncate py-3 pr-2">
               {t("table.action")}
             </th>
-            <th scope="col" className="truncate py-3 pr-2 font-normal">
+            <th scope="col" className="[font-weight:inherit] truncate py-3 pr-2">
               {t("table.severity")}
             </th>
-            <th scope="col" className="truncate py-3 pr-2 font-normal">
+            <th scope="col" className="[font-weight:inherit] truncate py-3 pr-2">
               {t("table.enabled")}
             </th>
-            <th scope="col" className="truncate py-3 font-normal">
+            <th scope="col" className="[font-weight:inherit] truncate py-3">
               {t("table.fired")}
             </th>
           </tr>

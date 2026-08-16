@@ -31,7 +31,7 @@ export function KpiCards({ overview, failed }: { overview: Overview | undefined;
     return (
       <div className="flex gap-4">
         {[0, 1, 2, 3].map((index) => (
-          <div key={index} className="h-[130px] flex-1 animate-pulse motion-reduce:animate-none rounded-sm bg-grayscale-900" />
+          <div key={index} className="h-[130px] flex-1 animate-pulse motion-reduce:animate-none rounded-lg bg-grayscale-900" />
         ))}
       </div>
     );
@@ -76,7 +76,7 @@ export function KpiCards({ overview, failed }: { overview: Overview | undefined;
           className={cn(
             // The panel's 1px stroke sits inside its 130px height in Figma, so it is an inset
             // ring here; a border would push the card to 132.
-            "flex flex-1 flex-col gap-2 rounded-sm p-4 transition-colors",
+            "flex flex-1 flex-col gap-2 rounded-lg p-4 transition-colors",
             danger
               ? "bg-(--primitive-opacity-block-alpha-6) shadow-[inset_0_0_0_1px_var(--primitive-opacity-block-alpha-25)] hover:bg-(--primitive-opacity-block-alpha-10)"
               : "bg-grayscale-900 shadow-[inset_0_0_0_1px_var(--primitive-color-grayscale-800)] hover:bg-grayscale-800"

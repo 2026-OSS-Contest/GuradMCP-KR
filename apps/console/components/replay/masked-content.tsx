@@ -15,7 +15,7 @@ function MaskChip({ label }: { label: string }) {
  */
 export function MaskedContent({ lines }: { lines: ContentLine[] }) {
   return (
-    <div className="flex flex-col gap-1 font-mono text-caption-mono-c-rg text-grayscale-200">
+    <div className="flex flex-col gap-1 font-mono text-body-mono-b3-rg text-grayscale-200">
       {lines.map((line) => (
         <div key={line.no} className="flex gap-2">
           <span className="flex-none text-(--primitive-opacity-white-alpha-50)">{line.no}</span>
