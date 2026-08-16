@@ -49,11 +49,14 @@ class SettingsApiTest : ApiTestSupport() {
     }
 
     @Test
-    fun `updating settings without the operator role is forbidden`() {
+    fun `updating settings with no actor headers at all still succeeds`() {
+        // No console session/auth exists yet, and the real console client
+        // (apps/console/lib/api/client.ts) never sends X-Actor-* — this is the request shape it
+        // actually makes, and it must not 403 (see SettingsController's doc comment).
         val response = putSettings(mapOf("approvalTimeoutSeconds" to 60), operator = false)
 
-        assertEquals(403, response.statusCode())
-        assertEquals("settings_update_forbidden", parseMap(response.body())["code"])
+        assertEquals(200, response.statusCode())
+        assertEquals(60, parseMap(response.body())["approvalTimeoutSeconds"])
     }
 
     @Test

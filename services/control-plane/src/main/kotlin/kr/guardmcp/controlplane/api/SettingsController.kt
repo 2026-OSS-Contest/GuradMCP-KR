@@ -30,10 +30,15 @@ data class SettingsUpdateRequest(
 )
 
 /**
- * `GET`/`PUT`/`stream /api/v1/settings` (GMCP-68 §5.1, GMCP-80 §3.8.2). `PUT` requires the
- * operator role, per §2's common rules — GMCP-68 didn't have a console session to check against
- * yet, so this keeps GMCP-80's `X-Actor-*` header check on top of GMCP-68's Postgres-backed
- * store and `riskAcknowledged` gate rather than dropping it.
+ * `GET`/`PUT`/`stream /api/v1/settings` (GMCP-68 §5.1, GMCP-80 §3.8.2). No console session/auth
+ * exists anywhere in this service yet (see [Actor]'s doc comment), and GMCP-68 already wired
+ * this endpoint end to end — console -> `PUT` -> Postgres -> SSE -> gateway cache — with no
+ * role check. `X-Actor-Id` is read only for the audit trail's `updatedBy` (same "record who, but
+ * don't gate on it" placeholder [kr.guardmcp.controlplane.domain.ServerRegistryStore.changeTrust]
+ * uses), not as an access-control gate: a real gate here would 403 every request the console
+ * actually sends today (it sends neither header — `apps/console/lib/api/client.ts` has no
+ * `X-Actor-*` anywhere) while doing nothing against a direct API call, which can set the header
+ * to whatever it wants. The real trust boundary this endpoint has is `riskAcknowledged` below.
  */
 @RestController
 @RequestMapping("/api/v1")
@@ -49,9 +54,6 @@ class SettingsController(private val store: GuardSettingsStore) {
         servletRequest: HttpServletRequest,
     ): SettingsResponse {
         val actor = Actor.from(actorId, actorRole)
-        if (!actor.isOperator) {
-            throw ApiException(HttpStatus.FORBIDDEN, "settings_update_forbidden", "updating settings requires the operator role")
-        }
         val failMode = request.failMode?.let {
             FailurePolicy.fromWire(it)
                 ?: throw ApiException(HttpStatus.BAD_REQUEST, "invalid_fail_mode", "unknown failMode '$it'")

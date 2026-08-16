@@ -736,8 +736,10 @@ paths:
       tags: [settings]
       summary: Update gateway settings
       description: >-
-        Operator-only (403 otherwise). Every field is independent, so a
-        caller sends only what it changed. Setting failMode to fail_open
+        No console session/auth exists yet, so this is not gated on
+        X-Actor-Role (apps/console/lib/api/client.ts never sends it) — it is
+        read only for the updatedBy audit trail. Every field is independent,
+        so a caller sends only what it changed. Setting failMode to fail_open
         requires riskAcknowledged: true in the same request, regardless of
         the previous value — otherwise the request is rejected with 400 and
         nothing is changed. Reverting failMode to fail_closed never requires
@@ -753,12 +755,7 @@ paths:
         - name: X-Actor-Id
           in: header
           required: false
-          schema:
-            type: string
-        - name: X-Actor-Role
-          in: header
-          required: false
-          description: Must be "operator" or the call is rejected with 403.
+          description: Recorded as updatedBy on the settings row; not an access-control check.
           schema:
             type: string
       requestBody:
@@ -779,12 +776,6 @@ paths:
             Malformed failMode, an out-of-range approvalTimeoutSeconds or
             unsupported locale, or failMode=fail_open without
             riskAcknowledged=true.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-        "403":
-          description: Actor is not an operator
           content:
             application/json:
               schema:
