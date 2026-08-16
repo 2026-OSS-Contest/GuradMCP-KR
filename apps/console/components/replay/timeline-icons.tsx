@@ -60,9 +60,17 @@ export const NodeToolIcon = (props: P) => (
   </svg>
 );
 
+/**
+ * The verdict marker, in the colour of the verdict it marks.
+ *
+ * This was one glyph with `#F15B5B` painted into it — the frame it was extracted from happened to
+ * show a block, and every timeline fixture at the time had exactly one verdict node, which was
+ * also a block. Anything else (an allow, a masking warn, a held call) drew a red 차단 disc beside
+ * its own badge (GMCP-117).
+ */
 export const NodeVerdictIcon = (props: P) => (
   <svg {...props} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="#F15B5B"/>
+  <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="currentColor"/>
   <g clipPath="url(#17b41c0c-clip0_296_11020)">
   <path d="M20 10C14.48 10 10 14.48 10 20C10 25.52 14.48 30 20 30C25.52 30 30 25.52 30 20C30 14.48 25.52 10 20 10ZM12 20C12 15.58 15.58 12 20 12C21.85 12 23.55 12.63 24.9 13.69L13.69 24.9C12.63 23.55 12 21.85 12 20ZM20 28C18.15 28 16.45 27.37 15.1 26.31L26.31 15.1C27.37 16.45 28 18.15 28 20C28 24.42 24.42 28 20 28Z" fill="#FCFCFD"/>
   </g>
@@ -71,6 +79,30 @@ export const NodeVerdictIcon = (props: P) => (
   <rect width="24" height="24" fill="white" transform="translate(8 8)"/>
   </clipPath>
   </defs>
+  </svg>
+);
+
+/** The same disc with a tick, for a verdict that let the call through. */
+export const NodeVerdictAllowIcon = (props: P) => (
+  <svg {...props} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="currentColor"/>
+  <path d="M17.6 24.3L13.4 20.1C13.0 19.7 13.0 19.1 13.4 18.7C13.8 18.3 14.4 18.3 14.8 18.7L18.3 22.2L25.2 15.3C25.6 14.9 26.2 14.9 26.6 15.3C27.0 15.7 27.0 16.3 26.6 16.7L19.0 24.3C18.6 24.7 18.0 24.7 17.6 24.3Z" fill="#FCFCFD"/>
+  </svg>
+);
+
+/** The same disc with a warning triangle, for a call that went through with something recorded. */
+export const NodeVerdictWarnIcon = (props: P) => (
+  <svg {...props} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="currentColor"/>
+  <path d="M13.0 27.0H27.0C27.8 27.0 28.3 26.1 27.9 25.4L20.9 13.3C20.5 12.6 19.5 12.6 19.1 13.3L12.1 25.4C11.7 26.1 12.2 27.0 13.0 27.0ZM20 22.7C19.6 22.7 19.2 22.3 19.2 21.9V19.9C19.2 19.5 19.6 19.1 20 19.1C20.4 19.1 20.8 19.5 20.8 19.9V21.9C20.8 22.3 20.4 22.7 20 22.7ZM20.8 25.4H19.2V23.8H20.8V25.4Z" fill="#1A1D21"/>
+  </svg>
+);
+
+/** The same disc with a hold, for a call waiting on a person. */
+export const NodeVerdictApprovalIcon = (props: P) => (
+  <svg {...props} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="currentColor"/>
+  <path d="M16.5 14.5H18.5C19.05 14.5 19.5 14.95 19.5 15.5V24.5C19.5 25.05 19.05 25.5 18.5 25.5H16.5C15.95 25.5 15.5 25.05 15.5 24.5V15.5C15.5 14.95 15.95 14.5 16.5 14.5ZM21.5 14.5H23.5C24.05 14.5 24.5 14.95 24.5 15.5V24.5C24.5 25.05 24.05 25.5 23.5 25.5H21.5C20.95 25.5 20.5 25.05 20.5 24.5V15.5C20.5 14.95 20.95 14.5 21.5 14.5Z" fill="#FCFCFD"/>
   </svg>
 );
 
