@@ -103,7 +103,10 @@ export function PolicyTable({ policies, selected, onSelect, onToggle, stats, bus
                 className={cn(
                   "cursor-pointer border-b border-grayscale-800 align-middle",
                   selected === policy.id && "bg-grayscale-800",
-                  muted && "text-grayscale-500"
+                  // The frame dims the whole row rather than greying its text, which is what
+                  // carries the badges down with it — a disabled policy whose verdict badge still
+                  // reads at full strength looks like it is still deciding calls.
+                  muted && "opacity-25"
                 )}
               >
                 {/* 78px cannot hold a policy id, and the design clamps rather than reflowing
@@ -121,10 +124,7 @@ export function PolicyTable({ policies, selected, onSelect, onToggle, stats, bus
                     <VerdictBadge verdict={toVerdict(policy.action)} size="sm" compact />
                   )}
                 </td>
-                <td className={cn(
-                    "text-body-text-b2-md py-4 pr-2",
-                    muted ? "text-grayscale-500" : SEVERITY_INK[policy.severity]
-                  )}>
+                <td className={cn("text-body-text-b2-md py-4 pr-2", SEVERITY_INK[policy.severity])}>
                   {policy.severity}
                 </td>
                 <td className="py-4 pr-2">

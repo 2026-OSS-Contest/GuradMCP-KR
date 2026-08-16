@@ -86,8 +86,9 @@ test("SCR-302 confirming the prompt disables the policy", async ({ page }) => {
   // The screen refetches after the PUT rather than trusting the click, so the row going muted is
   // the reloaded payload rendering — not optimistic state. (A `page.reload()` would prove nothing
   // here: MSW lives in the page, so reloading reseeds the mock's store along with everything else.)
+  // The frame dims the whole row rather than greying one cell's text, so the badges go with it.
   const row = page.getByRole("row").filter({ hasText: "block_env_file_read" });
-  await expect(row.getByText("critical")).toHaveClass(/text-grayscale-500/);
+  await expect(row).toHaveCSS("opacity", "0.25");
 });
 
 test("SCR-302 a policy that neither blocks nor is critical toggles without a prompt", async ({ page }) => {
