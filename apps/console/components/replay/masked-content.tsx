@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 /** A masked token rendered as a green chip, e.g. PHONE, BANK_ACCOUNT (spec §5.3). */
 function MaskChip({ label }: { label: string }) {
   return (
-    <span className="rounded-sm bg-(--primitive-opacity-allow-alpha-10) px-1.5 font-mono text-caption-mono-c-rg text-green-500">
+    <span className="rounded-sm bg-(--primitive-opacity-white-alpha-10) px-2 py-px font-mono text-caption-mono-c-rg text-green-200 shadow-[inset_0_0_0_1px_var(--primitive-opacity-white-alpha-10)]">
       {label}
     </span>
   );
@@ -29,7 +29,7 @@ export function MaskedContent({ lines, nowrap }: { lines: ContentLine[]; nowrap?
     // line has to reach the line above and below it — consecutive masked lines are one block in
     // the design, and a gap between them breaks it into stripes. The rhythm is unchanged: the
     // container gives back what the first and last line's own padding added.
-    <div className={cn("-my-0.5 flex flex-col font-mono text-body-mono-b3-rg text-grayscale-200", nowrap && "w-max")}>
+    <div className={cn("-my-0.5 flex flex-col font-mono text-body-mono-b3-rg text-grayscale-300", nowrap && "w-max")}>
       {lines.map((line) => (
         // A line the masking touched carries the tint; the run it touched carries the rule.
         <div
@@ -40,7 +40,7 @@ export function MaskedContent({ lines, nowrap }: { lines: ContentLine[]; nowrap?
           )}
         >
           <span className="flex-none text-(--primitive-opacity-white-alpha-50)">{line.no}</span>
-          <span className={cn("flex min-w-0 items-center gap-x-0 gap-y-1", nowrap ? "flex-nowrap whitespace-pre" : "flex-wrap")}>
+          <span className={cn("flex min-w-0 items-center gap-1", nowrap ? "flex-nowrap whitespace-pre" : "flex-wrap")}>
             {line.parts.map((part, index) =>
               "mask" in part ? (
                 <MaskChip key={index} label={part.mask} />

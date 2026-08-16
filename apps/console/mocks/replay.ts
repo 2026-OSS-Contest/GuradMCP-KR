@@ -47,13 +47,29 @@ export const SESSIONS: ApiSessionSummary[] = [
   }
 ];
 
+// The consultation log the get_log tool read — the source of the masked PII the reveal modal
+// shows (POST /events/{id}/reveal, spec §5.3 no.5). Out of the GMCP-28 timeline API's scope: it
+// never returns raw or masked body text, so this fixture backs only the separate reveal endpoint.
+const CONSULT_MASKED: ContentLine[] = [
+  line("01", { text: "[상담 로그 #C-20260712-142]" }),
+  line("02", { text: "유형: 환불 계좌 변경, 2026-07-12 14:02" }),
+  line("03", { text: "고객 김민서 님이 환불 계좌 변경을 요청함." }),
+  line("04", { text: "등록 연락처 " }, { mask: "PHONE" }, { text: " 으로 본인 확인 완료." }),
+  line("05", { text: "변경 계좌: 국민은행 " }, { mask: "BANK_ACCOUNT" }, { text: " (예금주: 김민서)" }),
+  line("06", { text: "본인확인 과정에서 주민등록번호 " }, { mask: "RRN_LIKE" }, { text: " 확인" }),
+  line("07", { text: "영수증 발송: " }, { mask: "EMAIL" }),
+  line("08", { text: "배송지: " }, { mask: "ADDRESS" })
+];
+
 const TIMELINE_0712_NODES: ApiTimelineNode[] = [
   {
     eventId: "e1",
     type: "USER_INPUT",
     ts: `${DAY}14:02:12+09:00`,
     summary: "README를 요약해줘",
-    content: [line("01", { text: "README를 요약해줘" })],
+    // The frame fills 입력 원문 with the consultation log the run went on to read, masked — the
+    // panel is where the masking is meant to be visible, and a bare prompt shows none of it.
+    content: CONSULT_MASKED,
     detail: null
   },
   {
@@ -161,19 +177,6 @@ export function eventLookup(eventId: string): ApiEventLookupResponse | undefined
   return node && { sessionId: "s-0712", ...node };
 }
 
-// The consultation log the get_log tool read — the source of the masked PII the reveal modal
-// shows (POST /events/{id}/reveal, spec §5.3 no.5). Out of the GMCP-28 timeline API's scope: it
-// never returns raw or masked body text, so this fixture backs only the separate reveal endpoint.
-const CONSULT_MASKED: ContentLine[] = [
-  line("01", { text: "[상담 로그 #C-20260712-142]" }),
-  line("02", { text: "유형: 환불 계좌 변경, 2026-07-12 14:02" }),
-  line("03", { text: "고객 김민서 님이 환불 계좌 변경을 요청함." }),
-  line("04", { text: "등록 연락처 " }, { mask: "PHONE" }, { text: " 으로 본인 확인 완료." }),
-  line("05", { text: "변경 계좌: 국민은행 " }, { mask: "BANK_ACCOUNT" }, { text: " (예금주: 김민서)" }),
-  line("06", { text: "본인확인 과정에서 주민등록번호 " }, { mask: "RRN_LIKE" }, { text: " 확인" }),
-  line("07", { text: "영수증 발송: " }, { mask: "EMAIL" }),
-  line("08", { text: "배송지: " }, { mask: "ADDRESS" })
-];
 // Numbered like the masked side, part for part: each `secret` is exactly what the chip opposite
 // it stands in for, so the two columns line up run by run and the rule falls on the value alone.
 const CONSULT_RAW: ContentLine[] = [

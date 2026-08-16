@@ -37,6 +37,36 @@ function StatPanel({ label, value, suffix, suffixType, danger }: { label: string
   );
 }
 
+/**
+ * The tool call's arguments, with the values picked out. Keys, braces and commas are structure —
+ * the same for every call — while a value is what this call actually carried, so it is the one run
+ * that takes a colour. The frame colours `".env"` alone and leaves the rest grey.
+ *
+ * A quoted run is a key when a colon follows it, and a value otherwise; numbers, booleans and null
+ * are always values.
+ */
+const JSON_TOKEN = /("(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?|true|false|null)/g;
+
+function ArgsJson({ json }: { json: string }) {
+  const parts = json.split(JSON_TOKEN);
+  return (
+    <pre className="overflow-x-auto rounded-lg bg-(--primitive-opacity-black-alpha-75) p-3 font-mono text-body-mono-b3-rg text-grayscale-300">
+      {parts.map((part, index) => {
+        const quoted = part.startsWith('"');
+        const isKey = quoted && /^\s*:/.test(parts[index + 1] ?? "");
+        const isValue = index % 2 === 1 && !isKey;
+        return isValue ? (
+          <span key={index} className="text-green-200">
+            {part}
+          </span>
+        ) : (
+          <span key={index}>{part}</span>
+        );
+      })}
+    </pre>
+  );
+}
+
 /** The direction verdict a tool-call / result carries: a verdict badge + policy chip. */
 function Direction({ direction, kind }: { direction: DirectionVerdict; kind: TimelineNodeType }) {
   const t = useTranslations("replay.detail");
@@ -205,9 +235,7 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
               <SectionHeading>
                 {t("args")} <span className="text-grayscale-300">{t("argsCount", { count: detail.call.argsCount })}</span>
               </SectionHeading>
-              <pre className="overflow-x-auto rounded-lg bg-(--primitive-opacity-black-alpha-75) p-3 font-mono text-caption-mono-c-rg text-grayscale-200">
-                {detail.call.argsJson}
-              </pre>
+              <ArgsJson json={detail.call.argsJson} />
             </section>
           </>
         )}
