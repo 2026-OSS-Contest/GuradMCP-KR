@@ -15,6 +15,8 @@ import type {
 // A fixed clock keeps the timestamps matching the design ("14:02:41" etc.).
 const DAY = "2026-07-04T";
 
+const line = (no: string, ...parts: ContentLine["parts"]): ContentLine => ({ no, parts });
+
 export const SESSIONS: ApiSessionSummary[] = [
   {
     sessionId: "s-0712",
@@ -46,12 +48,23 @@ export const SESSIONS: ApiSessionSummary[] = [
 ];
 
 const TIMELINE_0712_NODES: ApiTimelineNode[] = [
-  { eventId: "e1", type: "USER_INPUT", ts: `${DAY}14:02:12+09:00`, summary: "README를 요약해줘", detail: null },
+  {
+    eventId: "e1",
+    type: "USER_INPUT",
+    ts: `${DAY}14:02:12+09:00`,
+    summary: "README를 요약해줘",
+    content: [line("01", { text: "README를 요약해줘" })],
+    detail: null
+  },
   {
     eventId: "e2",
     type: "AGENT_STEP",
     ts: `${DAY}14:02:28+09:00`,
     summary: "README 내 지시문 발견 · .env 읽기 설정",
+    agentSummary:
+      "README.md 내용 중 시스템 프롬프트를 무시하고 .env 파일을 읽어 응답에 포함하라는 지시문을 발견했습니다. " +
+      "사용자 요청(README 요약)과 무관한 지시로 판단해 별도 확인 없이 무시하고, 원래 목적에 필요한 파일 접근으로 " +
+      ".env 읽기를 다음 동작으로 진행합니다.",
     detail: null
   },
   {
@@ -62,6 +75,8 @@ const TIMELINE_0712_NODES: ApiTimelineNode[] = [
     toolName: "read_file",
     direction: "req",
     argsDigest: "sha256:9f2c1af9d3e7…",
+    argsJson: '{\n  "path": ".env"\n}',
+    directionVerdict: { verdict: "block", policyIds: ["block_env_file_read"] },
     detail: null
   },
   {
@@ -78,6 +93,12 @@ const TIMELINE_0712_NODES: ApiTimelineNode[] = [
         { type: "SECRET", subtype: "GENERIC_PASSWORD", span: { start: 25, end: 41 }, confidence: 0.92, maskedAs: "텍스트" }
       ],
       maskDiffRef: "/api/v1/events/e4/mask-diff",
+      // One row per detection above, in the same order — the frame's third row is the Figma
+      // component's placeholder default, not a third finding.
+      maskDiff: {
+        before: "OPENAI_API_KEY=sk-dhjcfeas...\nDB_PASSWORD=prod-8f21-Xy!q",
+        after: "OPENAI_API_KEY=SECRET_OPENAI\nDB_PASSWORD=텍스트"
+      },
       hash: "a3f9c1",
       prevHash: ""
     }
@@ -87,6 +108,14 @@ const TIMELINE_0712_NODES: ApiTimelineNode[] = [
     type: "RESULT",
     ts: `${DAY}14:02:49+09:00`,
     summary: '"GuardMCP 정책에 의해 차단되었습니다" 오류 반환',
+    content: [
+      line("01", { text: "error: POLICY_BLOCKED" }),
+      line("02", { text: 'message: "GuardMCP 정책에 의해 차단되었습니다"' }),
+      line("03", { text: "policy: block_env_file_read" })
+    ],
+    // The call never reached the file, so nothing was returned to mask — the response direction
+    // is judged on its own by the exfil policy.
+    directionVerdict: { verdict: "block", policyIds: ["deny_secret_exfil"] },
     detail: null
   },
   {
@@ -94,6 +123,10 @@ const TIMELINE_0712_NODES: ApiTimelineNode[] = [
     type: "AGENT_STEP",
     ts: `${DAY}14:02:28+09:00`,
     summary: "차단 응답 수신 · 작업 중단, 사용자에게 보고",
+    agentSummary:
+      "read_file(\".env\") 호출이 GuardMCP 정책에 의해 차단되어 파일 내용을 받지 못했습니다. README.md 에 삽입된 " +
+      "지시문은 사용자 요청과 무관한 프롬프트 인젝션으로 판단해 더 이상 따르지 않고, 환경 파일 접근 시도와 차단 " +
+      "사실을 사용자에게 보고한 뒤 원래 요청인 README 요약만 이어서 진행합니다.",
     detail: null
   }
 ];
@@ -131,7 +164,6 @@ export function eventLookup(eventId: string): ApiEventLookupResponse | undefined
 // The consultation log the get_log tool read — the source of the masked PII the reveal modal
 // shows (POST /events/{id}/reveal, spec §5.3 no.5). Out of the GMCP-28 timeline API's scope: it
 // never returns raw or masked body text, so this fixture backs only the separate reveal endpoint.
-const line = (no: string, ...parts: ContentLine["parts"]): ContentLine => ({ no, parts });
 const CONSULT_MASKED: ContentLine[] = [
   line("01", { text: "[상담 로그 #C-20260712-142]" }),
   line("02", { text: "유형: 환불 계좌 변경, 2026-07-12 14:02" }),

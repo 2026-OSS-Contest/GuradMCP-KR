@@ -151,7 +151,12 @@
       "args": "인자",
       "argsCount": "{count}개",
       "normalizedPath": "정규화 경로",
-      "morePolicies": "외 {count}"
+      "morePolicies": "외 {count}",
+      "agentSummary": "Agent 보고 요약",
+      "inputOriginal": "입력 원문",
+      "returnSummary": "반환 데이터 요약",
+      "requestDirection": "요청 방향 판정",
+      "responseDirection": "응답 방향 판정"
     },
     "policy": {
       "goToPolicy": "정책으로 이동",

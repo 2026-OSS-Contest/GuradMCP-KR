@@ -70,11 +70,41 @@ test("clicking a timeline node swaps in that node's own detail", async ({ page }
   // Default selection is the block verdict — its threat score is on screen.
   await expect(detail.getByText("read_file")).toBeVisible();
   await expect(detail.getByText("위협 점수")).toBeVisible();
-  // The user node reads differently: its own header, not a verdict breakdown.
+  // The user node reads differently: its own header and 입력 원문, not a verdict breakdown.
+  // The prompt appears twice on that panel — as the title and as line 01 — so match the heading.
   await page.getByRole("log").getByRole("button", { name: /README를 요약해줘/ }).click();
-  await expect(detail.getByText("README를 요약해줘")).toBeVisible();
+  await expect(detail.getByRole("heading", { name: "입력 원문" })).toBeVisible();
+  await expect(detail.getByText("README를 요약해줘").first()).toBeVisible();
   await expect(detail.getByText("read_file")).toBeHidden();
   await expect(detail.getByText("위협 점수")).toBeHidden();
+});
+
+// ── GMCP-115: the per-node-type panel sections the design specifies ─────────
+
+test("every timeline node renders its own design section, not a bare header", async ({ page }) => {
+  await page.goto("/replay");
+  const log = page.getByRole("log");
+  const detail = page.getByTestId("event-detail");
+
+  // Verdict node (default selection): Mask Diff, which never rendered before — `maskDiffRef`
+  // pointed at an endpoint nothing implements.
+  await expect(detail.getByRole("heading", { name: "Mask Diff" })).toBeVisible();
+  await expect(detail.getByText("SECRET_OPENAI")).toBeVisible();
+
+  // Agent node: its own report, and its title is its summary — not the neighbouring tool name.
+  await log.getByRole("button", { name: /README 내 지시문 발견/ }).click();
+  await expect(detail.getByRole("heading", { name: "Agent 보고 요약" })).toBeVisible();
+  await expect(detail.getByText("read_file")).toBeHidden();
+
+  // Tool-call node: target, arguments and the request-direction verdict.
+  await log.getByRole("button", { name: /read_file\(".env"\)/ }).click();
+  await expect(detail.getByRole("heading", { name: "대상" })).toBeVisible();
+  await expect(detail.getByRole("heading", { name: "요청 방향 판정" })).toBeVisible();
+
+  // Result node: returned data and the response-direction verdict.
+  await log.getByRole("button", { name: /오류 반환/ }).click();
+  await expect(detail.getByRole("heading", { name: "반환 데이터 요약" })).toBeVisible();
+  await expect(detail.getByRole("heading", { name: "응답 방향 판정" })).toBeVisible();
 });
 
 test("next-verdict jump selects the verdict node", async ({ page }) => {

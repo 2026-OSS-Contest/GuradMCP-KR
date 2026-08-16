@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Lock } from "lucide-react";
 import { revealEvent } from "@/lib/api/client";
-import type { DirectionVerdict, EventDetail, RevealContent } from "@/lib/api/types";
+import type { DirectionVerdict, EventDetail, RevealContent, TimelineNodeType } from "@/lib/api/types";
 import { VerdictBadge } from "@/components/verdict-badge";
 import { VerdictAllowIcon, VerdictWarnIcon } from "@/components/icons";
 import { PolicyChip } from "./policy-chip";
@@ -35,11 +35,11 @@ function StatPanel({ label, value, suffix, danger }: { label: string; value: num
 }
 
 /** The direction verdict a tool-call / result carries: a verdict badge + policy chip. */
-function Direction({ direction }: { direction: DirectionVerdict }) {
+function Direction({ direction, kind }: { direction: DirectionVerdict; kind: TimelineNodeType }) {
   const t = useTranslations("replay.detail");
   return (
     <section className="flex flex-col gap-2">
-      <SectionHeading>{direction.heading}</SectionHeading>
+      <SectionHeading>{kind === "result" ? t("responseDirection") : t("requestDirection")}</SectionHeading>
       <div className="flex flex-wrap items-center gap-3">
         <VerdictBadge verdict={direction.verdict} size="sm" />
         <PolicyChip id={direction.policy} />
@@ -166,7 +166,9 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
             <span
               className={cn(
                 "min-w-0 break-words text-grayscale-white",
-                monoTitle || isVerdict ? "font-mono text-title-mono-t1-rg" : "text-title-text-t2-bd"
+                // User and agent nodes are titled with their own prose summary, so they take the
+                // design's title type rather than mono (frame `…-agent-단계`, GMCP-115 A-2).
+                monoTitle || isVerdict ? "font-mono text-title-mono-t1-rg" : "text-title-text-t1-bd"
               )}
             >
               {detail.tool}
@@ -177,8 +179,8 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
         {/* Agent — its own summary of the decision. */}
         {detail.summary && (
           <section className="flex flex-col gap-2">
-            <SectionHeading>{detail.summary.heading}</SectionHeading>
-            <p className="text-body-text-b3-rg text-grayscale-100">{detail.summary.text}</p>
+            <SectionHeading>{t("agentSummary")}</SectionHeading>
+            <p className="text-body-text-b3-rg text-grayscale-100">{detail.summary}</p>
           </section>
         )}
 
@@ -256,15 +258,15 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
         {/* User input / tool result — numbered, masked content. */}
         {detail.body && (
           <section className="flex flex-col gap-2">
-            <SectionHeading>{detail.body.heading}</SectionHeading>
+            <SectionHeading>{detail.kind === "result" ? t("returnSummary") : t("inputOriginal")}</SectionHeading>
             <div className="rounded-lg bg-(--primitive-opacity-black-alpha-75) p-3">
-              <MaskedContent lines={detail.body.lines} />
+              <MaskedContent lines={detail.body} />
             </div>
           </section>
         )}
 
         {/* Tool call / result — direction verdict. */}
-        {detail.direction && <Direction direction={detail.direction} />}
+        {detail.direction && <Direction direction={detail.direction} kind={detail.kind} />}
 
         {/* Verdict — mask diff. */}
         {detail.maskDiff && (
