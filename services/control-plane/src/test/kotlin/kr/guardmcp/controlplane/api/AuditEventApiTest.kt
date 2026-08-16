@@ -7,13 +7,17 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.test.context.TestPropertySource
 import java.math.BigDecimal
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Instant
 import java.util.UUID
 
+/** `security.reveal-token` must be configured for any reveal call to succeed (NFR-04) — see
+ *  [AuditEventController.hasValidOperatorToken]'s doc comment: unconfigured (blank) always denies. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@TestPropertySource(properties = ["security.reveal-token=test-operator-token"])
 class AuditEventApiTest : ApiTestSupport() {
     @Autowired
     private lateinit var repository: GuardEventRepository
@@ -188,13 +192,14 @@ class AuditEventApiTest : ApiTestSupport() {
     }
 
     @Test
-    fun `reveal without the operator role is forbidden`() {
+    fun `reveal without the operator role is forbidden, even with a valid operator token`() {
         val eventId = UUID.randomUUID()
         send("POST", "/api/v1/events", ingestPayload(eventId))
 
         val response = client.send(
             HttpRequest.newBuilder(uri("/api/v1/events/$eventId/reveal"))
                 .header("Content-Type", "application/json")
+                .header(OPERATOR_TOKEN_HEADER, "test-operator-token")
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build(),
             HttpResponse.BodyHandlers.ofString(),
@@ -202,6 +207,37 @@ class AuditEventApiTest : ApiTestSupport() {
 
         assertEquals(403, response.statusCode())
         assertEquals("reveal_forbidden", parseMap(response.body())["code"])
+    }
+
+    @Test
+    fun `reveal with the operator role but a missing or wrong operator token is forbidden`() {
+        val eventId = UUID.randomUUID()
+        send("POST", "/api/v1/events", ingestPayload(eventId))
+
+        val missingToken = client.send(
+            HttpRequest.newBuilder(uri("/api/v1/events/$eventId/reveal"))
+                .header("Content-Type", "application/json")
+                .header(Actor.ID_HEADER, "operator@company.co.kr")
+                .header(Actor.ROLE_HEADER, "operator")
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertEquals(403, missingToken.statusCode())
+        assertEquals("reveal_unauthorized", parseMap(missingToken.body())["code"])
+
+        val wrongToken = client.send(
+            HttpRequest.newBuilder(uri("/api/v1/events/$eventId/reveal"))
+                .header("Content-Type", "application/json")
+                .header(Actor.ID_HEADER, "operator@company.co.kr")
+                .header(Actor.ROLE_HEADER, "operator")
+                .header(OPERATOR_TOKEN_HEADER, "not-the-configured-token")
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertEquals(403, wrongToken.statusCode())
+        assertEquals("reveal_unauthorized", parseMap(wrongToken.body())["code"])
     }
 
     @Test
@@ -235,6 +271,7 @@ class AuditEventApiTest : ApiTestSupport() {
                 .header("Content-Type", "application/json")
                 .header(Actor.ID_HEADER, "operator@company.co.kr")
                 .header(Actor.ROLE_HEADER, "operator")
+                .header(OPERATOR_TOKEN_HEADER, "test-operator-token")
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build(),
             HttpResponse.BodyHandlers.ofString(),
@@ -269,4 +306,8 @@ class AuditEventApiTest : ApiTestSupport() {
         "maskDiffRef" to null,
         "rawPayload" to rawPayload,
     )
+
+    private companion object {
+        const val OPERATOR_TOKEN_HEADER = "X-Operator-Token"
+    }
 }
