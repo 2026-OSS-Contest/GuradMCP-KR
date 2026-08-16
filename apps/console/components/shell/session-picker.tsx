@@ -139,12 +139,14 @@ export function SessionPicker() {
         aria-controls={open && hasList ? LIST_ID : undefined}
         className={cn(
           // inline-flex keeps the label on the status bar's baseline (see the chips above).
-          "inline-flex h-8 items-center gap-2 rounded-lg bg-(--primitive-opacity-white-alpha-6) py-1 pr-1 pl-3 transition-colors hover:bg-white/10",
+          // The design fixes the trigger at 180px and lets the session id fill it, so the chevron
+          // sits at the right edge rather than drifting with the id's length.
+          "inline-flex h-8 w-45 items-center gap-2 rounded-lg bg-(--primitive-opacity-white-alpha-6) py-1 pr-1 pl-3 transition-colors hover:bg-white/10",
           open && "bg-white/10"
         )}
       >
         <span className="text-body-text-b3-md text-grayscale-200">{t("session")}</span>
-        <span className="text-body-text-b3-md">{selected ? `#${selected.id}` : "—"}</span>
+        <span className="min-w-0 flex-1 truncate text-left text-body-text-b3-md">{selected ? `#${selected.id}` : "—"}</span>
         <DropdownChevronIcon className={cn("size-6 flex-none transition-transform", open && "rotate-180")} aria-hidden />
       </button>
 

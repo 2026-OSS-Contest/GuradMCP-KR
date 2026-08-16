@@ -26,7 +26,7 @@ import { chromium } from "@playwright/test";
 import { pathToFileURL } from "node:url";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, globSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -147,10 +147,20 @@ const POSITION_TOLERANCE = 8;
 /* global document, getComputedStyle, NodeFilter, window */
 const SCRAPE = (side) => {
   const out = [];
-  const push = (text, el) => {
+  const push = (text, el, node) => {
     const clean = (text ?? "").replace(/\s+/g, " ").trim();
     if (!clean || !el) return;
-    const rect = el.getBoundingClientRect();
+    // Figma's TEXT node is the run itself, so the run is what has to be measured here too. The
+    // element around it is often a button or a padded cell, and measuring that compares a box
+    // against a word — `원문 열람` reads 142px out of place purely because its button is wider
+    // than the label. A range over the text node gives the same box Figma recorded.
+    let rect = el.getBoundingClientRect();
+    if (node) {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const ink = range.getBoundingClientRect();
+      if (ink.width && ink.height) rect = ink;
+    }
     if (!rect.width || !rect.height) return;
     const style = getComputedStyle(el);
     // Colour, and the box the run sits in, are anchored on the run itself — that is the one thing
@@ -184,7 +194,9 @@ const SCRAPE = (side) => {
       // Page coordinates: the draft's frame starts at 0,0 with the design's own width, and the app
       // is loaded at that same width, so the two origins line up without any further mapping.
       x: Math.round(rect.left + window.scrollX),
-      y: Math.round(rect.top + window.scrollY)
+      y: Math.round(rect.top + window.scrollY),
+      w: Math.round(rect.width),
+      h: Math.round(rect.height)
     });
   };
   const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
@@ -192,7 +204,7 @@ const SCRAPE = (side) => {
       node.parentElement?.closest("script, style, template") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
   });
   let node;
-  while ((node = walk.nextNode())) push(node.textContent, node.parentElement);
+  while ((node = walk.nextNode())) push(node.textContent, node.parentElement, node);
   // Copy a user reads that is not a text node. A placeholder is ordinary text in the draft, so
   // both sides need it. `alt` is app-only: the draft's images carry Figma layer names ("bg",
   // "Button/Solid", "Timeline_Rail/Node Marker") that no one reads, while the app's alt is what
@@ -242,7 +254,7 @@ const norm = (text) =>
     .replace(/\s+/g, " ")
     .trim();
 
-function compare(figma, app) {
+function compare(figma, app, geometry) {
   const appTexts = app.map((entry) => norm(entry.text));
   const figmaTexts = figma.map((entry) => norm(entry.text));
   // Each side also breaks a run wherever its own markup happens to — React splits `{speed}x`
@@ -283,18 +295,32 @@ function compare(figma, app) {
       if (f.box.background !== a.box.background) parts.push(["배경", f.box.background, a.box.background]);
       if (f.box.radius !== a.box.radius) parts.push(["radius", f.box.radius, a.box.radius]);
       if (f.box.padding !== a.box.padding) parts.push(["padding", f.box.padding, a.box.padding]);
-      // The box the run sits in: a chip that is 4px wider is a different chip. Same tolerance as
-      // position, since both are the draft rounding Figma's layout.
-      if (Math.abs(f.box.w - a.box.w) > POSITION_TOLERANCE || Math.abs(f.box.h - a.box.h) > POSITION_TOLERANCE) {
-        parts.push(["크기", `${f.box.w}×${f.box.h}`, `${a.box.w}×${a.box.h}`]);
-      }
+      // No size comparison here: the box comes from the draft, which inherits the draft's own
+      // layout errors. The run's own size is checked against the .json below instead.
       for (const [what, figmaValue, appValue] of parts) boxes.push({ text, what, figma: figmaValue, app: appValue });
     }
-    // A few pixels is the draft rounding Figma's own layout, not a misplacement worth reporting.
-    const dx = a.x - f.x;
-    const dy = a.y - f.y;
-    if (Math.abs(dx) > POSITION_TOLERANCE || Math.abs(dy) > POSITION_TOLERANCE) {
-      position.push({ text, figma: `${f.x},${f.y}`, app: `${a.x},${a.y}`, delta: `${dx >= 0 ? "+" : ""}${dx}, ${dy >= 0 ? "+" : ""}${dy}` });
+    // Position against Figma's own numbers, not the draft's. A few pixels is Figma rounding a
+    // fractional layout, not a misplacement worth reporting.
+    const g = geometry.filter((run) => norm(run.text) === text);
+    if (g.length === 1) {
+      const dx = a.x - Math.round(g[0].x);
+      const dy = a.y - Math.round(g[0].y);
+      // Only a HUG run's width is the width of its text; a FILL run's is the width of the box it
+      // was told to fill, which says nothing about the run the screen draws inside it.
+      if (
+        g[0].hug &&
+        (Math.abs(a.w - Math.round(g[0].w)) > POSITION_TOLERANCE || Math.abs(a.h - Math.round(g[0].h)) > POSITION_TOLERANCE)
+      ) {
+        boxes.push({ text, what: "크기", figma: `${Math.round(g[0].w)}×${Math.round(g[0].h)}`, app: `${a.w}×${a.h}` });
+      }
+      if (Math.abs(dx) > POSITION_TOLERANCE || Math.abs(dy) > POSITION_TOLERANCE) {
+        position.push({
+          text,
+          figma: `${Math.round(g[0].x)},${Math.round(g[0].y)}`,
+          app: `${a.x},${a.y}`,
+          delta: `${dx >= 0 ? "+" : ""}${dx}, ${dy >= 0 ? "+" : ""}${dy}`
+        });
+      }
     }
   }
   return { missing, sample, extra, type, color, boxes, position };
@@ -305,9 +331,14 @@ function compare(figma, app) {
  * reads as a wall. `--report <file>` writes the same run as a page grouped screen → state, so a
  * reviewer opens the state they care about and sees only its differences.
  */
-function renderReport(rows) {
+function renderReport(rows, mode) {
   const esc = (text) =>
-    String(text).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+    String(text)
+      .replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c])
+      // A run can carry U+FFFD when the Figma layer itself holds a broken character — SCR-401's
+      // 1920 frame has one where 이 should be. Marking it keeps the report publishable and keeps
+      // the corruption visible instead of quietly rendering as a box.
+      .replace(/\uFFFD/g, "▯");
   const screens = new Map();
   for (const row of rows) {
     const screen = row.frame.split("/")[0].toUpperCase();
@@ -350,11 +381,16 @@ function renderReport(rows) {
                  <img class="over" src="${row.figmaShot}" alt="프레임" loading="lazy" />
                  <span class="handle"></span>
                  <input type="range" min="0" max="100" value="50" aria-label="프레임과 화면 사이를 문질러 비교" />
-                 <figcaption><b>왼쪽 프레임</b> · <b>오른쪽 화면</b> — 손잡이를 드래그하세요. 사진을 누르면 두 장을 번갈아 깜빡입니다.</figcaption>
+                 <figcaption><b>왼쪽 피그마 원본</b> · <b>오른쪽 ${mode === "draft" ? "HTML 드래프트" : "화면"}</b> — 손잡이를 드래그하세요. 사진을 누르면 두 장을 번갈아 깜빡입니다.</figcaption>
                </figure>`
             : "";
           const inner =
-            list("빠진 문구 — 프레임에 있고 화면에 없음", "missing", row.missing, esc) +
+            list(
+              mode === "draft" ? "드래프트가 빠뜨린 문구" : "빠진 문구 — 프레임에 있고 화면에 없음",
+              "missing",
+              row.missing,
+              esc
+            ) +
             list("남는 문구 — 화면에 있고 프레임에 없음", "extra", row.extra, esc) +
             list("서체", "type", row.type, pair) +
             list("색", "color", row.color, pair) +
@@ -384,7 +420,7 @@ function renderReport(rows) {
     })
     .join("");
 
-  return `<title>프레임 대조 리포트</title>
+  return `<title>${mode === "draft" ? "드래프트 충실도 대조" : "프레임 대조 리포트"}</title>
 <style>
 :root{--bg:#fff;--fg:#16191d;--muted:#5b6472;--line:#e4e7ec;--card:#f7f8fa;--miss:#c2410c;--extra:#0369a1;--type:#7c3aed;--ok:#15803d}
 :root:not([data-theme="light"]){@media (prefers-color-scheme:dark){--bg:#0f1115;--fg:#e8eaed;--muted:#98a2b3;--line:#252a33;--card:#171a20;--miss:#fb923c;--extra:#38bdf8;--type:#c4b5fd;--ok:#4ade80}}
@@ -427,11 +463,13 @@ li{margin:.15rem 0;font-size:.9rem;overflow-wrap:anywhere}
 .cmp figcaption{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.66);color:#fff;font-size:.75rem;padding:.3rem .6rem;pointer-events:none}
 </style>
 <div class="wrap">
-<h1>피그마 프레임 대조 리포트</h1>
-<p class="sub"><b>${rows.length}개 상태 · 고쳐야 할 차이 ${total}건.</b>
+<h1>${mode === "draft" ? "피그마 원본 ↔ HTML 드래프트 대조" : "피그마 프레임 대조 리포트"}</h1>
+<p class="sub"><b>${rows.length}개 ${mode === "draft" ? "프레임" : "상태"} · 고쳐야 할 차이 ${total}건.</b>
 서체 · 색 · radius · 배경색 · 문구는 데이터가 바뀌어도 움직이지 않는 속성이라 그대로 믿으셔도 됩니다.<br />
 아래로 접어 둔 <b>크기 · padding · 위치 ${softTotal}건</b>과 <b>샘플 데이터 ${samples}건</b>은 목 데이터가 디자인 샘플과 달라서 생기는 잡음이 섞여 있습니다.
-문구는 <code>messages/ko.json</code>에 있으면 화면 문구, 없으면 목 데이터로 갈랐습니다.</p>
+${mode === "draft"
+  ? "여기서는 콘솔이 등장하지 않습니다 — 브리지 생성기가 피그마를 얼마나 충실히 재현하는지만 잽니다. 기준은 전부 <code>.json</code>에 적힌 피그마 자신의 숫자입니다."
+  : "문구는 <code>messages/ko.json</code>에 있으면 화면 문구, 없으면 목 데이터로 갈랐습니다."}</p>
 ${body}
 </div>
 <script>
@@ -451,11 +489,103 @@ for (const cmp of document.querySelectorAll(".cmp")) {
 </script>`;
 }
 
+/**
+ * Draft mode: the exported .png against the .html the bridge generated from the same Figma tree.
+ * Neither side is the console, so this measures one thing only — how faithfully the generator
+ * reproduces what Figma drew. That matters because AGENTS.md makes the .html the authority for
+ * styling when matching a screen to its frames: a draft that is wrong sends every review after it
+ * wrong too, and the wrapped `#s-0712` is what that looks like.
+ *
+ * The .json is the reference on both axes here, since it carries Figma's own numbers: x/y/w/h for
+ * position and size, font/fontSize for type, fills[0].hex for colour.
+ */
+async function compareDrafts(browser, files) {
+  const rows = [];
+  for (const file of files) {
+    const jsonFile = file.replace(/\.html$/, ".json");
+    const png = file.replace(/\.html$/, ".png");
+    if (!existsSync(jsonFile) || !existsSync(png)) continue;
+    const frame = (({ w, h }) => ({ w: Math.round(w / 2), h: Math.round(h / 2) }))(pngSize(png));
+    const geometry = figmaGeometry(jsonFile);
+
+    const context = await browser.newContext({ viewport: { width: Math.max(frame.w, 800), height: Math.max(frame.h, 600) } });
+    const page = await context.newPage();
+    await page.goto(pathToFileURL(file).href);
+    await page.waitForTimeout(300);
+    const draft = await page.evaluate(SCRAPE, "figma");
+    const draftShot = await shoot(page, page.locator("body > div").first());
+    const figmaShot = await shootPng(page, png, frame.w, frame.h);
+    await context.close();
+
+    const once = (list, text) => list.filter((entry) => norm(entry.text) === text).length === 1;
+    const missing = [];
+    const position = [];
+    const boxes = [];
+    const type = [];
+    const color = [];
+    for (const run of geometry) {
+      const text = norm(run.text);
+      if (!text || VOLATILE.test(text)) continue;
+      if (!draft.some((entry) => norm(entry.text) === text)) {
+        missing.push(text);
+        continue;
+      }
+      if (!once(geometry, text) || !once(draft, text)) continue;
+      const d = draft.find((entry) => norm(entry.text) === text);
+      const dx = d.x - Math.round(run.x);
+      const dy = d.y - Math.round(run.y);
+      if (Math.abs(dx) > POSITION_TOLERANCE || Math.abs(dy) > POSITION_TOLERANCE) {
+        position.push({
+          text,
+          figma: `${Math.round(run.x)},${Math.round(run.y)}`,
+          app: `${d.x},${d.y}`,
+          delta: `${dx >= 0 ? "+" : ""}${dx}, ${dy >= 0 ? "+" : ""}${dy}`
+        });
+      }
+      if (run.hug && (Math.abs(d.w - Math.round(run.w)) > POSITION_TOLERANCE || Math.abs(d.h - Math.round(run.h)) > POSITION_TOLERANCE)) {
+        boxes.push({ text, what: "크기", figma: `${Math.round(run.w)}×${Math.round(run.h)}`, app: `${d.w}×${d.h}` });
+      }
+      if (run.size && `${run.size}px` !== d.size) type.push({ text, figma: `${run.family ?? "?"} ${run.size}px`, app: `${d.family} ${d.size}` });
+      if (run.hex && run.alpha === 1) {
+        const hex = rgbToHex(d.color);
+        if (hex && hex.toLowerCase() !== run.hex.toLowerCase()) color.push({ text, figma: run.hex, app: hex });
+      }
+    }
+    rows.push({
+      frame: file.split("/out/")[1].replace(/\/[^/]+\.html$/, ""),
+      state: file.split("/").at(-2),
+      path: "(draft)",
+      width: frame.w,
+      missing,
+      sample: [],
+      extra: [],
+      type,
+      color,
+      boxes,
+      position,
+      figmaShot,
+      appShot: draftShot,
+      shotW: frame.w,
+      shotH: frame.h
+    });
+    const n = missing.length + position.length + boxes.length + type.length + color.length;
+    console.log(`${n ? String(n).padStart(4) : "   ✓"}  ${rows.at(-1).frame}`);
+  }
+  return rows;
+}
+
+/** `rgb(r, g, b)` as `#rrggbb`, so a computed colour can be held against Figma's own hex. */
+function rgbToHex(value) {
+  const m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(value ?? "");
+  return m ? "#" + [1, 2, 3].map((i) => Number(m[i]).toString(16).padStart(2, "0")).join("") : null;
+}
+
 const REPORT = (() => {
   const i = process.argv.indexOf("--report");
   return i > -1 ? process.argv[i + 1] : null;
 })();
-const only = process.argv[2] && process.argv[2] !== "--report" ? process.argv[2] : null;
+const only = process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : null;
+const DRAFTS = process.argv.includes("--drafts");
 const selected = only ? FRAMES.filter((f) => f.frame.includes(only)) : FRAMES;
 if (!selected.length) {
   console.error(`No frame matches "${only}".`);
@@ -467,6 +597,40 @@ if (!selected.length) {
 async function shoot(page, locator, clip) {
   const buffer = await (locator ?? page).screenshot({ type: "jpeg", quality: 55, ...(clip ? { clip } : {}) });
   return `data:image/jpeg;base64,${buffer.toString("base64")}`;
+}
+
+/**
+ * Every text run in the .json, with the position and size Figma recorded, in frame coordinates.
+ *
+ * Geometry comes from here rather than from the rendered .html on purpose. AGENTS.md already
+ * splits the three files this way — .json answers geometry, .html answers styling — and the
+ * reason shows up the moment you measure: the draft lays SCR-301's timeline column out at 361px
+ * where Figma records 429, so every run in the panel beside it reads 68px out of place. The screen
+ * is at 429. Comparing against the draft would have filed that as the screen's fault.
+ */
+function figmaGeometry(file) {
+  const root = JSON.parse(readFileSync(file, "utf8"));
+  const runs = [];
+  (function walk(node, ax, ay) {
+    const x = ax + (node.x ?? 0);
+    const y = ay + (node.y ?? 0);
+    if (node.type === "TEXT" && node.text) {
+      runs.push({
+        text: node.text.replace(/\s+/g, " ").trim(),
+        x,
+        y,
+        w: node.w,
+        h: node.h,
+        hug: node.sizing?.h === "HUG",
+        size: node.fontSize,
+        family: node.font?.family,
+        hex: node.fills?.[0]?.hex,
+        alpha: node.fills?.[0]?.a
+      });
+    }
+    for (const child of node.children ?? []) walk(child, x, y);
+  })(root, -(root.x ?? 0), -(root.y ?? 0));
+  return runs;
 }
 
 /** The PNG's own pixel size, straight out of the IHDR chunk. */
@@ -496,6 +660,21 @@ async function shootPng(page, file, width, height) {
 }
 
 const browser = await chromium.launch();
+
+if (DRAFTS) {
+  const files = globSync(resolve(OUT, "*", "*", "*.html"))
+    .filter((file) => !only || file.includes(only))
+    .sort();
+  console.log(`${files.length} drafts\n`);
+  const rows = await compareDrafts(browser, files);
+  await browser.close();
+  if (REPORT) {
+    await writeFile(REPORT, renderReport(rows, "draft"), "utf8");
+    console.log(`\nreport written to ${REPORT}`);
+  }
+  process.exit(0);
+}
+
 const report = [];
 let frames = 0;
 let findings = 0;
@@ -506,22 +685,27 @@ for (const entry of selected) {
     console.log(`\n## ${entry.frame}\n   (no export on disk — run the Figma export first)`);
     continue;
   }
-  const context = await browser.newContext({ viewport: { width: Math.max(entry.width, 1280), height: 1400 } });
+  // The frame's own size, from the 2x .png. The screen has to be laid out in exactly that
+  // viewport: the console's screens are full-height flex, so giving the browser a taller window
+  // than the design hands every column extra height to distribute and moves everything below the
+  // fold — a difference in the run that is the measurement's fault, not the screen's.
+  const png = file.replace(/\.html$/, ".png");
+  const frame = existsSync(png)
+    ? (({ w, h }) => ({ w: Math.round(w / 2), h: Math.round(h / 2) }))(pngSize(png))
+    : { w: entry.width, h: 1024 };
+  const shotBox = REPORT && existsSync(png) ? frame : null;
+
+  const geometryFile = file.replace(/\.html$/, ".json");
+  const geometry = existsSync(geometryFile) ? figmaGeometry(geometryFile) : [];
+
+  const context = await browser.newContext({ viewport: { width: Math.max(frame.w, 1280), height: frame.h } });
   const page = await context.newPage();
 
   await page.goto(pathToFileURL(file).href);
   await page.waitForTimeout(300);
   const figma = await page.evaluate(SCRAPE, "figma");
-  // The draft's frame is a fixed-size box at 0,0, so shooting it and then shooting the screen
-  // clipped to the same box gives two images that overlay pixel for pixel — which is what makes
-  // a wipe between them readable at all.
-  // The .png is the authority for what the frame looks like; its half-size is the box both
-  // images are shown at, so they overlay exactly.
-  const png = file.replace(/\.html$/, ".png");
-  const shotBox =
-    REPORT && existsSync(png) ? (({ w, h }) => ({ w: Math.round(w / 2), h: Math.round(h / 2) }))(pngSize(png)) : null;
 
-  await page.setViewportSize({ width: entry.width, height: 1400 });
+  await page.setViewportSize({ width: frame.w, height: frame.h });
   if (entry.scenario) {
     await page.goto(`${BASE}/`);
     await page.evaluate((name) => localStorage.setItem("guardmcp.mock-scenario", name), entry.scenario);
@@ -534,7 +718,7 @@ for (const entry of selected) {
   const appShot = shotBox ? await shoot(page, null, { x: 0, y: 0, width: shotBox.w, height: shotBox.h }) : null;
   const figmaShot = shotBox ? await shootPng(page, png, shotBox.w, shotBox.h) : null;
 
-  const result = compare(figma, app);
+  const result = compare(figma, app, geometry);
   const { missing, sample, extra, type, color, boxes, position } = result;
   report.push({ ...entry, state: entry.frame.split('/').pop(), ...result, figmaShot, appShot, shotW: shotBox && shotBox.w, shotH: shotBox && shotBox.h });
   frames += 1;
