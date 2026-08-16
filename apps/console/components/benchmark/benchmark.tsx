@@ -90,8 +90,12 @@ export function Benchmark() {
               <ResultPanel report={report.data} checks={rows.length} command={COMMAND} />
             ) : (
               // Before the run there is nothing to report, and saying so is better than an
-              // empty column the reader has to interpret.
-              <p className="flex min-h-40 flex-1 items-center justify-center rounded-(--primitive-radius-rounded-2xl) bg-(--primitive-opacity-white-alpha-6) p-6 text-center text-body-text-b3-md text-grayscale-400">
+              // empty column the reader has to interpret. While the run is on, the same
+              // `Proto/Shimmer` sweep SCR-201's panes use says the column is waiting on it.
+              <p className="relative flex min-h-40 flex-1 items-center justify-center overflow-hidden rounded-(--primitive-radius-rounded-2xl) bg-(--primitive-opacity-white-alpha-6) p-6 text-center text-body-text-b3-md text-grayscale-400">
+                {state === "running" && (
+                  <span className="pane-shimmer motion-reduce:animate-none pointer-events-none absolute inset-0" aria-hidden />
+                )}
                 {t(state === "running" ? "measuring" : "idle")}
               </p>
             )}
