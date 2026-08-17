@@ -176,6 +176,10 @@ because both are only wanted for a deploy — apply them, deploy, then revert.
    `msw` is a devDependency, which is fine — Vercel installs devDependencies — and
    `public/mockServiceWorker.js` is committed, so nothing else is needed.
 
+   Widening this gate does **not** bring the scenario switcher with it: the floating flask is
+   gated on `SHOW_SCENARIO_SWITCHER`, which tests `NODE_ENV === "development"` on its own. A
+   deployed mock build serves the mocks and draws no dev control over them.
+
 - Setting `NEXT_PUBLIC_API_BASE_URL` switches the mocks off no matter what else is set; leave it
   unset for a mock-backed deploy.
 - Verify a deploy by loading it and checking that `/api/v1/overview` answers **200**. The app
