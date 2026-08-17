@@ -6,7 +6,9 @@ export const SCENARIOS: readonly ScenarioId[] = ["full", "empty", "offline"];
 const STORAGE_KEY = "guardmcp.mock-scenario";
 
 /** Mock the API only in development, and only when no real backend is configured. */
-export const MOCK_API = process.env.NODE_ENV === "development" && !process.env.NEXT_PUBLIC_API_BASE_URL;
+const MOCKS_WANTED =
+  process.env.NODE_ENV === "development" || process.env.NEXT_PUBLIC_ENABLE_MOCK_API === "1";
+export const MOCK_API = MOCKS_WANTED && !process.env.NEXT_PUBLIC_API_BASE_URL;
 
 /**
  * Whether the scenario switcher may draw itself.
