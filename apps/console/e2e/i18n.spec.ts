@@ -13,7 +13,14 @@ import ko from "../messages/ko.json";
 
 /** Anchors have to survive the switch, so each is a role or a marker rather than a translated string. */
 const SCREENS = [
-  { scr: "SCR-101", path: "/", anchor: (page: Page) => page.locator('[data-scr="SCR-101"]') },
+  // The recent-event feed prints tool arguments — a search query, a path, a recipient — which
+  // are data in whatever language the operator's own systems speak, not copy to translate.
+  {
+    scr: "SCR-101",
+    path: "/",
+    anchor: (page: Page) => page.locator('[data-scr="SCR-101"]'),
+    except: '[data-scr="SCR-101"] [role="log"]'
+  },
   { scr: "SCR-201", path: "/demo", anchor: (page: Page) => page.locator('[data-scr="SCR-201"]') },
   { scr: "SCR-301", path: "/replay", anchor: (page: Page) => page.locator('[data-scr="SCR-301"]') },
   // SCR-302 carries no marker; "YAML" is the one heading the two bundles spell the same way.

@@ -18,11 +18,12 @@ test("GMCP-21 a streamed guard.event's own payload renders, not a stale placehol
 
   await expect(async () => expect(await rows.count()).toBeGreaterThan(seeded)).toPass({ timeout: 12_000 });
 
-  // The mock's first push on a fresh connection is always LIVE_SEED[0] (mocks/data.ts): a
-  // blocked read_file of credentials.json.
+  // The stream replays the live session's own verdicts rather than inventing events no other
+  // screen has (mocks/data.ts), so the first push is that session's newest one: the mail held
+  // for approval (GMCP-117).
   const streamed = rows.first();
-  await expect(streamed).toContainText("read_file");
-  await expect(streamed).toContainText("credentials.json");
+  await expect(streamed).toContainText("send_email");
+  await expect(streamed).toContainText("dae-eun.jung@example.co.kr");
   await expect(streamed.getByRole("link")).toHaveAttribute("href", /\/replay\/s-0712\?event=evt-live-0$/);
 });
 

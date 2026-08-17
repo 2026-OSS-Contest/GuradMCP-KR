@@ -15,7 +15,8 @@ test("GMCP-21 a blocked event on the home page deep-links into its Replay detail
   await expect(blocked).toBeVisible();
 
   await blocked.click();
-  await expect(page).toHaveURL(/\/replay\/s-0712\?event=evt-6012$/);
+  // The row carries the node's own id, so the link opens the very verdict it named (GMCP-117).
+  await expect(page).toHaveURL(/\/replay\/s-0712\?event=e6$/);
 
   // The session named in the deep link is auto-selected … (anchored: the status bar's own
   // "세션 #s-0712" picker button would otherwise also match).
@@ -45,5 +46,7 @@ test("GMCP-21 running an attack on SCR-201 shows the block and leads to its Repl
   // Replay 확인: the run's summary strip leads to the session it was recorded in.
   await page.getByRole("link", { name: /Replay에서 보기/ }).click();
   await expect(page).toHaveURL(/\/replay\/s-0712$/);
+  // The session opens on its first verdict; the block this run demonstrated is two nodes on.
+  await page.getByRole("log").getByRole("button", { name: /block_env_file_read/ }).click();
   await expect(page.getByTestId("event-detail").getByText("read_file")).toBeVisible();
 });

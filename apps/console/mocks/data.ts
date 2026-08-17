@@ -1,141 +1,18 @@
-// Sample payloads for the mock API, reproducing the SCR-101 Figma frames so the screen can be
-// diffed against the design. Values the screen cannot derive are literals straight from the
-// design; server and tool counts are derived from the fixture below.
+// SCR-101 fixtures: the KPI row, the server inventory, and the recent-event feed.
+//
+// None of it is invented any more (GMCP-117). The servers come from `mocks/demo-story.ts`, which
+// mirrors the control plane's own seed and the tools `apps/demo-mcp-tools` actually serves; the
+// events are the verdicts of the sessions on SCR-301, read straight off the same story, so a row
+// here always opens onto a timeline that contains it.
 
-import type { McpServer, Overview, SecurityEvent, SnapshotStatus } from "@/lib/api/types";
+import type { McpServer, Overview, SecurityEvent } from "@/lib/api/types";
 import { pendingCount } from "./approvals";
+import { ACTIVE_POLICY_IDS, LIVE_SESSION_ID, SERVERS, STORIES, stepAt } from "./demo-story";
+
+export { SERVERS };
 
 export const POLICY_PACKS = ["default", "korean-pii"];
 
-/** Every fixture tool but `write_file` has always matched its (never-shown) approved
- *  baseline — FR-GW-03 §6.1's `in_sync` state. */
-const IN_SYNC: SnapshotStatus = {
-  state: "in_sync",
-  snapshotCapturedAt: "2026-07-01T00:00:00Z",
-  lastCheckedAt: "2026-08-02T03:00:00Z",
-  pendingDiffCount: 0,
-  latestDiffId: null,
-};
-
-export const SERVERS: McpServer[] = [
-  {
-    id: "file-server",
-    name: "file_server",
-    endpoint: "http://file-mcp:8801/sse",
-    connected: true,
-    trust: "limited",
-    tools: [
-      {
-        name: "read_file",
-        risk: "high",
-        policies: [
-          "block_env_file_read",
-          "mask_secret_in_file",
-          "audit_file_read",
-        ],
-        snapshotStatus: IN_SYNC,
-      },
-      {
-        name: "write_file",
-        risk: "medium",
-        policies: ["deny_system_path_write"],
-        snapshotStatus: {
-          state: "drift_detected",
-          snapshotCapturedAt: "2026-07-20T09:00:00Z",
-          lastCheckedAt: "2026-08-02T03:00:00Z",
-          pendingDiffCount: 1,
-          latestDiffId: "9f2b0000-0000-4000-8000-000000000001",
-        },
-      },
-      {
-        name: "list_directory",
-        risk: "low",
-        policies: ["audit_directory_list"],
-        snapshotStatus: IN_SYNC,
-      },
-    ],
-  },
-  {
-    id: "mail-server",
-    name: "mail_server",
-    endpoint: "http://mail-mcp:8802/sse",
-    connected: true,
-    trust: "trusted",
-    tools: [
-      {
-        name: "send_email",
-        risk: "high",
-        policies: ["approve_external_email_with_secret", "mask_kr_pii"],
-        snapshotStatus: IN_SYNC,
-      },
-      {
-        name: "list_messages",
-        risk: "low",
-        policies: ["mask_kr_pii"],
-        snapshotStatus: IN_SYNC,
-      },
-      {
-        name: "read_message",
-        risk: "medium",
-        policies: ["mask_kr_pii"],
-        snapshotStatus: IN_SYNC,
-      },
-      {
-        name: "delete_message",
-        risk: "medium",
-        policies: [],
-        snapshotStatus: IN_SYNC,
-      },
-    ],
-  },
-  {
-    id: "db-server",
-    name: "db_server",
-    endpoint: "http://db-mcp:8803/sse",
-    connected: false,
-    trust: "untrusted",
-    tools: [
-      {
-        name: "db_query",
-        risk: "high",
-        policies: ["mask_kr_pii", "block_bulk_export"],
-        snapshotStatus: IN_SYNC,
-      },
-      {
-        name: "db_execute",
-        risk: "high",
-        policies: ["block_bulk_export"],
-        snapshotStatus: IN_SYNC,
-      },
-      {
-        name: "list_tables",
-        risk: "low",
-        policies: [],
-        // FR-GW-03 §6.1/§6.3: the operator acknowledged (dismissed) the one diff below, but
-        // never re-approved — the baseline still doesn't cover the current definition, so
-        // this is deliberately not `in_sync`. See `mocks/tool-diffs.ts`'s matching seed.
-        // Placed on the disconnected server so SCR-501's "연결 끊김" label (gated on
-        // `server.connected`, not tool state) isn't affected by this fixture.
-        snapshotStatus: {
-          state: "drift_acknowledged",
-          snapshotCapturedAt: "2026-07-15T00:00:00Z",
-          lastCheckedAt: "2026-08-02T03:00:00Z",
-          pendingDiffCount: 0,
-          latestDiffId: null,
-        },
-      },
-      {
-        name: "describe_table",
-        risk: "low",
-        policies: [],
-        snapshotStatus: IN_SYNC,
-      },
-    ],
-  },
-];
-
-/** Mock stand-in for the control plane's upgrade-impact estimate (FR-GW-02 §5.1) — the count of
- * policies currently applied to this server's tools, shown in the upgrade confirmation modal. */
 export function affectedPolicyCount(serverId: string): number {
   const server = SERVERS.find((candidate) => candidate.id === serverId);
   if (!server) return 0;
@@ -143,6 +20,11 @@ export function affectedPolicyCount(serverId: string): number {
 }
 
 
+/**
+ * Every KPI is counted from what the other screens show. `protectedTools` used to read 17 beside
+ * an inventory of 11, and `policies.active` 24 beside a table of 5 (GMCP-117): numbers a judge
+ * can subtract are numbers a judge will subtract.
+ */
 export function overviewOf(servers: McpServer[]): Overview {
   const disconnected = servers.filter((server) => !server.connected).length;
   return {
@@ -151,108 +33,85 @@ export function overviewOf(servers: McpServer[]): Overview {
     // this case, and `degraded` is reserved for the gateway saying so.
     status: "protected",
     servers: { total: servers.length, disconnected },
-    // Server-side aggregate in the real API — the inventory only lists the servers on screen.
-    protectedTools: 17,
-    policies: { active: 24, packs: POLICY_PACKS },
-    blocked24h: 6,
+    protectedTools: servers.reduce((total, server) => total + server.tools.length, 0),
+    policies: { active: ACTIVE_POLICY_IDS.length, packs: POLICY_PACKS },
+    blocked24h: blockedInLast24h(),
     pendingApprovals: pendingCount(),
   };
+}
+
+/** Blocks the story actually contains, counted rather than stated. */
+function blockedInLast24h(): number {
+  const since = Date.now() - 24 * 60 * 60 * 1_000;
+  return STORIES.flatMap((story) =>
+    story.steps
+      .filter((step) => step.verdict === "block")
+      .filter((step) => Date.parse(stepAt(story, step)) >= since)
+  ).length;
 }
 
 export const EMPTY_OVERVIEW: Overview = {
   status: "protected",
   servers: { total: 0, disconnected: 0 },
   protectedTools: 0,
-  policies: { active: 24, packs: POLICY_PACKS },
+  policies: { active: ACTIVE_POLICY_IDS.length, packs: POLICY_PACKS },
   blocked24h: 0,
   pendingApprovals: 0,
 };
 
-/** Ages are relative to request time so "방금 전" stays true however long the tab is open. */
-const AGES_MS = [
-  20_000,
-  60_000,
-  4 * 60_000,
-  6 * 60_000,
-  32 * 60_000,
-  60 * 60_000,
-];
+/**
+ * The feed is the story's verdicts, newest first — the same events SCR-301 replays. A row's
+ * `sessionId` and the tool it names therefore always resolve: deep-linking from here lands on a
+ * node that exists, which the hand-written seed this replaces could not promise.
+ */
+/** What `GET /events/recent` answers with by default — the design's list is a window, not a log. */
+const RECENT_LIMIT = 8;
 
 export function recentEvents(): SecurityEvent[] {
-  const now = Date.now();
-  const seed: Omit<SecurityEvent, "at">[] = [
-    {
-      id: "evt-6012",
-      sessionId: "s-0712",
-      verdict: "block",
-      tool: "read_file",
-      target: ".env",
-    },
-    {
-      id: "evt-6011",
-      sessionId: "s-0712",
-      verdict: "require_approval",
-      tool: "send_email",
-      target: "external@example.com",
-    },
-    {
-      id: "evt-6010",
-      sessionId: "s-0712",
-      verdict: "warn",
-      tool: "fetch_url",
-      target: "docs.example.com",
-    },
-    {
-      id: "evt-6009",
-      sessionId: "s-0711",
-      verdict: "allow",
-      tool: "list_directory",
-    },
-    {
-      id: "evt-6008",
-      sessionId: "s-0711",
-      verdict: "block",
-      tool: "read_file",
-      target: "id_rsa",
-    },
-    { id: "evt-6007", sessionId: "s-0710", verdict: "allow", tool: "db_query" },
-  ];
-  return seed.map((event, index) => ({
-    ...event,
-    at: new Date(now - AGES_MS[index]).toISOString(),
-  }));
+  return STORIES.flatMap((story) =>
+    story.steps
+      .filter((step) => step.verdict)
+      .map((step) => {
+        // A verdict node carries no tool of its own; the call it judged is the step before it.
+        const call = [...story.steps]
+          .slice(0, story.steps.indexOf(step))
+          .reverse()
+          .find((candidate) => candidate.type === "TOOL_CALL");
+        return {
+          // The node's own id: a row here deep-links to `?event=<id>`, and the replay screen
+          // looks that id up in the timeline. Anything else and the link opens onto nothing.
+          id: step.id,
+          sessionId: story.sessionId,
+          verdict: step.verdict!,
+          tool: call?.toolName ?? "gateway",
+          ...(targetOf(call?.argsJson) ? { target: targetOf(call?.argsJson) } : {}),
+          at: stepAt(story, step)
+        };
+      })
+  )
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+    .slice(0, RECENT_LIMIT);
 }
 
-// Rotated through by the SSE stream so each pushed event is a distinct, fresh-looking row.
-const LIVE_SEED: Omit<SecurityEvent, "at" | "id">[] = [
-  {
-    sessionId: "s-0712",
-    verdict: "block",
-    tool: "read_file",
-    target: "credentials.json",
-  },
-  {
-    sessionId: "s-0712",
-    verdict: "warn",
-    tool: "fetch_url",
-    target: "pastebin.com",
-  },
-  {
-    sessionId: "s-0713",
-    verdict: "require_approval",
-    tool: "send_email",
-    target: "ceo@partner.example",
-  },
-  {
-    sessionId: "s-0713",
-    verdict: "allow",
-    tool: "list_directory",
-    target: "/etc",
-  },
-];
+/** The one argument worth showing beside the tool name: a path, a recipient, a URL, a query. */
+function targetOf(argsJson: string | undefined): string | undefined {
+  if (!argsJson) return undefined;
+  try {
+    const args = JSON.parse(argsJson) as Record<string, string>;
+    return args.path ?? args.to ?? args.url ?? args.query;
+  } catch {
+    return undefined;
+  }
+}
 
-/** A new event for the live stream (spec §5.1 no.5), stamped now so it sorts to the top. */
+/**
+ * A new event for the live stream (spec §5.1 no.5), stamped now so it sorts to the top.
+ *
+ * The stream replays the live session's own verdicts rather than inventing sessions the replay
+ * screen has never heard of — `s-0713` used to appear here and nowhere else.
+ */
 export function liveEvent(seq: number): SecurityEvent {
-  const base = LIVE_SEED[seq % LIVE_SEED.length];
+  const feed = recentEvents().filter((event) => event.sessionId === LIVE_SESSION_ID);
+  const base = feed[seq % feed.length];
   return { ...base, id: `evt-live-${seq}`, at: new Date().toISOString() };
 }

@@ -8,50 +8,59 @@ test("GMCP-50 SCR-402 lists the held calls with their evidence", async ({ page }
   await page.goto("/approvals");
 
   await expect(page.getByRole("button", { name: /대기열/ })).toHaveAttribute("aria-current", "page");
-  const card = page.getByRole("article").first();
+  // Both held calls are `send_email`: in the packs as shipped, nothing else can be held for
+  // approval — both external-mail policies match `tool: send_email` and the untrusted backstop
+  // matches `send_*`. The recipient is what tells them apart.
+  const card = page.getByRole("article").filter({ hasText: "dae-eun.jung@example.co.kr" });
   await expect(card.getByText("send_email")).toBeVisible();
-  await expect(card.getByText("external@example.com")).toBeVisible();
   await expect(card.getByText("SECRET 1건")).toBeVisible();
-  await expect(card.getByText("92")).toBeVisible();
+  await expect(card.getByText("78")).toBeVisible();
   await expect(card.getByText("approve_external_email_with_secret")).toBeVisible();
 
   // The mask preview shows what would go out beside what would be sent instead.
-  await expect(card.getByText("010-4728-1953")).toBeVisible();
-  await expect(card.getByText("BANK_ACCOUNT")).toBeVisible();
+  await expect(card.getByText("sk-DEMO000000000000000000000000000000FAKE")).toBeVisible();
+  await expect(card.getByText("SECRET_LLM_API_KEY")).toBeVisible();
 });
 
 test("SCR-402 approving masked moves the call into the history", async ({ page }) => {
   await page.goto("/approvals");
-  const card = page.getByRole("article").filter({ hasText: "send_email" });
+  const card = page.getByRole("article").filter({ hasText: "dae-eun.jung@example.co.kr" });
   await card.getByRole("button", { name: /마스킹 후 승인/ }).click();
 
   // It leaves the queue.
   await expect(card).toBeHidden();
 
+  // The seeded history already holds one 마스킹 후 승인 (the hour-old call from #s-0711, decided
+  // by an operator who was named), so this one is the second — and the one with no 처리자.
   await page.getByRole("button", { name: "처리 이력" }).click();
-  const row = page.getByRole("row").filter({ hasText: "send_email" });
-  await expect(row.getByText("마스킹 후 승인")).toBeVisible();
+  const rows = page.getByRole("row").filter({ hasText: "send_email" });
+  await expect(rows.getByText("마스킹 후 승인")).toHaveCount(2);
   // 처리자 is blank: `decidedBy` is optional on the wire and the console has no operator identity
   // to send, so a decision made here names nobody — the same as against a real gateway.
-  await expect(row.getByText("–")).toBeVisible();
+  await expect(rows.filter({ hasText: "–" })).toHaveCount(1);
 });
 
 test("SCR-402 the three decisions are available from the keyboard", async ({ page }) => {
   await page.goto("/approvals");
-  await expect(page.getByRole("article").filter({ hasText: "send_email" })).toBeVisible();
+  const partnerMail = page.getByRole("article").filter({ hasText: "dae-eun.jung@example.co.kr" });
+  const vendorMail = page.getByRole("article").filter({ hasText: "newsletter@vendor.example" });
+  await expect(partnerMail).toBeVisible();
 
   // B / M / A resolve the call at the top of the queue without reaching for the mouse (§5.6).
   await page.keyboard.press("b");
-  await expect(page.getByRole("article").filter({ hasText: "send_email" })).toBeHidden();
+  await expect(partnerMail).toBeHidden();
 
   // M masks the next one, so both letters are covered against a stray remap.
-  await expect(page.getByRole("article").filter({ hasText: "fetch_url" })).toBeVisible();
+  await expect(vendorMail).toBeVisible();
   await page.keyboard.press("m");
-  await expect(page.getByRole("article").filter({ hasText: "fetch_url" })).toBeHidden();
+  await expect(vendorMail).toBeHidden();
 
+  // The history names the tool and the decision, not the recipient, and both calls are
+  // `send_email` — so the two decisions are asserted as a pair rather than per row.
   await page.getByRole("button", { name: "처리 이력" }).click();
-  await expect(page.getByRole("row").filter({ hasText: "send_email" }).getByText("차단")).toBeVisible();
-  await expect(page.getByRole("row").filter({ hasText: "fetch_url" }).getByText("마스킹 후 승인")).toBeVisible();
+  const history = page.getByRole("row").filter({ hasText: "send_email" });
+  await expect(history.getByText("차단")).toHaveCount(1);
+  await expect(history.getByText("마스킹 후 승인")).toHaveCount(2);
 });
 
 test("SCR-402 a call that runs out of time says so before it leaves", async ({ page }) => {
@@ -68,7 +77,8 @@ test("SCR-402 a call that runs out of time says so before it leaves", async ({ p
 
 test("SCR-402 reports a call another operator already handled", async ({ page }) => {
   await page.goto("/approvals");
-  await expect(page.getByRole("article").filter({ hasText: "send_email" })).toBeVisible();
+  const card = page.getByRole("article").filter({ hasText: "dae-eun.jung@example.co.kr" });
+  await expect(card).toBeVisible();
 
   // Stand in for the other operator by resolving it straight through the API. It has to be this
   // page: MSW answers from the handler module of whichever page made the request, so a second
@@ -84,7 +94,7 @@ test("SCR-402 reports a call another operator already handled", async ({ page })
   expect(status).toBe(200);
 
   // The card is still on screen here, so deciding it now conflicts — 409, reported not retried.
-  await page.getByRole("article").filter({ hasText: "send_email" }).getByRole("button", { name: /마스킹 후 승인/ }).click();
+  await card.getByRole("button", { name: /마스킹 후 승인/ }).click();
   await expect(page.getByText("다른 처리자가 이미 처리했습니다.")).toBeVisible();
 });
 

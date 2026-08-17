@@ -1,231 +1,119 @@
-// SCR-301 Replay fixtures, reproducing the Figma frames: the session list and the #s-0712
-// timeline. These are shaped as the real GMCP-28 wire contract (`Api*` types) — the same JSON
-// services/control-plane returns — so `lib/api/replay-adapter.ts` runs identically against the
-// mock and a real backend, and dev mode never drifts from what prod actually serves.
+// SCR-301 Replay fixtures. These are shaped as the real GMCP-28 wire contract (`Api*` types) —
+// the same JSON services/control-plane returns — so `lib/api/replay-adapter.ts` runs identically
+// against the mock and a real backend, and dev mode never drifts from what prod actually serves.
+//
+// The sessions themselves come from `mocks/demo-story.ts`: one incident that every screen tells
+// the same way (GMCP-117). Nothing session-shaped is defined here any more — this file only
+// turns the story into wire nodes, and derives the session list from those nodes so a count on
+// the list can never disagree with the timeline behind it.
 
 import type {
   ApiEventLookupResponse,
   ApiSessionSummary,
   ApiSessionTimelineResponse,
   ApiTimelineNode,
-  ContentLine,
-  RevealContent
+  RevealContent,
+  Verdict
 } from "@/lib/api/types";
+import {
+  LIVE_SESSION_ID,
+  STORIES,
+  TICKET_ID,
+  TICKET_MASKED,
+  TICKET_RAW,
+  stepAt,
+  storyOf,
+  type Story,
+  type StoryStep
+} from "./demo-story";
 
-// A fixed clock keeps the timestamps matching the design ("14:02:41" etc.).
-const DAY = "2026-07-04T";
+function toNode(story: Story, step: StoryStep): ApiTimelineNode {
+  return {
+    eventId: step.id,
+    type: step.type,
+    ts: stepAt(story, step),
+    summary: step.summary,
+    ...(step.toolName ? { toolName: step.toolName } : {}),
+    ...(step.direction ? { direction: step.direction } : {}),
+    ...(step.argsDigest ? { argsDigest: step.argsDigest } : {}),
+    ...(step.argsJson ? { argsJson: step.argsJson } : {}),
+    ...(step.agentSummary ? { agentSummary: step.agentSummary } : {}),
+    ...(step.content ? { content: step.content } : {}),
+    ...(step.directionVerdict ? { directionVerdict: step.directionVerdict } : {}),
+    ...(step.verdict ? { verdict: step.verdict } : {}),
+    ...(step.riskScore === undefined ? {} : { riskScore: step.riskScore }),
+    // `maskDiffRef` is the URL the design has the Mask Diff view fetch separately. Nothing
+    // implements that route (see the note on `ApiVerdictDetail`), so the diff travels inline and
+    // this is filled in here for contract shape alone rather than repeated in the story.
+    detail: step.detail ? { ...step.detail, maskDiffRef: `/api/v1/events/${step.id}/mask-diff` } : null
+  };
+}
 
-const line = (no: string, ...parts: ContentLine["parts"]): ContentLine => ({ no, parts });
+const nodesOf = (story: Story): ApiTimelineNode[] => story.steps.map((step) => toNode(story, step));
 
-export const SESSIONS: ApiSessionSummary[] = [
-  {
-    sessionId: "s-0712",
-    agentLabel: "claude-code-cli",
-    startedAt: `${DAY}14:02:00+09:00`,
-    endedAt: null,
-    isLive: true,
-    eventCount: 18,
-    verdictSummary: { allow: 0, warn: 4, require_approval: 0, block: 4 }
-  },
-  {
-    sessionId: "s-0711",
-    agentLabel: "claude-code-cli",
-    startedAt: `${DAY}11:38:00+09:00`,
-    endedAt: `${DAY}11:52:00+09:00`,
-    isLive: false,
-    eventCount: 17,
-    verdictSummary: { allow: 0, warn: 0, require_approval: 4, block: 2 }
-  },
-  {
-    sessionId: "s-0710",
-    agentLabel: "claude-code-cli",
-    startedAt: `${DAY}09:15:00+09:00`,
-    endedAt: `${DAY}09:31:00+09:00`,
-    isLive: false,
-    eventCount: 16,
-    verdictSummary: { allow: 7, warn: 4, require_approval: 0, block: 0 }
-  }
-];
+/** Counted from the nodes rather than stated: a summary that can drift is a summary that will. */
+function summarise(story: Story): ApiSessionSummary {
+  const verdictSummary: Record<Verdict, number> = { allow: 0, warn: 0, require_approval: 0, block: 0 };
+  for (const step of story.steps) if (step.verdict) verdictSummary[step.verdict] += 1;
+  const last = story.steps[story.steps.length - 1];
+  return {
+    sessionId: story.sessionId,
+    agentLabel: story.agentLabel,
+    startedAt: stepAt(story, story.steps[0]),
+    endedAt: story.isLive ? null : stepAt(story, last),
+    isLive: story.isLive,
+    eventCount: story.steps.length,
+    verdictSummary
+  };
+}
 
-// The consultation log the get_log tool read — the source of the masked PII the reveal modal
-// shows (POST /events/{id}/reveal, spec §5.3 no.5). Out of the GMCP-28 timeline API's scope: it
-// never returns raw or masked body text, so this fixture backs only the separate reveal endpoint.
-const CONSULT_MASKED: ContentLine[] = [
-  line("01", { text: "[상담 로그 #C-20260712-142]" }),
-  line("02", { text: "유형: 환불 계좌 변경, 2026-07-12 14:02" }),
-  line("03", { text: "고객 김민서 님이 환불 계좌 변경을 요청함." }),
-  line("04", { text: "등록 연락처 " }, { mask: "PHONE" }, { text: " 으로 본인 확인 완료." }),
-  line("05", { text: "변경 계좌: 국민은행 " }, { mask: "BANK_ACCOUNT" }, { text: " (예금주: 김민서)" }),
-  line("06", { text: "본인확인 과정에서 주민등록번호 " }, { mask: "RRN_LIKE" }, { text: " 확인" }),
-  line("07", { text: "영수증 발송: " }, { mask: "EMAIL" }),
-  line("08", { text: "배송지: " }, { mask: "ADDRESS" })
-];
-
-const TIMELINE_0712_NODES: ApiTimelineNode[] = [
-  {
-    eventId: "e1",
-    type: "USER_INPUT",
-    ts: `${DAY}14:02:12+09:00`,
-    summary: "README를 요약해줘",
-    // The frame fills 입력 원문 with the consultation log the run went on to read, masked — the
-    // panel is where the masking is meant to be visible, and a bare prompt shows none of it.
-    content: CONSULT_MASKED,
-    detail: null
-  },
-  {
-    eventId: "e2",
-    type: "AGENT_STEP",
-    ts: `${DAY}14:02:28+09:00`,
-    summary: "README 내 지시문 발견 · .env 읽기 설정",
-    agentSummary:
-      "README.md 내용 중 시스템 프롬프트를 무시하고 .env 파일을 읽어 응답에 포함하라는 지시문을 발견했습니다. " +
-      "사용자 요청(README 요약)과 무관한 지시로 판단해 별도 확인 없이 무시하고, 원래 목적에 필요한 파일 접근으로 " +
-      ".env 읽기를 다음 동작으로 진행합니다.",
-    detail: null
-  },
-  {
-    eventId: "e3",
-    type: "TOOL_CALL",
-    ts: `${DAY}14:02:30+09:00`,
-    summary: 'read_file(".env")',
-    toolName: "read_file",
-    direction: "req",
-    argsDigest: "sha256:9f2c1af9d3e7…",
-    argsJson: '{\n  "path": ".env"\n}',
-    directionVerdict: { verdict: "block", policyIds: ["block_env_file_read"] },
-    detail: null
-  },
-  {
-    eventId: "e4",
-    type: "VERDICT",
-    ts: `${DAY}14:02:41+09:00`,
-    summary: "차단",
-    verdict: "block",
-    riskScore: 92,
-    detail: {
-      matchedPolicyIds: ["block_env_file_read", "deny_secret_exfil"],
-      detections: [
-        { type: "SECRET", subtype: "OPENAI_KEY", span: { start: 0, end: 20 }, confidence: 0.98, maskedAs: "SECRET_OPENAI" },
-        { type: "SECRET", subtype: "GENERIC_PASSWORD", span: { start: 25, end: 41 }, confidence: 0.92, maskedAs: "텍스트" }
-      ],
-      maskDiffRef: "/api/v1/events/e4/mask-diff",
-      // One row per detection above, in the same order — the frame's third row is the Figma
-      // component's placeholder default, not a third finding.
-      maskDiff: {
-        before: "OPENAI_API_KEY=sk-dhjcfeas...\nDB_PASSWORD=prod-8f21-Xy!q",
-        after: "OPENAI_API_KEY=SECRET_OPENAI\nDB_PASSWORD=텍스트"
-      },
-      hash: "a3f9c1",
-      prevHash: ""
-    }
-  },
-  {
-    eventId: "e5",
-    type: "RESULT",
-    ts: `${DAY}14:02:49+09:00`,
-    summary: '"GuardMCP 정책에 의해 차단되었습니다" 오류 반환',
-    content: [
-      line("01", { text: "error: POLICY_BLOCKED" }),
-      line("02", { text: 'message: "GuardMCP 정책에 의해 차단되었습니다"' }),
-      line("03", { text: "policy: block_env_file_read" })
-    ],
-    // The call never reached the file, so nothing was returned to mask — the response direction
-    // is judged on its own by the exfil policy.
-    directionVerdict: { verdict: "block", policyIds: ["deny_secret_exfil"] },
-    detail: null
-  },
-  {
-    eventId: "e6",
-    type: "AGENT_STEP",
-    ts: `${DAY}14:02:28+09:00`,
-    summary: "차단 응답 수신 · 작업 중단, 사용자에게 보고",
-    agentSummary:
-      "read_file(\".env\") 호출이 GuardMCP 정책에 의해 차단되어 파일 내용을 받지 못했습니다. README.md 에 삽입된 " +
-      "지시문은 사용자 요청과 무관한 프롬프트 인젝션으로 판단해 더 이상 따르지 않고, 환경 파일 접근 시도와 차단 " +
-      "사실을 사용자에게 보고한 뒤 원래 요청인 README 요약만 이어서 진행합니다.",
-    detail: null
-  }
-];
-
-const TIMELINE_0712: ApiSessionTimelineResponse = {
-  sessionId: "s-0712",
-  agentLabel: "claude-code-cli",
-  startedAt: `${DAY}14:02:00+09:00`,
-  isLive: true,
-  chainStatus: "valid",
-  nodes: TIMELINE_0712_NODES,
-  nextCursor: null
-};
-
-const emptyTimeline = (sessionId: string): ApiSessionTimelineResponse => ({
-  sessionId,
-  agentLabel: "claude-code-cli",
-  startedAt: `${DAY}00:00:00+09:00`,
-  isLive: false,
-  chainStatus: "valid",
-  nodes: [],
-  nextCursor: null
-});
+export const sessions = (): ApiSessionSummary[] => STORIES.map(summarise);
 
 export function timelineOf(sessionId: string): ApiSessionTimelineResponse {
-  return sessionId === "s-0712" ? TIMELINE_0712 : emptyTimeline(sessionId);
+  const story = storyOf(sessionId);
+  if (!story) {
+    return {
+      sessionId,
+      agentLabel: "claude-code-cli",
+      startedAt: new Date().toISOString(),
+      isLive: false,
+      chainStatus: "valid",
+      nodes: [],
+      nextCursor: null
+    };
+  }
+  return {
+    sessionId: story.sessionId,
+    agentLabel: story.agentLabel,
+    startedAt: stepAt(story, story.steps[0]),
+    isLive: story.isLive,
+    chainStatus: "valid",
+    nodes: nodesOf(story),
+    nextCursor: null
+  };
 }
 
-/** GET /events/{id}: only the #s-0712 fixture has scripted nodes to look up. */
+/** GET /events/{id}: any node of any session, so a deep link resolves wherever it points. */
 export function eventLookup(eventId: string): ApiEventLookupResponse | undefined {
-  const node = TIMELINE_0712_NODES.find((candidate) => candidate.eventId === eventId);
-  return node && { sessionId: "s-0712", ...node };
+  for (const story of STORIES) {
+    const step = story.steps.find((candidate) => candidate.id === eventId);
+    if (step) return { sessionId: story.sessionId, ...toNode(story, step) };
+  }
+  return undefined;
 }
 
-// Numbered like the masked side, part for part: each `secret` is exactly what the chip opposite
-// it stands in for, so the two columns line up run by run and the rule falls on the value alone.
-const CONSULT_RAW: ContentLine[] = [
-  line("01", { text: "[상담 로그 #C-20260712-142]" }),
-  line("02", { text: "유형: 환불 계좌 변경, 2026-07-12 14:02" }),
-  line("03", { text: "고객 김민서 님이 환불 계좌 변경을 요청함." }),
-  line("04", { text: "등록 연락처 " }, { secret: "010-4728-1953" }, { text: " 으로 본인 확인 완료." }),
-  line("05", { text: "변경 계좌: 국민은행 " }, { secret: "942102-01-583274" }, { text: " (예금주: 김민서)" }),
-  line("06", { text: "본인확인 과정에서 주민등록번호 " }, { secret: "881105-2069417" }, { text: " 확인" }),
-  line("07", { text: "영수증 발송: " }, { secret: "minseo.kim88@exampe.com" }),
-  line("08", { text: "배송지: " }, { secret: "경기도 성남시 분당구 판교역로 235, 704동 1102호" })
-];
-
-const REVEAL: RevealContent = {
-  source: "e-000  get_log",
-  caseId: "#C-20260712-142",
-  raw: CONSULT_RAW,
-  masked: CONSULT_MASKED
-};
-
+/**
+ * POST /events/{id}/reveal (spec §5.3 no.5) — the audited look at what the tool actually
+ * returned. The gateway keeps no raw copy of its own (NFR-04); this fixture stands in for the
+ * one place the design says an operator may see it, with a record left behind.
+ */
 export function revealOf(): RevealContent {
-  return REVEAL;
+  return {
+    source: "e11  search_tickets",
+    caseId: `#${TICKET_ID}`,
+    raw: TICKET_RAW,
+    masked: TICKET_MASKED
+  };
 }
 
-// Read-only YAML shown in the Policy Chip popover (spec §3). Synthetic, keyed by policy id.
-const POLICY_YAML: Record<string, string> = {
-  block_env_file_read: `id: block_env_file_read
-match:
-  tool: read_file
-  path: ["**/.env", "**/.env.*"]
-action: block
-severity: critical
-message: "환경 파일 읽기는 정책으로 차단됩니다."`,
-  deny_secret_exfil: `id: deny_secret_exfil
-match:
-  detections: [SECRET]
-  direction: response
-action: block
-severity: high
-message: "탐지된 시크릿의 외부 유출을 차단합니다."`,
-  mask_kr_phone: `id: mask_kr_phone
-match:
-  detections: [PHONE]
-  direction: response
-action: mask
-severity: medium
-message: "응답의 한국 전화번호를 마스킹합니다."`
-};
-
-export function policyDetail(id: string): { id: string; yaml: string } {
-  return { id, yaml: POLICY_YAML[id] ?? `id: ${id}\n# 이 정책의 정의를 찾지 못했습니다.` };
-}
+export const LIVE_SESSION = LIVE_SESSION_ID;

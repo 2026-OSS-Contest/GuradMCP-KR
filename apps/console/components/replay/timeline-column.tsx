@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { ChevronRight, Pause } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
-import type { TimelineEvent, TimelineNodeType } from "@/lib/api/types";
+import type { TimelineEvent, TimelineNodeType, Verdict } from "@/lib/api/types";
 import { VerdictBadge } from "@/components/verdict-badge";
 import { useReplay } from "./replay-provider";
 import {
@@ -12,7 +12,10 @@ import {
   NodeResultIcon,
   NodeToolIcon,
   NodeUserIcon,
+  NodeVerdictAllowIcon,
+  NodeVerdictApprovalIcon,
   NodeVerdictIcon,
+  NodeVerdictWarnIcon,
   PlayControlIcon,
   RewindControlIcon,
   ShiftKeyIcon
@@ -29,6 +32,17 @@ const MARKER: Record<TimelineNodeType, ComponentType<SVGProps<SVGSVGElement>>> =
   tool_call: NodeToolIcon,
   verdict: NodeVerdictIcon,
   result: NodeResultIcon
+};
+
+/**
+ * A verdict node's disc says which verdict, in the same glyph-and-colour pair as its badge
+ * (§4.3: never colour alone). The other node types have one marker each.
+ */
+const VERDICT_MARKER: Record<Verdict, { Icon: ComponentType<SVGProps<SVGSVGElement>>; tone: string }> = {
+  allow: { Icon: NodeVerdictAllowIcon, tone: "text-verdict-allow" },
+  warn: { Icon: NodeVerdictWarnIcon, tone: "text-verdict-warn" },
+  require_approval: { Icon: NodeVerdictApprovalIcon, tone: "text-verdict-require-approval" },
+  block: { Icon: NodeVerdictIcon, tone: "text-verdict-block" }
 };
 
 const LABEL_TONE: Partial<Record<TimelineNodeType, string>> = {
@@ -55,7 +69,8 @@ function NodeRow({
   register: (el: HTMLButtonElement | null) => void;
 }) {
   const t = useTranslations("replay.timeline");
-  const Marker = MARKER[event.type];
+  const verdictMarker = event.type === "verdict" ? VERDICT_MARKER[event.verdict ?? "allow"] : undefined;
+  const Marker = verdictMarker?.Icon ?? MARKER[event.type];
   const mono = event.type === "tool_call" || event.type === "result";
 
   return (
@@ -77,7 +92,7 @@ function NodeRow({
             : "bg-(--primitive-opacity-white-alpha-6)")
       )}
     >
-      <Marker className="size-10 flex-none" aria-hidden />
+      <Marker className={cn("size-10 flex-none", verdictMarker?.tone)} aria-hidden />
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         {event.type === "verdict" ? (
           <span className="flex flex-wrap items-center gap-2">
