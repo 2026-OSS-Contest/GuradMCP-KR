@@ -330,6 +330,10 @@ function buildGuardEvent(
     ...(decision.failurePolicyApplied !== undefined
       ? { failurePolicyApplied: decision.failurePolicyApplied }
       : {}),
+    // FR-INJ-04: only present when an operator enabled the adjudicator and it ran.
+    ...(decision.llmAdjudication !== undefined
+      ? { llmAdjudication: decision.llmAdjudication }
+      : {}),
     ...(storeRawPayload ? { rawPayload: ctx.payload } : {}),
     ...extras,
   };

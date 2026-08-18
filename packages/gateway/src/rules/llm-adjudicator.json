@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "description": "FR-INJ-04. Bounds for the optional second-opinion classifier. Enabling it is an environment decision (LLM_ADJUDICATOR_ENABLED=true) because it sends payload text to whatever adapter an operator registered; this file only bounds when and for how long.",
+  "band": {
+    "gte": 40,
+    "lt": 70,
+    "basis": "The warn band. Below 40 the rules found nothing worth a second opinion, and at 70 the pipeline already escalates on its own — asking a model to confirm a decision that is being made anyway spends latency and disclosure for no change in outcome."
+  },
+  "timeoutMs": 800,
+  "minConfidence": 0.7
+}

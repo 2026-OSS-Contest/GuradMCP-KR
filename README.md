@@ -81,6 +81,7 @@ npm run bench
 | 위험 점수 산식 | [열기](docs/risk-scoring.md) | [Open](docs/risk-scoring.en.md) |
 | 판정 설명 문구 | [열기](docs/explanation.md) | [Open](docs/explanation.en.md) |
 | Replay 세션·타임라인 | [열기](docs/replay.md) | [Open](docs/replay.en.md) |
+| 선택적 LLM 2차 판별기 | [열기](docs/llm-adjudicator.md) | [Open](docs/llm-adjudicator.en.md) |
 | 국내 서비스 자격증명 탐지 | [열기](docs/korean-service-tokens.md) | [Open](docs/korean-service-tokens.en.md) |
 | 고엔트로피 자격증명 안전망 | [열기](docs/high-entropy-secrets.md) | [Open](docs/high-entropy-secrets.en.md) |
 | 한국어 개인정보 마스킹 데모 | [열기](docs/korean-pii-demo.md) | [Open](docs/korean-pii-demo.en.md) |

@@ -16,6 +16,7 @@ import {
 import { createAutoExpireApprovalBackend } from "./approval/backend.js";
 import { createControlPlaneApprovalBackend } from "./controlPlane/approvalBackend.js";
 import { detect, mask, type Detection } from "./detect.js";
+import { adjudicate, adjudicationEnabled, isBorderline } from "./llm/adjudicator.js";
 import {
   digest,
   routeByVerdict,
@@ -148,7 +149,7 @@ async function route(
       const body = await readJson(request);
       const text =
         typeof body.text === "string" ? body.text : JSON.stringify(body);
-      const decision = evaluatePayload(text, {
+      const decision = await evaluatePayloadAdjudicated(text, {
         direction: "response",
         tool: "inspect",
         serverTrust: getServerTrust(gatewayServerId),
@@ -234,7 +235,7 @@ async function handleMcp(
       serverTrust,
     );
     const payload = JSON.stringify(metadata.sanitized);
-    const decision = evaluatePayload(payload, {
+    const decision = await evaluatePayloadAdjudicated(payload, {
       direction: "response",
       tool: "tools/list",
       serverTrust,
@@ -333,7 +334,7 @@ async function handleMcp(
               .map((key) => [key, argumentsValue[key] as string]),
           )
         : undefined;
-    const requestDecision = evaluatePayload(requestPayload, {
+    const requestDecision = await evaluatePayloadAdjudicated(requestPayload, {
       direction: "request",
       tool,
       serverTrust,
@@ -384,7 +385,7 @@ async function handleMcp(
       },
     );
     const responsePayload = JSON.stringify(upstream);
-    const responseDecision = evaluatePayload(responsePayload, {
+    const responseDecision = await evaluatePayloadAdjudicated(responsePayload, {
       direction: "response",
       tool,
       serverTrust,
@@ -489,6 +490,37 @@ const actionWeight: Record<Action, number> = {
  * `PolicyDecision` via `handlePipelineFailure`, so every caller downstream of this function
  * keeps working with an ordinary decision either way.
  */
+/**
+ * FR-INJ-04 (GMCP-57). The rule verdict, then an optional second opinion on it.
+ *
+ * `evaluatePayload` below stays synchronous and stays the source of the verdict; this
+ * only wraps it. With the adjudicator off — the default, and the only mode CI runs —
+ * this is `evaluatePayload` plus one boolean, which is what "no hard dependency"
+ * has to mean structurally rather than by configuration.
+ *
+ * A confident `injection` answer raises the verdict to `require_approval`: the model
+ * is a reason to put a human in front of a borderline call, not a reason to decide it.
+ * It can never lower one — see ./llm/adjudicator.ts.
+ */
+async function evaluatePayloadAdjudicated(
+  text: string,
+  context: Pick<PolicyContext, "direction" | "tool" | "serverTrust" | "args">,
+): Promise<PolicyDecision> {
+  const decision = evaluatePayload(text, context);
+  if (!adjudicationEnabled() || !isBorderline(decision.riskScore)) return decision;
+  const adjudication = await adjudicate(text, decision.riskScore);
+  if (!adjudication) return decision;
+  if (!adjudication.escalated) return { ...decision, llmAdjudication: adjudication };
+  return {
+    ...decision,
+    verdict: actionWeight[decision.verdict] >= actionWeight.require_approval ? decision.verdict : "require_approval",
+    severity: decision.severity === "critical" ? decision.severity : "high",
+    reasonCode: "LLM_ADJUDICATED_INJECTION",
+    message: `경계 구간 판정을 ${adjudication.model}이 인젝션으로 분류해 승인 대기로 올렸습니다.`,
+    llmAdjudication: adjudication,
+  };
+}
+
 function evaluatePayload(
   text: string,
   context: Pick<PolicyContext, "direction" | "tool" | "serverTrust" | "args">,

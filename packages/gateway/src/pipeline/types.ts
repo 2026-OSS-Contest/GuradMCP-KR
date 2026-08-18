@@ -77,6 +77,28 @@ export interface PolicyDecision {
    */
   errorInfo?: StageError;
   failurePolicyApplied?: FailurePolicy;
+  /**
+   * FR-INJ-04 (GMCP-57): present only when the optional LLM adjudicator ran, which
+   * needs an operator to have both enabled it and registered an adapter. Absent on
+   * every other decision, including every decision made with the feature off.
+   */
+  llmAdjudication?: LlmAdjudication;
+}
+
+/**
+ * What the second-opinion classifier answered and what it cost. `latencyMs` is
+ * reported here rather than folded into the pipeline timing on purpose: NFR-01's
+ * budget is a claim about the rule pipeline, and a network call to somebody else's
+ * model must not be able to hide inside it.
+ */
+export interface LlmAdjudication {
+  model: string;
+  label: "injection" | "benign" | "unsure";
+  confidence: number;
+  latencyMs: number;
+  /** True when this changed the verdict; false when it merely agreed with the rules. */
+  escalated: boolean;
+  failure?: "timeout" | "error" | "malformed";
 }
 
 export type RoutedResult =
@@ -141,6 +163,8 @@ export interface GuardEvent {
   errorInfo?: StageError;
   /** The failure policy actually applied to produce this event's verdict; absent on a normal decision. */
   failurePolicyApplied?: FailurePolicy;
+  /** FR-INJ-04 (GMCP-57): the optional adjudicator's answer and its own latency, when it ran. */
+  llmAdjudication?: LlmAdjudication;
   /**
    * NFR-04 opt-in only: populated by `buildGuardEvent` (actionRouter.ts) solely when
    * `AUDIT_STORE_RAW_PAYLOAD=true`. `./auditPublisher.ts` must be the only reader — it strips
