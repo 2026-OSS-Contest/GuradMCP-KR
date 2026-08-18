@@ -10,6 +10,7 @@ import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
 import { parse } from "yaml";
+import { readDryRunObservations, type DryRunObservations } from "./dryRunStats.js";
 import { detect } from "../../packages/gateway/src/detect.js";
 import { scoreRisk } from "../../packages/gateway/src/risk.js";
 import { evaluate, type Action, type Detection, type Direction, type EvaluationStrategy, type Policy, type ServerTrust } from "../../packages/policy-engine/src/index.js";
@@ -99,6 +100,8 @@ export interface BenchmarkReport {
   highEntropySecrets: { samples: number; positives: number; negatives: number; recall: number; fpr: number; misses: unknown[] };
   koreanInjection: { samples: number; positives: number; negatives: number; recall: number; fpr: number; subtypeCoverage: string[]; misses: unknown[] };
   validationImpact: { fprWithoutValidation: number; fprWithValidation: number; falsePositivesPrevented: number; fprReduction: number };
+  /** FR-LAB-03: dry-run activity observed on real traffic, or why none was. */
+  dryRunObservations: DryRunObservations;
   scenarios: Array<{ id: string; passed: boolean; expectedBlocked: boolean; actualBlocked: boolean }>;
   fixtures: Array<{ id: string; coverage: AuthorFixture["coverage"]; passed: boolean; expected: AuthorFixture["expected"]; actual: { action: Action; matched_policy_ids: string[] } }>;
   fixtureCoverage: Array<{ policyId: string; positive: boolean; negative: boolean }>;
@@ -341,7 +344,11 @@ export async function runBenchmark(): Promise<BenchmarkReport> {
     falsePositivesPrevented: falsePositiveWithoutValidation - falsePositive,
     fprReduction: fprWithoutValidation - fpr
   };
-  return { generatedAt: new Date().toISOString(), metrics, thresholds, perTypeRecall, koreanServiceTokens, highEntropySecrets, koreanInjection, validationImpact, scenarios: scenarioResults, fixtures: fixtureResults, fixtureCoverage, passed };
+  // Consulted, not required: the gate's own thresholds are all measured from the
+  // datasets in this repository, so a benchmark run must not depend on a control plane
+  // being reachable. CI has none, and its report says so rather than reporting zeros.
+  const dryRunObservations = await readDryRunObservations(policies);
+  return { generatedAt: new Date().toISOString(), metrics, thresholds, perTypeRecall, dryRunObservations, koreanServiceTokens, highEntropySecrets, koreanInjection, validationImpact, scenarios: scenarioResults, fixtures: fixtureResults, fixtureCoverage, passed };
 }
 
 function toDetection(tag: string): Detection {
