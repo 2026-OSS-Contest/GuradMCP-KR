@@ -44,6 +44,17 @@ AI Agent → GuardMCP-KR Gateway → MCP Tools
 - **한국형 기본값:** 휴대전화번호, 주민등록번호 유사 패턴, 사업자등록번호, 계좌번호 등 한국형 PII를 다룹니다.
 - **코드 없는 확장:** 정책과 탐지/공격 샘플은 YAML 또는 데이터셋만으로 기여할 수 있습니다.
 
+## 에이전트 예제 (두 생태계)
+
+도입은 **에이전트 코드를 고치지 않고 도구 호출이 향하는 URL만 바꾸는 것**입니다. 같은 T-01 공격 시나리오를 두 스택에서 각각 재현해 그걸 보여줍니다.
+
+| 생태계 | 위치 | 실행 |
+| --- | --- | --- |
+| Kotlin / LangChain4j | [`apps/demo-agent`](apps/demo-agent) | [`./scripts/demo-env-leak.sh`](scripts/demo-env-leak.sh) |
+| Python / LangGraph | [`apps/demo-agent/langgraph`](apps/demo-agent/langgraph) | [`./scripts/demo-langgraph-t01.sh`](scripts/demo-langgraph-t01.sh) |
+
+양쪽 다 악성 README에 숨은 지시(`​.env`를 읽어 외부로 전송)를 따르려다 **1단계에서 `block_env_file_read`로 멈춥니다.** 두 스크립트는 출력을 보여주는 게 아니라 단언합니다 — 적용 쪽이 체인을 멈췄는지, 그리고 **미적용 쪽이 실제로 유출하는지**까지 확인합니다.
+
 ## 정책 작성
 
 정책 DSL v1의 모든 `match` 축, 다섯 action, 평가 규칙, 승인 블록과 정책팩 구조는 [정책 작성 가이드](docs/policy-guide/README.md)에 있습니다. 바로 실행 가능한 예제는 [`policy-packs/default`](policy-packs/default)와 [`policy-packs/korean-pii`](policy-packs/korean-pii)를 참고하세요.
