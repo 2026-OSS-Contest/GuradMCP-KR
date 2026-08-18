@@ -89,13 +89,19 @@ curl --fail --silent "http://localhost:8080/api/v1/sessions/<uuid>/timeline"
 | `broken` | 불일치. `brokenAt`이 어긋난 첫 이벤트를 지목 |
 | `unknown` | **대조할 저장된 해시가 없음 — 검증을 주장하지 않음** |
 
-**투영된 세션은 `unknown`입니다.** 검증에는 이벤트가 기록될 때 함께 쓰인 해시가 필요한데, `guard_event.hash`/`prev_hash`는 GMCP-83이 채우기 전까지 스키마만 있고 항상 null입니다. 조회 시점에 해시를 만들어 **그 자리에서 만든 값과 비교하면** 함수가 결정적이라는 것만 증명될 뿐, 변조된 행에 대해서도 똑같이 `valid`가 나옵니다. 그래서 그렇게 하지 않습니다.
+**투영된 세션은 이제 실제로 검증됩니다(GMCP-83).** `GuardEventRepository.insert`가 이벤트를 적재하는 시점에 세션별 락 아래에서 `seq`·`prev_hash`·`hash`를 함께 채워 저장하고, 조회 시 `GuardEventHasher.verify`가 저장된 해시를 `seq` 순서대로 다시 계산해 대조합니다. 비교 대상이 "저장된 값"과 "그 자리에서 새로 만든 값"이라, 행이 변조되면 실제로 `broken`이 뜹니다.
+
+`unknown`은 이제 예외적인 경우에만 나옵니다 — 세션 안의 어떤 행이든 `seq`/`prev_hash`/`hash`가 비어 있으면(이 기능이 배포되기 전에 적재된 이벤트, 혹은 이벤트가 아예 없는 세션) 그 세션 전체가 `unknown`입니다. 그런 행은 기록 당시 함께 남긴 해시가 없어 검증 자체가 불가능하므로, `broken`으로 오탐하는 대신 `unknown`으로 남깁니다.
 
 콘솔은 `unknown`일 때 체인 배지를 **아예 표시하지 않습니다**. 검증하지 않은 세션에 녹색 "검증됨"을 붙이는 것은 아무것도 안 보여주는 것보다 나쁘기 때문이고, 이건 `replay-adapter.ts`가 딥링크 조회에 이미 적용하던 규칙입니다.
 
-시드 세션은 `valid`·`broken`이 나옵니다. 기동 시 해시를 만들어 노드에 담아두고, 그중 하나를 **일부러 틀리게** 저장해 둔 픽스처가 있어서 불일치가 실제로 검출됩니다.
+시드 세션은 `valid`·`broken`이 나옵니다. 기동 시 해시를 만들어 노드에 담아두고, 그중 하나를 **일부러 틀리게** 저장해 둔 픽스처가 있어서 불일치가 실제로 검출됩니다. 시드와 실제 적재 이벤트는 **서로 다른 코드**로 검증합니다 — 시드는 `ReplayChain`이 이 해시 체인이 생기기 전부터 있던 `TimelineNode` 형태를 그대로 해시하는 반면, 적재된 이벤트는 `GuardEventHasher`가 Postgres에 저장된 `GuardEventRecord`를 해시합니다. 그래서 `GuardEventHasher`로 시드를 검증하면 형태가 달라 오히려 `broken`이 나옵니다.
 
-계산 알고리즘은 시드와 투영이 **같은 코드**(`ReplayChain`)를 씁니다. 복제해 두면 두 쪽이 어긋나고, 그때 첫 증상은 **문제 없는 체인을 BROKEN으로 신고하는 것**입니다.
+해시에 들어가는 필드는 `argsDigest`·`detections`(`type`/`subtype`/`confidence`만, `span`·`maskedAs`는 제외)·`direction`·`eventId`·`matchedPolicyIds`·`riskScore`·`seq`·`sessionId`·`toolName`·`ts`·`verdict`뿐입니다. **`rawPayload`와 `maskDiffRef`는 해시에서 빠집니다** — NFR-04 옵트인으로 원문을 저장하거나 나중에 마스킹 형식이 바뀌어도, 그것만으로는 체인이 깨지지 않도록 하기 위해서입니다.
+
+세션별 `seq`/`hash` 할당은 세션 단위 락(in-JVM `synchronized`)으로 원자성을 보장합니다. 이 락은 **단일 인스턴스 안에서만** 유효합니다 — control-plane을 여러 인스턴스로 수평 확장하면 별도의 분산 락이 필요하며, 데모 범위에서는 다루지 않습니다.
+
+세부 검증 결과(검증한 이벤트 수·전체 이벤트 수·불일치 이벤트 id 목록·마지막으로 검증된 해시)는 `GET /sessions/{id}/chain-verify`로 따로 조회할 수 있습니다. 타임라인 응답의 `chainStatus`/`brokenAt`은 그 요약입니다.
 
 ## 남은 것
 

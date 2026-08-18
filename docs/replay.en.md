@@ -89,13 +89,19 @@ A session's VERDICT nodes bind their own `hash` to the previous verdict's `hash`
 | `broken` | They disagree; `brokenAt` names the first event that failed |
 | `unknown` | **No stored hash to check against — no verification is claimed** |
 
-**Projected sessions report `unknown`.** A verification needs a hash written when the event was recorded, and `guard_event.hash`/`prev_hash` are schema-only — always null until GMCP-83 fills them in. Deriving a hash at read time and comparing it to a value derived in the same breath proves only that the function is deterministic; it would answer `valid` over a tampered row just as readily. So it does not do that.
+**Projected sessions are now genuinely verified (GMCP-83).** `GuardEventRepository.insert` assigns `seq`/`prev_hash`/`hash` under a per-session lock at ingest time, and `GuardEventHasher.verify` recomputes the chain in `seq` order against what was stored. The comparison is between "what was stored" and "what gets recomputed fresh," so a tampered row genuinely reports `broken`.
+
+`unknown` is now the exception rather than the default — it appears when any row in the session has no `seq`/`prev_hash`/`hash` (an event ingested before this feature shipped, or a session with no events at all). Such a row has no hash written alongside it at record time, so there is nothing to verify against; reporting `broken` there would be a false alarm, so it stays `unknown` instead.
 
 The console omits the chain pill entirely when the status is `unknown`. A green "verified" badge on a session nothing has verified is worse than showing nothing — the rule `replay-adapter.ts` already applied to deep-linked event lookups.
 
-Seeded sessions do report `valid` and `broken`. Their hashes are built at startup and held on the nodes, and one fixture stores a **deliberately wrong** hash, so the mismatch is genuinely detected.
+Seeded sessions do report `valid` and `broken`. Their hashes are built at startup and held on the nodes, and one fixture stores a **deliberately wrong** hash, so the mismatch is genuinely detected. Seeds and ingested events are verified by **different code**: seeds go through `ReplayChain`, which hashes the `TimelineNode` shape that predates this chain, while ingested events go through `GuardEventHasher`, which hashes the `GuardEventRecord` stored in Postgres. Running `GuardEventHasher` over a seed would report it `broken` on shape alone.
 
-Seeds and projections compute it with the **same code** (`ReplayChain`). Duplicating it lets the two drift, and the first symptom of that drift is **reporting a sound chain as BROKEN**.
+Only these fields enter the hash: `argsDigest`, `detections` (`type`/`subtype`/`confidence` only — `span` and `maskedAs` are excluded), `direction`, `eventId`, `matchedPolicyIds`, `riskScore`, `seq`, `sessionId`, `toolName`, `ts`, `verdict`. **`rawPayload` and `maskDiffRef` are excluded from the hash** — so opting into raw-payload storage (NFR-04) or changing the masking format later never breaks the chain on its own.
+
+Assigning `seq`/`hash` per session is made atomic by a per-session lock (`synchronized`, in-JVM). That lock is a **single-instance** guarantee only — scaling control-plane to multiple instances would need a real distributed lock, which is out of scope at demo scale.
+
+The detailed verification result (events verified, total events, mismatched event ids, last verified hash) is available separately at `GET /sessions/{id}/chain-verify`. The timeline response's `chainStatus`/`brokenAt` is its summary.
 
 ## Known limits
 
