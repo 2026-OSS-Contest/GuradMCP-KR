@@ -109,7 +109,15 @@ export interface MatchDefinition {
   // e.g. `[limited, untrusted]` to express "every grade except trusted".
   server_trust?: ServerTrust | ServerTrust[] | "any";
   args?: Record<string, unknown>;
-  detections?: { any_of?: string[]; all_of?: string[]; none_of?: string[] };
+  /**
+   * `min_count` (FR-PII-05) counts how many detections match, rather than
+   * whether any did. Bulk disclosure cannot be expressed with `risk_score`
+   * because that number folds in server trust: a single span from an untrusted
+   * server outscores a twelve-span dump from a trusted one, so the two bands
+   * overlap and no threshold separates them. Counted against `any_of` (or
+   * `all_of`) when present, otherwise against every detection.
+   */
+  detections?: { any_of?: string[]; all_of?: string[]; none_of?: string[]; min_count?: number };
   risk_score?: { gte?: number; lte?: number };
 }
 

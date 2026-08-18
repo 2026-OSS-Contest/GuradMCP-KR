@@ -25,7 +25,9 @@ export const matchSchema = z
       .object({
         any_of: z.array(z.string().min(1)).optional(),
         all_of: z.array(z.string().min(1)).optional(),
-        none_of: z.array(z.string().min(1)).optional()
+        none_of: z.array(z.string().min(1)).optional(),
+        // FR-PII-05: how many detections must match, not just whether any did.
+        min_count: z.number().int().min(1).optional()
       })
       .strict()
       .optional(),

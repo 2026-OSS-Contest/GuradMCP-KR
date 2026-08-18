@@ -9,4 +9,5 @@ extends:
   - default@^1.0.0
 policies:
   - policies/mask-korean-pii-response.yaml
+  - policies/require-approval-bulk-pii-response.yaml
   - policies/require-approval-external-pii-email.yaml

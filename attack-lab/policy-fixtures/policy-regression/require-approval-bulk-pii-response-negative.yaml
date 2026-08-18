@@ -1,0 +1,18 @@
+id: require_approval_bulk_pii_response_negative
+description: >-
+  A lookup that returns one customer's phone and account stays on the masking
+  path. The risk score here is the untrusted-server figure for a single span,
+  which is higher than the trusted bulk case above — that inversion is why this
+  policy counts spans instead of reading the score.
+coverage:
+  policy_id: require_approval_bulk_pii_response
+  expectation: not_match
+event:
+  direction: response
+  tool: customer_lookup
+  server_trust: untrusted
+  detections: [PII.PHONE, PII.BANK_ACCOUNT]
+  risk_score: 80
+expected:
+  action: mask_then_allow
+  matched_policy_ids: [mask_korean_pii_response]

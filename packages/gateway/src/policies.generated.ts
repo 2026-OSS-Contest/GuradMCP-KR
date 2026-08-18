@@ -248,6 +248,32 @@ export const runtimePolicyPacks: Record<string, RuntimePolicyPack> = {
         "message": "Personal-data spans were masked before the tool response was delivered."
       },
       {
+        "id": "require_approval_bulk_pii_response",
+        "pack": "korean-pii",
+        "version": 1,
+        "description": "Hold a tool response that discloses personal data in bulk for human approval",
+        "priority": 320,
+        "match": {
+          "direction": "response",
+          "tool": "*",
+          "server_trust": "any",
+          "detections": {
+            "any_of": [
+              "PII"
+            ],
+            "min_count": 10
+          }
+        },
+        "action": "require_approval",
+        "severity": "critical",
+        "message": "The response disclosed personal data in bulk, so it is held for approval instead of being masked and delivered.",
+        "approval": {
+          "timeout_seconds": 120,
+          "on_timeout": "block",
+          "allow_masked_approval": true
+        }
+      },
+      {
         "id": "approve_external_email_with_korean_pii",
         "pack": "korean-pii",
         "version": 1,

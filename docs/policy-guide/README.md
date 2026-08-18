@@ -129,14 +129,25 @@ Detector가 만든 정규화 tag를 평가합니다. tag는 `SECRET`, `INJECTION
 | `any_of` | 목록 중 하나 이상이 존재 |
 | `all_of` | 목록의 모든 tag가 존재 |
 | `none_of` | 목록의 어떤 tag도 존재하지 않음 |
+| `min_count` | 매칭된 detection이 N건 이상 (1 이상의 정수) |
 
-`any_of`, `all_of`, `none_of`를 함께 쓰면 세 조건을 모두 만족해야 합니다. detector가 실행되지 않은 상태는 빈 detection 집합이며 `none_of`만 만족할 수 있습니다.
+`any_of`, `all_of`, `none_of`, `min_count`를 함께 쓰면 모든 조건을 만족해야 합니다. detector가 실행되지 않은 상태는 빈 detection 집합이며 `none_of`만 만족할 수 있습니다.
 
 ```yaml
 detections:
   any_of: [SECRET, PII.RRN_LIKE]
   none_of: [TEST_FIXTURE]
 ```
+
+**`min_count`는 tag 종류가 아니라 건수를 셉니다.** `any_of`(없으면 `all_of`)가 지정돼 있으면 그 범위에 드는 detection만 세고, 둘 다 없으면 전체를 셉니다.
+
+```yaml
+detections:
+  any_of: [PII]
+  min_count: 10   # PII 종류가 10가지가 아니라, PII detection이 10건 이상
+```
+
+이게 필요한 이유는 `risk_score`로 대량 유출을 표현할 수 없기 때문입니다. 위험 점수는 서버 신뢰등급을 함께 반영하므로, **비신뢰 서버의 단건 PII(80점)가 신뢰 서버의 12건 덤프(71점)보다 높게** 나옵니다. 두 구간이 겹쳐서 어떤 임계값도 "대량"만 골라낼 수 없습니다. 건수를 세는 것이 그 뜻을 그대로 말하는 유일한 조건입니다. 실제 사용 예는 `policy-packs/korean-pii/policies/require-approval-bulk-pii-response.yaml`에 있습니다.
 
 ### 3.6 `risk_score`
 
