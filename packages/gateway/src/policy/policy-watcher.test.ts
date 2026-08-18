@@ -61,6 +61,42 @@ describe("createDebouncedRunner", () => {
 
     expect(run).toHaveBeenCalledTimes(1);
   });
+
+  it("never overlaps a slow async run: a schedule() during an in-flight run waits for it, then re-runs", async () => {
+    vi.useRealTimers();
+    const order: string[] = [];
+    let releaseFirst: (() => void) | undefined;
+    const run = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        order.push("first:start");
+        await new Promise<void>((resolvePromise) => {
+          releaseFirst = resolvePromise;
+        });
+        order.push("first:end");
+      })
+      .mockImplementationOnce(async () => {
+        order.push("second:start");
+      });
+    const runner = createDebouncedRunner(run, 10);
+
+    runner.schedule();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(["first:start"]);
+
+    // Fires while the first run is still in flight — must not start a second, overlapping run.
+    runner.schedule();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(run).toHaveBeenCalledTimes(1);
+
+    releaseFirst?.();
+    await new Promise((r) => setTimeout(r, 30));
+
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(order).toEqual(["first:start", "first:end", "second:start"]);
+    vi.useFakeTimers();
+  });
 });
 
 async function writePack(root: string, packId: string): Promise<void> {

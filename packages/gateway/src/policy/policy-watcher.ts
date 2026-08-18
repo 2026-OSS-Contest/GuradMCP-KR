@@ -16,22 +16,73 @@ const DEFAULT_DEBOUNCE_MS = 300;
  * Collapses any number of `schedule()` calls arriving within `delayMs` of each other into one
  * `run` invocation. Kept independent of chokidar so it's unit-testable with fake timers instead
  * of real filesystem events.
+ *
+ * Also serializes `run()` itself: at most one call is ever in flight, and at most one more is
+ * queued behind it (further triggers while both are outstanding just join that same queued
+ * call — a depth-1 coalesced queue, not an unbounded one). Without this, a burst of file events
+ * arriving faster than a slow `run()` (e.g. disk I/O) could start a second overlapping call, and
+ * since a snapshot's version is stamped at load *completion* (see `buildSnapshot` in
+ * policy-loader.ts), completion order — not start order — decides which one wins the swap. An
+ * older, slower load finishing after a newer, faster one would then roll the active policy back
+ * to stale state. Serializing removes the overlap entirely; the queued trailing call still
+ * re-reads current state after the in-flight one settles, so a request never gets silently
+ * dropped, only coalesced.
  */
 export function createDebouncedRunner(run: () => void | Promise<void>, delayMs = DEFAULT_DEBOUNCE_MS) {
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let inFlight: Promise<void> | null = null;
+  let queued: Promise<void> | null = null;
+
+  function invoke(): Promise<void> {
+    const result = run();
+    if (!result || typeof (result as Promise<void>).then !== "function") {
+      // A synchronous run already fully happened above (used by unit tests) — no in-flight
+      // window to guard, so don't hold `inFlight` open for it.
+      return Promise.resolve();
+    }
+    const settle = (error?: unknown): void => {
+      inFlight = null;
+      if (error !== undefined) {
+        // Never let a rejection propagate as an unhandled rejection or, worse, wedge the runner
+        // (a rejected `inFlight`/`queued` would otherwise never resolve, permanently silencing
+        // every later trigger()). The real `run()` here (policy reload) already reports its own
+        // failures via events/logging and resolves normally — this only guards an unexpected throw.
+        console.error("[createDebouncedRunner] run() rejected:", error);
+      }
+    };
+    inFlight = (result as Promise<void>).then(
+      () => settle(),
+      (error: unknown) => settle(error)
+    );
+    return inFlight;
+  }
+
+  function trigger(): Promise<void> {
+    if (!inFlight) return invoke();
+    if (!queued) {
+      const waitFor = inFlight;
+      const runQueued = (): Promise<void> => {
+        queued = null;
+        return invoke();
+      };
+      queued = waitFor.then(runQueued, runQueued);
+    }
+    return queued;
+  }
+
   return {
     schedule(): void {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
-        void run();
+        void trigger();
       }, delayMs);
     },
-    /** Test/reloadNow seam: run immediately, bypassing the debounce wait. */
-    flushNow(): void {
+    /** Test/reloadNow seam: run immediately (joining a run already in flight/queued), bypassing the debounce wait. */
+    flushNow(): Promise<void> {
       if (timer) clearTimeout(timer);
       timer = null;
-      void run();
+      return trigger();
     },
     cancel(): void {
       if (timer) clearTimeout(timer);
@@ -142,8 +193,9 @@ export function startPolicyWatcher(
       await watcher.close();
     },
     async reloadNow() {
-      runner.cancel();
-      await reload();
+      // Routes through the runner (not a direct `reload()` call) so it joins the same in-flight/
+      // queued serialization as watcher-triggered reloads instead of racing one.
+      await runner.flushNow();
     },
     ready() {
       return readyPromise;

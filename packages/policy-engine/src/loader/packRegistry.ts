@@ -328,6 +328,14 @@ async function loadPack(
   if (declaredPolicyPaths) {
     policyFilePaths = declaredPolicyPaths;
   } else {
+    // No manifest (or a manifest without `policies:`) falls back to listing whatever `.yaml`/
+    // `.yml` files currently exist under the pack directory. Unlike the `declaredPolicyPaths`
+    // branch above — where a deleted-but-still-listed file is a `manifest.policies:missing_file`
+    // load error (FR-POL-03 §4.4: hot-reload refuses to swap on any error) — this path has no
+    // fixed list to compare against, so deleting a file here just silently shrinks the pack on
+    // the next successful reload. This is the accepted behavior only because every shipped pack
+    // under policy-packs/ declares an explicit `policies:` list; an operational pack is expected
+    // to keep doing so.
     try {
       policyFilePaths = await listYamlFilesFlat(entry.packDir);
     } catch (error) {
