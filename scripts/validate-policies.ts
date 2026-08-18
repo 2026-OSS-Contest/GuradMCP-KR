@@ -57,7 +57,7 @@ const matchFields = new Set([
   "detections",
   "risk_score",
 ]);
-const detectionFields = new Set(["any_of", "all_of", "none_of"]);
+const detectionFields = new Set(["any_of", "all_of", "none_of", "min_count"]);
 const riskFields = new Set(["gte", "lte"]);
 const approvalFields = new Set([
   "timeout_seconds",
@@ -268,6 +268,15 @@ function validateMatch(path: string, value: unknown): void {
       detectionFields,
     );
     for (const [key, tags] of Object.entries(value.detections)) {
+      // min_count is a count, not a tag list; a policy that asked for zero or a
+      // fraction of a detection would match in ways nobody could reason about.
+      if (key === "min_count") {
+        if (typeof tags !== "number" || !Number.isInteger(tags) || tags < 1)
+          failures.push(
+            `${path}: match.detections.min_count must be an integer of at least 1`,
+          );
+        continue;
+      }
       if (
         !Array.isArray(tags) ||
         tags.length === 0 ||

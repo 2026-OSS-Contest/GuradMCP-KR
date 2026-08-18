@@ -129,8 +129,19 @@ Matches normalized detector tags. Tags are hierarchical, for example `SECRET`, `
 | `any_of` | at least one listed tag exists |
 | `all_of` | every listed tag exists |
 | `none_of` | no listed tag exists |
+| `min_count` | at least N matching detections (integer, 1 or more) |
 
 When keys are combined, all keyed conditions must pass. If detectors did not run, the detection set is empty and can satisfy only `none_of`.
+
+**`min_count` counts detections, not distinct tags.** It counts the detections in scope of `any_of` (or `all_of`) when one is present, and every detection otherwise.
+
+```yaml
+detections:
+  any_of: [PII]
+  min_count: 10   # ten PII detections, not ten kinds of PII
+```
+
+It exists because `risk_score` cannot express bulk disclosure: that number folds in server trust, so **a single PII span from an untrusted server (80) outranks a twelve-span dump from a trusted one (71)**. The bands overlap, and no threshold selects "bulk" alone. Counting the spans is the only condition that says what it means. See `policy-packs/korean-pii/policies/require-approval-bulk-pii-response.yaml` for a shipped example.
 
 ```yaml
 detections:

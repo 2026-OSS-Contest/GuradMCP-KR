@@ -25,8 +25,18 @@ class AttackLabCatalogKotest : StringSpec({
     }
 
     "a threat with a single still-manual scenario is not available" {
+        // T-05's A-09 needs multi-step automation in the runner, which GMCP-65 left as
+        // follow-up scope, so the threat still cannot be run end to end.
         scenarios.single { it.id == "T-05" }.available shouldBe false
-        scenarios.single { it.id == "T-08" }.available shouldBe false
+    }
+
+    "a threat becomes available once its last manual scenario is automated" {
+        // T-08 was in the list above until GMCP-70 settled the bulk-disclosure verdict
+        // and A-14 became a probe. Asserted here rather than dropped, so the catalog and
+        // this endpoint cannot drift apart silently.
+        val t08 = scenarios.single { it.id == "T-08" }
+        t08.available shouldBe true
+        t08.modes shouldContainExactly listOf("vulnerable", "guarded")
     }
 
     "title and description come from the catalog's threat name/summary, not a hardcoded string" {

@@ -1,0 +1,32 @@
+id: require_approval_bulk_pii_response_positive
+description: >-
+  Twelve personal-data spans in one response — six customers' phone and account
+  each — are held for approval rather than masked and delivered. Server trust is
+  `trusted` on purpose: volume alone has to be enough, or the rule would only
+  protect against servers already treated as suspect.
+coverage:
+  policy_id: require_approval_bulk_pii_response
+  expectation: match
+event:
+  direction: response
+  tool: customer_lookup
+  server_trust: trusted
+  detections:
+    [
+      PII.PHONE,
+      PII.BANK_ACCOUNT,
+      PII.PHONE,
+      PII.BANK_ACCOUNT,
+      PII.PHONE,
+      PII.BANK_ACCOUNT,
+      PII.PHONE,
+      PII.BANK_ACCOUNT,
+      PII.PHONE,
+      PII.BANK_ACCOUNT,
+      PII.PHONE,
+      PII.BANK_ACCOUNT,
+    ]
+  risk_score: 71
+expected:
+  action: require_approval
+  matched_policy_ids: [mask_korean_pii_response, require_approval_bulk_pii_response]

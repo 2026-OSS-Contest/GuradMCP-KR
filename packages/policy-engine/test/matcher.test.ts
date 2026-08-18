@@ -288,6 +288,32 @@ describe("matchDetections", () => {
   it("treats an empty any_of defensively as no match (spec §5.5)", () => {
     expect(matchDetections({ any_of: [] }, context({ detections: [{ type: "SECRET" }] }))).toBe(false);
   });
+
+  // FR-PII-05: bulk disclosure is a count, and no risk-score threshold expresses it —
+  // that number folds in server trust, so a single span from an untrusted server
+  // outranks a twelve-span dump from a trusted one.
+  describe("min_count", () => {
+    const pii = (n: number) => Array.from({ length: n }, () => ({ type: "PII", subtype: "PHONE" }));
+
+    it("counts the detections matching any_of, not the distinct tags", () => {
+      expect(matchDetections({ any_of: ["PII"], min_count: 10 }, context({ detections: pii(12) }))).toBe(true);
+      expect(matchDetections({ any_of: ["PII"], min_count: 10 }, context({ detections: pii(9) }))).toBe(false);
+    });
+
+    it("counts only the detections in scope", () => {
+      const mixed = [...pii(3), { type: "SECRET" }, { type: "SECRET" }];
+      expect(matchDetections({ any_of: ["PII"], min_count: 4 }, context({ detections: mixed }))).toBe(false);
+      expect(matchDetections({ any_of: ["PII"], min_count: 3 }, context({ detections: mixed }))).toBe(true);
+    });
+
+    it("counts every detection when no tag scope is given", () => {
+      expect(matchDetections({ min_count: 5 }, context({ detections: [...pii(3), { type: "SECRET" }, { type: "SECRET" }] }))).toBe(true);
+    });
+
+    it("still requires the tag condition it is combined with", () => {
+      expect(matchDetections({ any_of: ["SECRET"], min_count: 1 }, context({ detections: pii(20) }))).toBe(false);
+    });
+  });
 });
 
 describe("matchRiskScore", () => {

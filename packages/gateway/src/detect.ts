@@ -3,6 +3,7 @@ import entropyTable from "./rules/entropy.json" with { type: "json" };
 import filePathCatalog from "./rules/file-path.json" with { type: "json" };
 import injectionCatalog from "./rules/injection.json" with { type: "json" };
 import koreanServiceTokenTable from "./rules/korean-service-tokens.json" with { type: "json" };
+import piiContextTable from "./rules/pii-context.json" with { type: "json" };
 import piiCatalog from "./rules/pii.json" with { type: "json" };
 import secretCatalog from "./rules/secret.json" with { type: "json" };
 
@@ -34,6 +35,19 @@ export interface Detection {
 /** What a rule does when its format validator rejects a candidate span. */
 type ValidationFailure = "reject" | "downgrade";
 
+/**
+ * FR-PII-04. What a rule does when no confirming keyword sits in the window
+ * before the span: `keep` reports it at the catalog confidence, `reject` treats
+ * the bare shape as too common to call personal data.
+ */
+type ContextAbsence = "keep" | "reject";
+
+interface ContextPolicy {
+  keywords: readonly string[];
+  withoutContext: ContextAbsence;
+  confidenceWithContext: number;
+}
+
 interface Rule {
   type: DetectionKind;
   subtype: string;
@@ -44,12 +58,16 @@ interface Rule {
   onValidationFailure: ValidationFailure;
   /** Confidence kept when a `downgrade` rule fails validation. */
   unvalidatedConfidence: number;
+  /** FR-PII-04 weighting for this subtype; absent when the table says nothing about it. */
+  contextPolicy?: ContextPolicy;
 }
 
 /** Options for a single detection pass. */
 export interface DetectOptions {
   /** Skips format validators; used to measure how much they reduce false positives. */
   skipValidation?: boolean;
+  /** Skips FR-PII-04 context weighting; used to measure what it contributes. */
+  skipContextWeighting?: boolean;
 }
 
 interface NormalizedInput {
@@ -74,12 +92,16 @@ const validators: Record<string, (value: string) => boolean> = {
   jwtStructure: validJwtStructure,
 };
 
+const { windowChars: contextWindow, policies: contextPolicies } = parsePiiContextTable(piiContextTable);
 const rules: Rule[] = [
   ...[piiCatalog, secretCatalog, injectionCatalog, filePathCatalog].flatMap(
     parseCatalog,
   ),
   ...parseKoreanServiceTokens(koreanServiceTokenTable),
-];
+].map((rule) => {
+  const contextPolicy = rule.type === "PII" ? contextPolicies.get(rule.subtype) : undefined;
+  return contextPolicy ? { ...rule, contextPolicy } : rule;
+});
 const injectionRules = rules.filter(({ type }) => type === "INJECTION");
 const bankAccounts = parseBankAccountTable(bankAccountTable);
 
@@ -89,8 +111,9 @@ export function detect(
 ): Detection[] {
   const normalized = normalizeInput(input);
   const skipValidation = options.skipValidation === true;
+  const skipContextWeighting = options.skipContextWeighting === true;
   const catalogued = [
-    ...rules.flatMap((rule) => findRule(rule, normalized, skipValidation)),
+    ...rules.flatMap((rule) => findRule(rule, normalized, skipValidation, skipContextWeighting)),
     ...findEncodedInjections(normalized, skipValidation),
   ];
   return [...catalogued, ...findHighEntropySecrets(normalized, catalogued)];
@@ -592,6 +615,7 @@ function findRule(
   rule: Rule,
   input: NormalizedInput,
   skipValidation: boolean,
+  skipContextWeighting = false,
 ): Detection[] {
   const pattern = new RegExp(rule.pattern.source, rule.pattern.flags);
   return [...input.text.matchAll(pattern)].flatMap((match) => {
@@ -603,6 +627,18 @@ function findRule(
     if (!skipValidation && rule.validate && !rule.validate(match[0])) {
       if (rule.onValidationFailure === "reject") return [];
       confidence = rule.unvalidatedConfidence;
+    }
+    // FR-PII-04. Korean labels the value before writing it, so the window that
+    // matters is the text immediately preceding the span. Checked against the
+    // normalized text, before spans are mapped back to source offsets, so both
+    // sides of the comparison use the same coordinates.
+    if (!skipContextWeighting && rule.contextPolicy) {
+      const before = input.text.slice(Math.max(0, match.index - contextWindow), match.index);
+      const confirmed = rule.contextPolicy.keywords.some((keyword) =>
+        before.toLowerCase().includes(keyword.toLowerCase()),
+      );
+      if (confirmed) confidence = Math.max(confidence, rule.contextPolicy.confidenceWithContext);
+      else if (rule.contextPolicy.withoutContext === "reject") return [];
     }
     const span = input.identity
       ? { start: match.index, end: match.index + match[0].length }
@@ -653,6 +689,52 @@ function normalizeInput(input: string): NormalizedInput {
     sourceOffset = sourceEnd;
   }
   return { text, sourceSpans, identity: false };
+}
+
+/**
+ * Parses the FR-PII-04 context table. Failures throw at module load, like the
+ * other catalogs: a malformed entry that silently did nothing would leave the
+ * ambiguous shapes reporting as personal data with nobody the wiser.
+ */
+function parsePiiContextTable(source: unknown): {
+  windowChars: number;
+  policies: Map<string, ContextPolicy>;
+} {
+  if (!isRecord(source)) throw new Error("PII context table must be an object.");
+  if (source.version !== 1) throw new Error("PII context table must declare version 1.");
+  const windowChars = source.windowChars;
+  if (typeof windowChars !== "number" || !Number.isInteger(windowChars) || windowChars <= 0) {
+    throw new Error("PII context table must declare a positive integer windowChars.");
+  }
+  if (!Array.isArray(source.subtypes) || source.subtypes.length === 0) {
+    throw new Error("PII context table must list at least one subtype.");
+  }
+  const policies = new Map<string, ContextPolicy>();
+  for (const entry of source.subtypes) {
+    if (!isRecord(entry)) throw new Error("PII context entry must be an object.");
+    const { subtype, keywords, withoutContext, confidenceWithContext, basis } = entry;
+    if (!isNonEmptyString(subtype)) throw new Error("PII context entry must name a subtype.");
+    if (policies.has(subtype)) throw new Error(`PII context table repeats ${subtype}.`);
+    if (!Array.isArray(keywords) || keywords.length === 0 || !keywords.every(isNonEmptyString)) {
+      throw new Error(`PII context entry ${subtype} must list non-empty keywords.`);
+    }
+    if (withoutContext !== "keep" && withoutContext !== "reject") {
+      throw new Error(`PII context entry ${subtype} must declare withoutContext as keep or reject.`);
+    }
+    if (
+      typeof confidenceWithContext !== "number" ||
+      !Number.isFinite(confidenceWithContext) ||
+      confidenceWithContext < 0 ||
+      confidenceWithContext > 1
+    ) {
+      throw new Error(`PII context entry ${subtype} must declare confidenceWithContext between 0 and 1.`);
+    }
+    // Same requirement the domestic-credential table carries: a contributor has
+    // to say why a shape is or is not evidence, so the trade-off stays reviewable.
+    if (!isNonEmptyString(basis)) throw new Error(`PII context entry ${subtype} must document its basis.`);
+    policies.set(subtype, { keywords, withoutContext, confidenceWithContext });
+  }
+  return { windowChars, policies };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

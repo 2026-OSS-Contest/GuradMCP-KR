@@ -84,7 +84,21 @@ export function matchDetections(cond: MatchDefinition["detections"], ctx: Policy
   if (cond.any_of && !cond.any_of.some((type) => found.has(type))) return false;
   if (cond.all_of && !cond.all_of.every((type) => found.has(type))) return false;
   if (cond.none_of && cond.none_of.some((type) => found.has(type))) return false;
+  if (cond.min_count !== undefined) {
+    const scope = cond.any_of ?? cond.all_of;
+    const counted = scope
+      ? ctx.detections.filter((detection) =>
+          tokensOf(detection).some((token) => scope.includes(token))
+        ).length
+      : ctx.detections.length;
+    if (counted < cond.min_count) return false;
+  }
   return true;
+}
+
+/** The coarse type and the dotted `type.subtype` token one detection answers to. */
+function tokensOf({ type, subtype }: Detection): string[] {
+  return subtype ? [type, `${type}.${subtype}`] : [type];
 }
 
 /** Argument conditions (spec §5.3/§5.4 plus the runtime operator superset). */
@@ -96,9 +110,7 @@ export function matchArgs(cond: MatchDefinition["args"], ctx: PolicyContext): bo
 // --- Helpers ---------------------------------------------------------------
 
 function detectionTokens(detections: Detection[]): Set<string> {
-  return new Set(
-    detections.flatMap(({ type, subtype }) => (subtype ? [type, `${type}.${subtype}`] : [type]))
-  );
+  return new Set(detections.flatMap(tokensOf));
 }
 
 /**

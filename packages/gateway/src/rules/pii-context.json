@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "windowChars": 24,
+  "description": "FR-PII-04. Korean writes the label before the value ('여권번호 M12345678'), so a confirming keyword within windowChars before a span is evidence about what the digits are. Each subtype declares what to do when that evidence is absent: keep it (the pattern stands on its own), or reject it (the shape alone is too common to report).",
+  "subtypes": [
+    {
+      "subtype": "PASSPORT",
+      "keywords": ["여권", "passport"],
+      "withoutContext": "reject",
+      "confidenceWithContext": 0.9,
+      "basis": "The pattern is one letter and eight digits, which is also the shape of model numbers, SKUs and ticket ids. Its 0.6 confidence was a hedge against exactly that. Every passport mention in Korean business writing carries the label, so requiring it removes the ambiguous half without costing a real detection."
+    },
+    {
+      "subtype": "DL_NO",
+      "keywords": ["운전면허", "면허번호", "면허"],
+      "withoutContext": "reject",
+      "confidenceWithContext": 0.9,
+      "basis": "A regional code plus grouped digits also describes equipment serial numbers and asset tags. Same trade as PASSPORT: the label is always present when the number really is a licence."
+    },
+    {
+      "subtype": "RRN_LIKE",
+      "keywords": ["주민등록번호", "주민번호", "등록번호", "본인확인", "생년월일"],
+      "withoutContext": "keep",
+      "confidenceWithContext": 1.0,
+      "basis": "The checksum validator already rejects lookalikes such as an order number, so the pattern stands without a label. A label is still corroboration, so it raises confidence rather than deciding the detection."
+    },
+    {
+      "subtype": "ADDRESS",
+      "keywords": ["주소", "거주지", "배송지", "자택"],
+      "withoutContext": "keep",
+      "confidenceWithContext": 0.95,
+      "basis": "An address is self-describing enough to report on its own, but a label distinguishes a customer's home address from a branch office named in passing."
+    }
+  ]
+}

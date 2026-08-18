@@ -121,7 +121,10 @@ describe("Attack Scenario Runner (GMCP-55)", () => {
 
   it("skips a manual scenario instead of counting it as covered", async () => {
     const report = await runCatalog({ sessionId: "s-catalog" });
-    expect(report.skipped.map(({ scenarioId }) => scenarioId)).toEqual(expect.arrayContaining(["A-09", "A-11", "A-14"]));
+    // Exact, not `arrayContaining`: a scenario quietly reverting to manual is the
+    // failure this guards against, and containment would not notice it. A-14 left
+    // this list when GMCP-70 settled the bulk-disclosure verdict.
+    expect(report.skipped.map(({ scenarioId }) => scenarioId).sort()).toEqual(["A-09", "A-11"]);
     for (const skip of report.skipped) expect(skip.blockedBy).toMatch(/^GMCP-\d+$/);
   });
 

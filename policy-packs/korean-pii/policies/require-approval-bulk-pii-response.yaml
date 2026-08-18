@@ -1,0 +1,28 @@
+# T-08 (Exfil by volume). One customer's phone number and a dump of six
+# customers' phones and account numbers are the same event to
+# `mask_korean_pii_response`: both mask and pass. Volume is the signal that
+# separates a lookup from an extraction, and it cannot be expressed with
+# `risk_score` — that number folds in server trust, so a single span from an
+# untrusted server (80) outranks a twelve-span dump from a trusted one (71).
+# Counting the spans is the only condition that says what it means.
+id: require_approval_bulk_pii_response
+pack: korean-pii
+version: 1
+description: Hold a tool response that discloses personal data in bulk for human approval
+priority: 320
+match:
+  direction: response
+  tool: '*'
+  server_trust: any
+  detections:
+    any_of: [PII]
+    # Six customers' phone and account each — a `SELECT *` shaped answer rather
+    # than a record someone looked up. Below this the masking policy still applies.
+    min_count: 10
+action: require_approval
+severity: critical
+message: The response disclosed personal data in bulk, so it is held for approval instead of being masked and delivered.
+approval:
+  timeout_seconds: 120
+  on_timeout: block
+  allow_masked_approval: true
