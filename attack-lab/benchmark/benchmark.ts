@@ -102,11 +102,15 @@ export interface BenchmarkReport {
   validationImpact: { fprWithoutValidation: number; fprWithValidation: number; falsePositivesPrevented: number; fprReduction: number };
   /** FR-LAB-03: dry-run activity observed on real traffic, or why none was. */
   dryRunObservations: DryRunObservations;
+  contextWeightingImpact: { fprWithoutContext: number; fprWithContext: number; fprReduction: number; recallWithoutContext: number; recallWithContext: number; recallChange: number; falsePositivesPrevented: number };
   scenarios: Array<{ id: string; passed: boolean; expectedBlocked: boolean; actualBlocked: boolean }>;
   fixtures: Array<{ id: string; coverage: AuthorFixture["coverage"]; passed: boolean; expected: AuthorFixture["expected"]; actual: { action: Action; matched_policy_ids: string[] } }>;
   fixtureCoverage: Array<{ policyId: string; positive: boolean; negative: boolean }>;
   passed: boolean;
 }
+
+/** Mirrors `require_approval_bulk_pii_response`'s `detections.min_count`. */
+const BULK_PII_MIN_COUNT = 10;
 
 export async function runBenchmark(): Promise<BenchmarkReport> {
   const samples = JSON.parse(await readFile(new URL("../datasets/pii-benchmark.json", import.meta.url), "utf8")) as Sample[];
@@ -127,6 +131,9 @@ export async function runBenchmark(): Promise<BenchmarkReport> {
   let falseNegative = 0;
   /** FR-PII-02: how many benign samples the format validators keep out of the results. */
   let falsePositiveWithoutValidation = 0;
+  /** FR-PII-04: how many benign samples the context weighting keeps out, and what it costs in recall. */
+  let falsePositiveWithoutContext = 0;
+  let falseNegativeWithoutContext = 0;
   const perTypeTotals = new Map<string, { total: number; detected: number }>();
   for (const sample of samples) {
     const subtypes = new Set(detect(sample.text).filter(({ type }) => type === "PII").map(({ subtype }) => subtype));
@@ -134,6 +141,9 @@ export async function runBenchmark(): Promise<BenchmarkReport> {
     if (!sample.label && detect(sample.text, { skipValidation: true }).some(({ type }) => type === "PII")) {
       falsePositiveWithoutValidation += 1;
     }
+    const positiveWithoutContext = detect(sample.text, { skipContextWeighting: true }).some(({ type }) => type === "PII");
+    if (!sample.label && positiveWithoutContext) falsePositiveWithoutContext += 1;
+    if (sample.label && !positiveWithoutContext) falseNegativeWithoutContext += 1;
     if (sample.label && positive) truePositive += 1;
     if (!sample.label && positive) falsePositive += 1;
     if (sample.label && !positive) falseNegative += 1;
@@ -167,7 +177,16 @@ export async function runBenchmark(): Promise<BenchmarkReport> {
   }).sort((left, right) => left - right);
 
   const scenarioResults = scenarios.map((scenario) => {
-    const actualBlocked = detect(scenario.text).some(({ type }) => type === "SECRET" || type === "INJECTION");
+    const found = detect(scenario.text);
+    // "Blocked" here means the detector produced a control point, and until T-08
+    // every one of those was a SECRET or an INJECTION. Bulk personal data is the
+    // exception: a single PII span is masked and delivered, so it is not a block,
+    // while a dump of them is held for approval by `require_approval_bulk_pii_response`.
+    // The threshold is that policy's `detections.min_count`; the two have to agree,
+    // or this metric would score a control the pipeline does not actually apply.
+    const actualBlocked =
+      found.some(({ type }) => type === "SECRET" || type === "INJECTION") ||
+      found.filter(({ type }) => type === "PII").length >= BULK_PII_MIN_COUNT;
     return { id: scenario.id, passed: actualBlocked === scenario.expectBlocked, expectedBlocked: scenario.expectBlocked, actualBlocked };
   });
   const expectedThreats = scenarioResults.filter(({ expectedBlocked }) => expectedBlocked);
@@ -344,11 +363,43 @@ export async function runBenchmark(): Promise<BenchmarkReport> {
     falsePositivesPrevented: falsePositiveWithoutValidation - falsePositive,
     fprReduction: fprWithoutValidation - fpr
   };
+  /**
+   * FR-PII-04 (GMCP-70). The ticket asks for an on/off record, and the pair only
+   * means something if both halves are reported: a weighting that cut the false
+   * positive rate by dropping real detections would show here as recall falling
+   * on the "with" side, rather than as an unqualified improvement.
+   */
+  const fprWithoutContext = negatives === 0 ? 0 : falsePositiveWithoutContext / negatives;
+  const recallWithoutContext = positives === 0 ? 0 : (positives - falseNegativeWithoutContext) / positives;
+  const contextWeightingImpact = {
+    fprWithoutContext,
+    fprWithContext: fpr,
+    fprReduction: fprWithoutContext - fpr,
+    recallWithoutContext,
+    recallWithContext: recall,
+    recallChange: recall - recallWithoutContext,
+    falsePositivesPrevented: falsePositiveWithoutContext - falsePositive
+  };
   // Consulted, not required: the gate's own thresholds are all measured from the
   // datasets in this repository, so a benchmark run must not depend on a control plane
   // being reachable. CI has none, and its report says so rather than reporting zeros.
   const dryRunObservations = await readDryRunObservations(policies);
-  return { generatedAt: new Date().toISOString(), metrics, thresholds, perTypeRecall, dryRunObservations, koreanServiceTokens, highEntropySecrets, koreanInjection, validationImpact, scenarios: scenarioResults, fixtures: fixtureResults, fixtureCoverage, passed };
+  return {
+    generatedAt: new Date().toISOString(),
+    metrics,
+    thresholds,
+    perTypeRecall,
+    dryRunObservations,
+    koreanServiceTokens,
+    highEntropySecrets,
+    koreanInjection,
+    validationImpact,
+    contextWeightingImpact,
+    scenarios: scenarioResults,
+    fixtures: fixtureResults,
+    fixtureCoverage,
+    passed
+  };
 }
 
 function toDetection(tag: string): Detection {
