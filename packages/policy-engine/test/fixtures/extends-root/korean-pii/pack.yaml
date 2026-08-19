@@ -1,0 +1,11 @@
+name: korean-pii
+version: 1.0.0
+description: Fixture child pack that extends default (extends-chain resolution tests)
+dsl_version: 1
+default_action: allow
+evaluation_strategy: severity-max
+extends:
+  - default@^1.0.0
+policies:
+  - policies/mask-korean-pii-response.yaml
+  - policies/block-env-file-read-override.yaml

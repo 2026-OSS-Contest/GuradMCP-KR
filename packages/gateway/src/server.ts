@@ -5,6 +5,7 @@ import {
   type ServerResponse,
 } from "node:http";
 import { connect } from "node:net";
+import { fileURLToPath } from "node:url";
 import {
   evaluate,
   extractPathArg,
@@ -45,6 +46,10 @@ import type {
   PolicyDecision,
   ServerTrust,
 } from "./pipeline/types.js";
+import { logJson } from "./pipeline/logger.js";
+import { loadBootSnapshot } from "./policy/policy-loader.js";
+import { PolicyStore } from "./policy/policy-store.js";
+import { startPolicyWatcher } from "./policy/policy-watcher.js";
 import { scoreRisk } from "./risk.js";
 import { getServerTrust, startServerRegistrySync } from "./server-registry.js";
 import { startFailurePolicySync } from "./settings/failurePolicyCache.js";
@@ -60,7 +65,6 @@ import {
   type ToolDefinitionDiff,
   type ToolDiffType,
 } from "./tool-snapshot.js";
-import { runtimePolicyPacks } from "./policies.generated.js";
 
 const port = Number(process.env.PORT ?? 3001);
 const maxBodyBytes = 1024 * 1024;
@@ -92,6 +96,50 @@ startToolSnapshotSync(
   gatewayServerId,
   toolSnapshotSyncIntervalMs,
 );
+
+// FR-POL-03 §3/§6: the pipeline evaluates through PolicyStore.getSnapshot(), never a static
+// import, so an edit under policy-packs/ takes effect on the next Tool Call without a restart.
+// korean-pii is the pack the pipeline evaluates against; it `extends: [default]`
+// (policy-packs/korean-pii/pack.yaml), so this is the same effective policy set the old static
+// wiring (`runtimePolicyPacks["korean-pii"]`) evaluated.
+const ACTIVE_POLICY_PACK_ID = "korean-pii";
+
+// A source checkout (`src/server.ts` under tsx) and a locally-built `dist/server.js` both sit
+// three directories under the repo root, so this default resolves correctly either way. The
+// Docker image flattens `packages/gateway/dist` to `/app/dist` (see Dockerfile), which is why
+// production sets POLICY_PACKS_DIR explicitly instead of relying on this default.
+const defaultPolicyPacksDir = fileURLToPath(
+  new URL("../../../policy-packs", import.meta.url),
+);
+const policyPacksDir = process.env.POLICY_PACKS_DIR ?? defaultPolicyPacksDir;
+
+// §6 step 3: boot failure (a required pack missing or broken) is fatal — fail-closed by exiting
+// rather than serving traffic with no usable policy set.
+const bootLoad = await loadBootSnapshot(policyPacksDir);
+for (const error of bootLoad.registry.getAllErrors()) {
+  logJson(error.level === "critical" ? "error" : "warn", "policy load error", {
+    file: error.file,
+    ruleId: error.ruleId,
+    message: error.message,
+    level: error.level,
+  });
+}
+if (bootLoad.fatal) {
+  logJson("error", "gateway boot aborted: a required policy pack failed to load", {
+    policyPacksDir,
+  });
+  process.exit(1);
+}
+const policyStore = new PolicyStore(bootLoad.snapshot);
+// The watcher holds an open chokidar handle (fs watches + a debounce timer), which would leak
+// across the test suite for no benefit — tests exercise PolicyWatcher directly instead
+// (policy-watcher.test.ts), the same way ./pipeline/auditPublisher.ts gates its own bus
+// subscription and the tail of this file gates `createServer(...).listen(...)`.
+if (process.env.NODE_ENV !== "test") {
+  startPolicyWatcher(policyPacksDir, policyStore, {
+    activePackId: ACTIVE_POLICY_PACK_ID,
+  });
+}
 
 // With CONTROL_PLANE_URL set, a real Approval Console can resolve `require_approval` calls
 // (§5.1, GMCP-26); otherwise there is nothing to answer them, so fail-closed immediately
@@ -137,10 +185,17 @@ async function route(
     // Verdict counts and pipeline latency only (NFR-06). Never payloads or detected
     // values — this endpoint must not become a second way to read protected data.
     // `audit` is the Event Emitter's own health (NFR-06: publish success rate, queue backlog).
+    const activeSnapshot = policyStore.getSnapshot();
     send(response, 200, {
       service: "gateway",
       ...metricsSnapshot(),
       audit: auditPublisherMetrics(),
+      // FR-POL-03: observable proof a hot-reload landed, without exposing policy content.
+      policy: {
+        version: activeSnapshot.version,
+        loadedAt: activeSnapshot.loadedAt.toISOString(),
+        policyCount: activeSnapshot.registry.getActivePolicyCount(),
+      },
     });
     return;
   }
@@ -547,16 +602,21 @@ function evaluatePayloadOrThrow(
   context: Pick<PolicyContext, "direction" | "tool" | "serverTrust" | "args">,
 ): PolicyDecision {
   const startedAt = performance.now();
+  // FR-POL-03 §4.3: read the active snapshot once, up front, and thread it through the rest of
+  // this (fully synchronous) function. A concurrent `PolicyStore.swap()` can never be observed
+  // mid-evaluation this way — this call either sees the pre-reload or the post-reload snapshot,
+  // never a mix of the two.
+  const snapshot = policyStore.getSnapshot();
   const tracker = createStageBudgetTracker();
   const detections = runStage(tracker, "detection", () => detect(text));
   const { score: riskScore } = runStage(tracker, "risk_scoring", () =>
     scoreRisk(detections, context.tool, context.serverTrust),
   );
   const decision = runStage(tracker, "policy_engine", () => {
-    const activePack = runtimePolicyPacks["korean-pii"];
+    const activePack = snapshot.registry.getPack(ACTIVE_POLICY_PACK_ID);
     if (!activePack) throw new Error("Active policy pack is unavailable");
     const result = evaluate(
-      resolveRuntimePolicies("korean-pii"),
+      snapshot.registry.resolvePolicies(ACTIVE_POLICY_PACK_ID),
       {
         ...context,
         detections: detections.map(({ type, subtype }) => ({ type, subtype })),
@@ -863,25 +923,6 @@ function sessionIdOf(body: Record<string, unknown>): string {
   return typeof body.sessionId === "string"
     ? body.sessionId
     : `req-${String(body.id ?? randomUUID())}`;
-}
-
-function resolveRuntimePolicies(
-  packName: string,
-  resolving = new Set<string>(),
-): Policy[] {
-  if (resolving.has(packName))
-    throw new Error(`Runtime policy-pack cycle at ${packName}`);
-  const pack = runtimePolicyPacks[packName];
-  if (!pack) throw new Error(`Unknown runtime policy pack ${packName}`);
-  const next = new Set(resolving).add(packName);
-  const inherited = pack.extends.flatMap((reference) =>
-    resolveRuntimePolicies(reference.split("@")[0] ?? reference, next),
-  );
-  return [
-    ...new Map(
-      [...inherited, ...pack.policies].map((policy) => [policy.id, policy]),
-    ).values(),
-  ];
 }
 
 async function readJson(

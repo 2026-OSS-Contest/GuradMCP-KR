@@ -1,0 +1,15 @@
+id: approve_env_file_read_korean_pii
+pack: korean-pii
+priority: 110
+match:
+  direction: request
+  tool: read_file
+  server_trust: untrusted
+  args:
+    path_regex: '(^|/)\.env$'
+action: require_approval
+severity: high
+message: Credential-file access from an untrusted server requires approval.
+approval:
+  timeout_seconds: 60
+  on_timeout: block

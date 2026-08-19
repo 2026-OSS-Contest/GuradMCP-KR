@@ -277,4 +277,58 @@ describe("loadPolicyPacks", () => {
       "PROMPT_INJECTION_DETECTED"
     );
   });
+
+  it("reads a manifest's evaluation_strategy and extends onto PackState (FR-POL-03 §6 step 1)", async () => {
+    const registry = await loadPolicyPacks(fixture("extends-root"), { requiredPacks: [] });
+
+    expect(registry.getPack("default")).toMatchObject({ evaluationStrategy: "severity-max", extends: [] });
+    expect(registry.getPack("korean-pii")).toMatchObject({
+      evaluationStrategy: "severity-max",
+      extends: ["default@^1.0.0"]
+    });
+  });
+
+  it("defaults evaluationStrategy/extends when a pack has no manifest", async () => {
+    const registry = await loadPolicyPacks(fixture("no-manifest-root"), { requiredPacks: [] });
+    const pack = registry.getPack("no-manifest-pack");
+
+    expect(pack?.evaluationStrategy).toBe("severity-max");
+    expect(pack?.extends).toEqual([]);
+  });
+
+  describe("resolvePolicies (FR-POL-03 §4.3/§6 step 1)", () => {
+    it("flattens a pack's extends chain, parent policies first", async () => {
+      const registry = await loadPolicyPacks(fixture("extends-root"), { requiredPacks: [] });
+
+      const resolved = registry.resolvePolicies("korean-pii");
+
+      expect(resolved.map((policy) => policy.id)).toEqual([
+        "block_env_file_read",
+        "warn_injection_request",
+        "mask_korean_pii_response",
+        "approve_env_file_read_korean_pii"
+      ]);
+    });
+
+    it("resolves a pack with no extends to just its own policies", async () => {
+      const registry = await loadPolicyPacks(fixture("extends-root"), { requiredPacks: [] });
+
+      expect(registry.resolvePolicies("default").map((policy) => policy.id)).toEqual([
+        "block_env_file_read",
+        "warn_injection_request"
+      ]);
+    });
+
+    it("throws on an unknown pack id", async () => {
+      const registry = await loadPolicyPacks(fixture("extends-root"), { requiredPacks: [] });
+
+      expect(() => registry.resolvePolicies("does-not-exist")).toThrow(/Unknown policy pack/);
+    });
+
+    it("throws instead of infinite-looping on an extends cycle", async () => {
+      const registry = await loadPolicyPacks(fixture("extends-cycle-root"), { requiredPacks: [] });
+
+      expect(() => registry.resolvePolicies("pack-a")).toThrow(/cycle/);
+    });
+  });
 });

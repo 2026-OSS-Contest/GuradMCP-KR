@@ -1,0 +1,10 @@
+id: mask_korean_pii_response
+pack: korean-pii
+priority: 300
+match:
+  direction: response
+  detections:
+    any_of: [PII]
+action: mask_then_allow
+severity: high
+message: Personal-data spans were masked before the tool response was delivered.

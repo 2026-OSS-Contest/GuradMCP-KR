@@ -8,7 +8,20 @@ import { EventEmitter } from "node:events";
 import type { ApprovalRequestId } from "../approval/backend.js";
 import type { GuardEvent } from "./types.js";
 
-export type GuardBusEventType = "guard.event" | "approval.created" | "approval.resolved";
+export type GuardBusEventType =
+  | "guard.event"
+  | "approval.created"
+  | "approval.resolved"
+  | "policy.reloaded"
+  | "policy.reload_failed";
+
+const GUARD_BUS_EVENT_TYPES: readonly GuardBusEventType[] = [
+  "guard.event",
+  "approval.created",
+  "approval.resolved",
+  "policy.reloaded",
+  "policy.reload_failed"
+];
 
 export interface ApprovalCreatedPayload {
   requestId: ApprovalRequestId;
@@ -22,9 +35,31 @@ export interface ApprovalResolvedPayload {
   decision: string;
 }
 
+/** FR-POL-03 §4.5 success payload. */
+export interface PolicyReloadedPayload {
+  packId: string;
+  version: string;
+  reloadedAt: string;
+  policyCount: number;
+}
+
+/** FR-POL-03 §4.5 failure payload (not in SCREEN-SPACE.md §6.3 yet — defined here per §4.5's note). */
+export interface PolicyReloadFailedPayload {
+  packId: string;
+  filePath: string;
+  reason: string;
+  detail: string;
+  occurredAt: string;
+}
+
 export interface GuardBusMessage {
   type: GuardBusEventType;
-  data: GuardEvent | ApprovalCreatedPayload | ApprovalResolvedPayload;
+  data:
+    | GuardEvent
+    | ApprovalCreatedPayload
+    | ApprovalResolvedPayload
+    | PolicyReloadedPayload
+    | PolicyReloadFailedPayload;
 }
 
 export const guardEventBus = new EventEmitter();
@@ -45,14 +80,18 @@ export function emitApprovalResolved(data: ApprovalResolvedPayload): void {
   publish({ type: "approval.resolved", data });
 }
 
+export function emitPolicyReloaded(data: PolicyReloadedPayload): void {
+  publish({ type: "policy.reloaded", data });
+}
+
+export function emitPolicyReloadFailed(data: PolicyReloadFailedPayload): void {
+  publish({ type: "policy.reload_failed", data });
+}
+
 export function onGuardBusMessage(listener: (message: GuardBusMessage) => void): () => void {
   const handler = (message: GuardBusMessage) => listener(message);
-  guardEventBus.on("guard.event", handler);
-  guardEventBus.on("approval.created", handler);
-  guardEventBus.on("approval.resolved", handler);
+  for (const type of GUARD_BUS_EVENT_TYPES) guardEventBus.on(type, handler);
   return () => {
-    guardEventBus.off("guard.event", handler);
-    guardEventBus.off("approval.created", handler);
-    guardEventBus.off("approval.resolved", handler);
+    for (const type of GUARD_BUS_EVENT_TYPES) guardEventBus.off(type, handler);
   };
 }

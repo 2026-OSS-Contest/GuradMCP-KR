@@ -172,6 +172,11 @@ services:
       DEPENDENCY_TCP: postgres:5432,redis:6379
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-3001}:3001"
+    volumes:
+      # FR-POL-03: bind-mounted (not baked into the image) so an edit under the host's
+      # policy-packs/ is hot-reloaded into the running container without a rebuild. `:ro` is
+      # enough — the gateway only watches/reads this path, it never writes to it.
+      - ./policy-packs:/app/policy-packs:ro
     depends_on:
       postgres-seed:
         condition: service_completed_successfully
