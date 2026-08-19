@@ -104,3 +104,20 @@ def test_cli_exit_code_reflects_whether_the_chain_was_stopped(monkeypatch, mode,
     monkeypatch.setattr(cli, "McpClient", lambda url: McpClient(url, transport))
     # Nothing blocked: guarded must fail loudly, vulnerable is expected to complete.
     assert cli.main(["--mode", mode]) == expected
+
+
+def test_an_unreachable_gateway_fails_closed():
+    """Connection refused, DNS failure and timeout raise `URLError`, not `HTTPError`.
+
+    Only the latter was handled, so a gateway that was down raised out of the agent
+    instead of producing a verdict. An outage has to read as blocked for the same
+    reason a 502 does: nothing told us the call was safe.
+    """
+    import urllib.error
+
+    def refused(url: str, body: bytes) -> bytes:
+        raise urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
+
+    result = McpClient("http://gateway", refused).call("read_file", {"path": ".env"}, "t-01")
+    assert result.blocked is True
+    assert result.verdict == "error"

@@ -64,6 +64,15 @@ class McpClient:
                 tool=name, blocked=True, verdict="error",
                 message=f"gateway returned HTTP {error.code}",
             )
+        except urllib.error.URLError as error:
+            # Connection refused, DNS failure and timeout land here rather than above
+            # (HTTPError is the subclass, so it is caught first). An outage has to read
+            # as blocked for the same reason a 502 does — nothing told us the call was
+            # safe — and raising out of the agent would report neither verdict at all.
+            return ToolResult(
+                tool=name, blocked=True, verdict="error",
+                message=f"gateway at {self._base_url} is unreachable: {error.reason}",
+            )
         return self._read(name, json.loads(raw))
 
     @staticmethod
