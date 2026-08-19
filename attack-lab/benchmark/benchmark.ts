@@ -109,9 +109,6 @@ export interface BenchmarkReport {
   passed: boolean;
 }
 
-/** Mirrors `require_approval_bulk_pii_response`'s `detections.min_count`. */
-const BULK_PII_MIN_COUNT = 10;
-
 export async function runBenchmark(): Promise<BenchmarkReport> {
   const samples = JSON.parse(await readFile(new URL("../datasets/pii-benchmark.json", import.meta.url), "utf8")) as Sample[];
   const scenarios = JSON.parse(await readFile(new URL("../scenarios/threats.json", import.meta.url), "utf8")) as Scenario[];
@@ -123,6 +120,7 @@ export async function runBenchmark(): Promise<BenchmarkReport> {
   const policyPacks = await loadPolicyPacks(policyRoot);
   const policies = [...policyPacks.values()].flatMap(({ policies: packPolicies }) => packPolicies);
   const policyById = new Map(policies.map((policy) => [policy.id, policy]));
+  const bulkPiiMinCount = readBulkPiiMinCount(policyById);
   const authorFixtures = await loadYamlFiles<AuthorFixture>(fixtureRoot, (path) => [".yaml", ".yml"].includes(extname(path)));
   validateFixtures(authorFixtures, policies);
 
@@ -186,7 +184,7 @@ export async function runBenchmark(): Promise<BenchmarkReport> {
     // or this metric would score a control the pipeline does not actually apply.
     const actualBlocked =
       found.some(({ type }) => type === "SECRET" || type === "INJECTION") ||
-      found.filter(({ type }) => type === "PII").length >= BULK_PII_MIN_COUNT;
+      found.filter(({ type }) => type === "PII").length >= bulkPiiMinCount;
     return { id: scenario.id, passed: actualBlocked === scenario.expectBlocked, expectedBlocked: scenario.expectBlocked, actualBlocked };
   });
   const expectedThreats = scenarioResults.filter(({ expectedBlocked }) => expectedBlocked);
@@ -400,6 +398,27 @@ export async function runBenchmark(): Promise<BenchmarkReport> {
     fixtureCoverage,
     passed
   };
+}
+
+/**
+ * The bulk-disclosure threshold, read from the policy that enforces it rather than
+ * repeated here (GMCP-119). The two numbers deciding the same thing from two files is
+ * how this metric ends up scoring a control the pipeline does not actually apply: the
+ * policy would escalate at one count while `blockRate` credited a block at another.
+ *
+ * Throws rather than defaulting. A silent fallback would keep the benchmark green
+ * while measuring a threshold nothing enforces, which is the failure this exists to
+ * prevent.
+ */
+export function readBulkPiiMinCount(policyById: Map<string, Policy>): number {
+  const policyId = "require_approval_bulk_pii_response";
+  const policy = policyById.get(policyId);
+  if (!policy) throw new Error(`${policyId} is not among the shipped policies; blockRate cannot credit bulk PII.`);
+  const minCount = policy.match?.detections?.min_count;
+  if (typeof minCount !== "number" || !Number.isInteger(minCount) || minCount < 1) {
+    throw new Error(`${policyId} must declare an integer match.detections.min_count of at least 1.`);
+  }
+  return minCount;
 }
 
 function toDetection(tag: string): Detection {
