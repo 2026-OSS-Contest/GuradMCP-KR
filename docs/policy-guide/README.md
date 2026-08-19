@@ -44,6 +44,7 @@ message: 비밀 키 파일 접근이 정책에 의해 차단되었습니다.
 | `severity` | 예 | 다섯 값 중 하나 | 사건의 보안 중요도 |
 | `message` | 권장 | 문자열 | 민감 원문 없는 사용자 메시지 |
 | `approval` | 조건부 | 객체 | `require_approval`일 때 필수 |
+| `dry_run` | 선택 | boolean, 기본 `false` | `true`면 매칭·판정은 그대로 일어나지만 실제 조치(마스킹/승인 대기열/차단)에는 반영되지 않는 "관찰 모드"입니다. `enabled: false`와 달리 평가 자체에서는 제외되지 않습니다 — 신규 정책을 실 트래픽에 영향 없이 검증할 때 씁니다(SPEC-POL-04). |
 
 알 수 없는 필드, 잘못된 enum, 빈 `match`, 중복 `id`, 팩 이름 불일치는 validation 오류입니다. 정규식은 YAML single quote로 감싸 역슬래시 해석을 피하는 것을 권장합니다.
 
@@ -268,6 +269,7 @@ policies:
 - `evaluation_strategy`는 `severity-max` 또는 `first-match`입니다.
 - `extends`는 `pack@semver-range` 목록입니다. 부모를 먼저 적용하고 child manifest가 strategy/default를 정합니다.
 - `policies`는 팩 directory 기준 상대 파일이며 나열 순서가 아니라 `priority`가 평가 순서를 정합니다.
+- `default_dry_run`(선택, boolean)은 팩 내 정책이 자기만의 `dry_run`을 명시하지 않았을 때 상속받는 기본값입니다. 신규 정책팩 전체를 관찰 모드로 시험할 때 씁니다.
 
 `extends`로 로드된 전체 그래프에서 policy `id`가 중복되면 조용히 override하지 않고 오류로 중단합니다. 기존 정책을 바꾸려면 부모의 새 버전에 변경을 제안하거나 새 `id`와 더 강한 조건을 추가하세요.
 
