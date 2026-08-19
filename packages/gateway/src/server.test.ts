@@ -221,10 +221,24 @@ describe("gateway HTTP boundary", () => {
       });
       process.env.DEMO_MCP_TOOLS_URL = await listen(upstream);
 
-      const guardEvents: Array<Record<string, unknown>> = [];
+      const guardEvents: Array<{
+        verdict: string;
+        matchedPolicyIds: string[];
+        dryRunVerdict?: string;
+        dryRunMatchedPolicyIds?: string[];
+        wouldEscalate?: boolean;
+      }> = [];
       const unsubscribe = onGuardBusMessage((message) => {
         if (message.type === "guard.event")
-          guardEvents.push(message.data as Record<string, unknown>);
+          guardEvents.push(
+            message.data as {
+              verdict: string;
+              matchedPolicyIds: string[];
+              dryRunVerdict?: string;
+              dryRunMatchedPolicyIds?: string[];
+              wouldEscalate?: boolean;
+            },
+          );
       });
 
       const url = await listen(createServer(handler));
