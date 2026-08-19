@@ -24,6 +24,10 @@ private class FakeRepository(private val records: List<GuardEventRecord>) : Audi
     override fun findBySessionId(sessionId: String): List<GuardEventRecord> =
         records.filter { it.sessionId == sessionId }.sortedWith(compareBy({ it.ts }, { it.eventId.toString() }))
 
+    override fun findBySessionIdOrderBySeq(sessionId: String): List<GuardEventRecord> =
+        records.filter { it.sessionId == sessionId }
+            .sortedWith(compareBy({ it.seq ?: Long.MAX_VALUE }, { it.ts }, { it.eventId.toString() }))
+
     override fun findById(eventId: UUID): GuardEventRecord? = records.firstOrNull { it.eventId == eventId }
 }
 
@@ -39,6 +43,9 @@ private fun record(
     riskScore: String = "38",
     policyIds: List<String> = listOf("block_env_file_read"),
     detections: List<Map<String, Any?>> = emptyList(),
+    seq: Long? = null,
+    prevHash: String? = null,
+    hash: String? = null,
 ) = GuardEventRecord(
     eventId = eventId,
     sessionId = sessionId,
@@ -52,7 +59,20 @@ private fun record(
     detections = detections,
     maskDiffRef = null,
     rawPayload = null,
+    seq = seq,
+    prevHash = prevHash,
+    hash = hash,
 )
+
+/** Chains [drafts] with real hashes, the way `GuardEventRepository.insert` would (GMCP-83). */
+private fun chain(sessionId: String, vararg drafts: GuardEventRecord): List<GuardEventRecord> {
+    var prevHash = GuardEventHasher.genesisHash(sessionId)
+    return drafts.mapIndexed { index, draft ->
+        val withSeq = draft.copy(seq = (index + 1).toLong())
+        val hash = GuardEventHasher.computeHash(prevHash, GuardEventHasher.payload(withSeq))
+        withSeq.copy(prevHash = prevHash, hash = hash).also { prevHash = hash }
+    }
+}
 
 class LiveReplaySourceKotest : StringSpec({
 
@@ -200,5 +220,43 @@ class LiveReplaySourceKotest : StringSpec({
     "a fractional risk score rounds rather than truncating" {
         val source = LiveReplaySource(FakeRepository(listOf(record(riskScore = "37.6"))))
         source.timeline(LiveReplaySource.sessionUuid("s-demo")).shouldNotBeNull()[0].riskScore shouldBe 38
+    }
+
+    "a session whose rows carry a real, untampered hash chain verifies as valid" {
+        val records = chain(
+            "s-demo",
+            record(eventId = UUID.randomUUID(), offsetMillis = 0, verdict = "warn"),
+            record(eventId = UUID.randomUUID(), offsetMillis = 10, verdict = "block"),
+        )
+        val source = LiveReplaySource(FakeRepository(records))
+        val result = source.chainResult(LiveReplaySource.sessionUuid("s-demo")).shouldNotBeNull()
+
+        result.status shouldBe ChainStatus.VALID
+        result.brokenAt.shouldBeNull()
+        result.verifiedCount shouldBe 2
+        result.totalCount shouldBe 2
+        result.mismatchEventIds.shouldBeEmpty()
+        result.lastVerifiedHash shouldBe records.last().hash
+    }
+
+    "a row whose stored hash no longer matches its payload is reported broken, localized to that row" {
+        val eventA = UUID.randomUUID()
+        val eventB = UUID.randomUUID()
+        val chained = chain(
+            "s-demo",
+            record(eventId = eventA, offsetMillis = 0, verdict = "warn"),
+            record(eventId = eventB, offsetMillis = 10, verdict = "block"),
+        )
+        // Simulate a direct DB tamper: risk score changed after the hash was computed and
+        // stored, so the row's own hash and its successor's prevHash are both now stale.
+        val tampered = chained.map { if (it.eventId == eventA) it.copy(riskScore = BigDecimal("10")) else it }
+        val source = LiveReplaySource(FakeRepository(tampered))
+        val result = source.chainResult(LiveReplaySource.sessionUuid("s-demo")).shouldNotBeNull()
+
+        result.status shouldBe ChainStatus.BROKEN
+        result.brokenAt shouldBe eventA
+        result.mismatchEventIds shouldContainExactly listOf(eventA)
+        result.verifiedCount shouldBe 1
+        result.totalCount shouldBe 2
     }
 })

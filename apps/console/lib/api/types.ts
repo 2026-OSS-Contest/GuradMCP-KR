@@ -187,8 +187,13 @@ export interface MaskDiff {
 
 export type ChainStatus = "verified" | "failed";
 
-/** A run of text, or a masked token rendered as a chip (e.g. PHONE, BANK_ACCOUNT). */
-export type ContentPart = { text: string } | { mask: string };
+/**
+ * A run of content: plain text, the masked token that replaced a detection (rendered as a chip,
+ * e.g. PHONE, BANK_ACCOUNT), or — on the raw side of the reveal modal — the value that token
+ * stands in for. 기획서 10.4 draws that one with the rule and the tint it
+ * calls "밑줄+틴트 하이라이트", so a reader sees at a glance which lines the masking touched.
+ */
+export type ContentPart = { text: string } | { mask: string } | { secret: string };
 
 /** One numbered line of masked content in the input/return sections and the reveal modal. */
 export interface ContentLine {
@@ -196,9 +201,12 @@ export interface ContentLine {
   parts: ContentPart[];
 }
 
-/** The direction verdict a tool-call / tool-result node carries (요청/응답 방향 판정). */
+/**
+ * The direction verdict a tool-call / tool-result node carries. Which direction it is (요청 /
+ * 응답 방향 판정) follows from the node kind, so the heading stays in the message catalogs
+ * rather than riding along in the data.
+ */
 export interface DirectionVerdict {
-  heading: string;
   verdict: Verdict;
   policy: string;
   /** "외 N" when more than one policy matched. */
@@ -213,7 +221,8 @@ export interface RevealContent {
   /** Source line, e.g. "e-000  get_log  #C-20260712-142". */
   source: string;
   caseId: string;
-  raw: string;
+  /** Numbered like `masked`, so the two columns are read line against line. */
+  raw: ContentLine[];
   masked: ContentLine[];
 }
 
@@ -238,9 +247,9 @@ export interface EventDetail {
   chain?: { status: ChainStatus; hash: string };
 
   // Agent node: the agent's own summary of what it decided.
-  summary?: { heading: string; text: string };
+  summary?: string;
   // User-input / tool-result node: numbered, masked content.
-  body?: { heading: string; lines: ContentLine[] };
+  body?: ContentLine[];
   // Tool-call node: the target and the JSON arguments.
   call?: { target: string; argsCount: number; argsJson: string };
   /**
@@ -321,6 +330,13 @@ export interface ApiVerdictDetail {
   detections: ApiDetection[];
   /** URL the Mask Diff View fetches separately (out of scope: GET /events/{id}/mask-diff). */
   maskDiffRef: string;
+  /**
+   * The diff itself, inlined. GET /events/{id}/mask-diff is not in the 화면설계서 6.2 API list
+   * and nothing implements it, so `maskDiffRef` points at a route no client can call — which is
+   * why the panel's Mask Diff section never rendered (GMCP-115 A-1). Optional and mock-supplied
+   * per AGENTS.md: the control plane omits it and the section simply folds away.
+   */
+  maskDiff?: { before: string; after: string } | null;
   hash: string;
   /** Empty string for the first VERDICT node in a session (chain genesis). */
   prevHash: string;
@@ -337,6 +353,22 @@ export interface ApiTimelineNode {
   verdict?: Verdict;
   riskScore?: number;
   detail: ApiVerdictDetail | null;
+
+  // The four below back the node-type-specific panel sections the design shows (frames
+  // `…-사용자-입력-단계`, `…-agent-단계`, `…-tool-call-단계`, `…-tool-결과-단계`) and the GMCP-28
+  // contract has no field for — it carries only a `sha256:` args digest, never the arguments,
+  // the content or the per-direction verdict. Without them every node but VERDICT rendered a
+  // bare header (GMCP-115 C-3). Optional and mock-supplied per AGENTS.md: the control plane
+  // omits them and each section folds away.
+
+  /** AGENT_STEP: the agent's own report of what it decided. */
+  agentSummary?: string;
+  /** USER_INPUT / RESULT: the numbered, already-masked content. */
+  content?: ContentLine[];
+  /** TOOL_CALL: the arguments as sent. `argsDigest` above is all the real API returns. */
+  argsJson?: string;
+  /** TOOL_CALL / RESULT: the verdict for that direction alone, distinct from the VERDICT node. */
+  directionVerdict?: { verdict: Verdict; policyIds: string[] };
 }
 
 export interface ApiSessionSummary {
@@ -456,8 +488,14 @@ export interface AttackRun {
 // OpenAPI `GuardAction`/`Severity`, so these mirror the wire format rather than the UI's
 // `Verdict`; `toVerdict()` in `lib/verdict.ts` bridges the two.
 
-/** The control plane's verdict vocabulary. `mask_then_allow` is the UI's `warn`. */
-export type GuardAction = "allow" | "mask_then_allow" | "require_approval" | "block";
+/**
+ * The control plane's verdict vocabulary (`domain/GuardAction.kt`), which is wider than the UI's
+ * four. Both `warn` and `mask_then_allow` land on the UI's `warn`: the DSL separates recording a
+ * finding from rewriting the payload, and the rail has one colour for "went through, with
+ * something on the record". `warn` was missing here until GMCP-117 — a policy carrying it (the
+ * shipped `warn_injection_request` does) fell through `toVerdict`'s default and drew as 허용.
+ */
+export type GuardAction = "allow" | "warn" | "mask_then_allow" | "require_approval" | "block";
 export type Severity = "low" | "medium" | "high" | "critical";
 
 /** Which side of a tool call the text came from — the policies differ by direction. */
@@ -641,3 +679,138 @@ export interface PolicyStats {
   dryRun?: { wouldFire: number; windowDays: number };
 }
 
+
+// ── Benchmark (GMCP-61, SCR-601) ─────────────────────────────────────────────
+// `attack-lab/benchmark/run.ts` already writes exactly this report; these types are that file's
+// output, read back. Two endpoints serve it and neither exists on the control plane yet —
+// GET /benchmark/report and GET /benchmark/samples are the two the console needs built.
+//
+// The split matters: the report carries per-item results for the 40 scenarios and the 29 policy
+// fixtures, but for the 176 dataset samples it carries only aggregates (recall, fpr, and a list
+// of ids that were missed). A screen that ticks each sample as it goes therefore cannot get that
+// verdict from the report — which is why `/samples` returns each sample already judged.
+
+export interface BenchmarkMetrics {
+  recall: number;
+  fpr: number;
+  precision: number;
+  p95Ms: number;
+  averageMs: number;
+  payloadBytes: number;
+  blockRate: number;
+  scenarioPassRate: number;
+  fixturePassRate: number;
+  fixtureCoverageRate: number;
+  samples: number;
+  positives: number;
+  negatives: number;
+  labeledTypeCount: number;
+}
+
+/** The pass marks from `docs/benchmark-gate.md` 12.2. A metric is read against its own. */
+export interface BenchmarkThresholds {
+  recall: number;
+  fpr: number;
+  p95Ms: number;
+  blockRate: number;
+  scenarioPassRate: number;
+  fixturePassRate: number;
+  fixtureCoverageRate: number;
+  koreanServiceTokenRecall: number;
+  koreanServiceTokenFpr: number;
+  highEntropyRecall: number;
+  highEntropyFpr: number;
+}
+
+export interface BenchmarkTypeRecall {
+  type: string;
+  total: number;
+  detected: number;
+  recall: number;
+}
+
+/** A dataset measured on its own: the Korean service tokens and the high-entropy secrets. */
+export interface BenchmarkDatasetResult {
+  samples: number;
+  positives: number;
+  negatives: number;
+  recall: number;
+  fpr: number;
+  /** Ids of the labelled positives this run failed to detect. */
+  misses: string[];
+}
+
+/** What the format checks are worth: the same negatives measured with them off, then on. */
+export interface BenchmarkValidationImpact {
+  fprWithoutValidation: number;
+  fprWithValidation: number;
+  falsePositivesPrevented: number;
+  fprReduction: number;
+}
+
+export interface BenchmarkScenario {
+  /** The probe id from `attack-lab/scenarios/threats.json` — `T-…` attacks, `B-…` benign. */
+  id: string;
+  passed: boolean;
+  expectedBlocked: boolean;
+  actualBlocked: boolean;
+  /**
+   * The probe itself, and the threat it belongs to. The report the runner writes carries neither:
+   * both live in `attack-lab/scenarios/{threats,catalog}.json`, so the endpoint has to join them
+   * before answering. Optional because a report read straight off disk will not have them, and
+   * the screen then shows the id alone.
+   */
+  text?: string;
+  /** Tool arguments the probe is sent with, where it has any. */
+  args?: Record<string, string>;
+  /** Only the catalogued families T-01…T-09; the later probes have no catalog entry. */
+  threat?: { id: string; name: string; summary: string; owasp: string[] };
+}
+
+export interface BenchmarkFixture {
+  id: string;
+  passed: boolean;
+  coverage: { policy_id: string; expectation: string };
+  expected: { action: string; matched_policy_ids: string[] };
+  actual: { action: string; matched_policy_ids: string[] };
+}
+
+export interface BenchmarkFixtureCoverage {
+  policyId: string;
+  positive: boolean;
+  negative: boolean;
+}
+
+export interface BenchmarkReport {
+  generatedAt: string;
+  metrics: BenchmarkMetrics;
+  thresholds: BenchmarkThresholds;
+  perTypeRecall: BenchmarkTypeRecall[];
+  koreanServiceTokens: BenchmarkDatasetResult;
+  highEntropySecrets: BenchmarkDatasetResult;
+  validationImpact: BenchmarkValidationImpact;
+  scenarios: BenchmarkScenario[];
+  fixtures: BenchmarkFixture[];
+  fixtureCoverage: BenchmarkFixtureCoverage[];
+  /** Every threshold met. The runner exits non-zero when this is false. */
+  passed: boolean;
+}
+
+/** Which dataset a sample came from — the four under `attack-lab/datasets/`. */
+export type BenchmarkSampleGroup = "pii" | "injection" | "serviceToken" | "entropy";
+
+export interface BenchmarkSample {
+  id: string;
+  group: BenchmarkSampleGroup;
+  /** True when the sample is a labelled positive: something the detector is meant to catch. */
+  label: boolean;
+  /** The label's own subdivision — a PII type, an injection subtype, a credential name. */
+  kind: string | null;
+  text: string;
+  /** Whether this run caught it. Always false for a negative, which is nothing to catch. */
+  detected: boolean;
+}
+
+export interface BenchmarkSamplesResponse {
+  samples: BenchmarkSample[];
+}

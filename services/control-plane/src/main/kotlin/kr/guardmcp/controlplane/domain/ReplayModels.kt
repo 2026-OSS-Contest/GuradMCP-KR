@@ -94,4 +94,25 @@ data class ReplaySession(
     val isLive: Boolean,
 )
 
-data class ChainResult(val status: ChainStatus, val brokenAt: UUID?)
+/**
+ * The result of walking one session's hash chain (GMCP-83 §4). [brokenAt] is kept — it is
+ * `mismatchEventIds.firstOrNull()` — because it is already the console's GMCP-28 wire contract
+ * (`apps/console/lib/api/types.ts`'s `ApiSessionTimelineResponse.brokenAt`); the richer fields
+ * are additive, for the dedicated `GET /sessions/{id}/chain-verify` endpoint.
+ *
+ * `status` keeps this codebase's existing three-valued [ChainStatus] (`valid`/`broken`/`unknown`)
+ * rather than the audit-hash-chain-spec's `VALID`/`INVALID`/`EMPTY`: that vocabulary already
+ * ships in the console and is asserted in tests, and `unknown` — no stored hash to check yet —
+ * has no equivalent in the spec's two-valued failure case. `EMPTY` is not reachable through this
+ * type: an empty session has no [kr.guardmcp.controlplane.domain.ReplaySession] to attach a
+ * result to in the first place (`LiveReplaySource.load` returns `null`, and the controller 404s).
+ */
+data class ChainResult(
+    val status: ChainStatus,
+    val brokenAt: UUID?,
+    val verifiedCount: Int,
+    val totalCount: Int,
+    val mismatchEventIds: List<UUID>,
+    val lastVerifiedHash: String?,
+    val verifiedAt: Instant,
+)

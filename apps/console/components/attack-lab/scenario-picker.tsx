@@ -104,7 +104,7 @@ export function ScenarioPicker({
             <span className="min-w-0 flex-1 truncate text-body-text-b2-md text-grayscale-white">{selected.title}</span>
           </>
         ) : (
-          <span className="min-w-0 flex-1 truncate text-body-text-b2-md text-grayscale-400">{t("pickScenario")}</span>
+          <span className="min-w-0 flex-1 truncate text-body-text-b2-md text-(--primitive-opacity-white-alpha-50)">{t("pickScenario")}</span>
         )}
         <DropdownChevronIcon className={cn("size-6 flex-none transition-transform", open && "rotate-180")} aria-hidden />
       </button>

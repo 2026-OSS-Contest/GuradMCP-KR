@@ -31,6 +31,18 @@ export function MockApiProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!MOCK_API) return;
     let cancelled = false;
+    // A service worker only registers in a secure context, and of the addresses that reach a dev
+    // server only `localhost`, `127.0.0.1` and `[::1]` count as one — `0.0.0.0` and a LAN IP do
+    // not. Without the worker nothing is mocked, so every /api/v1 call 404s against a Next server
+    // that serves no such route, and the console fills with offline states and a live stream that
+    // retries for ever. That is a long way from the cause, so name it here.
+    if (!window.isSecureContext) {
+      console.error(
+        `[mocks] ${window.location.origin} is not a secure context, so the service worker cannot ` +
+          "register and nothing will be mocked — every /api/v1 request will 404. Open the console " +
+          "on http://localhost:3000 instead, or serve this origin over HTTPS."
+      );
+    }
     void startWorker()
       .catch((error) => {
         // Render the app anyway: it will show its offline state, which is diagnosable.

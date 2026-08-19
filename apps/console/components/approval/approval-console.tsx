@@ -137,7 +137,7 @@ export function ApprovalConsole() {
             onClick={() => setTab(value)}
             aria-current={tab === value ? "page" : undefined}
             className={cn(
-              "flex items-center gap-2 border-b-2 pb-2 text-body-text-b1-md transition-colors",
+              "flex items-center gap-2 border-b-2 pb-2 text-body-text-b2-bd transition-colors",
               tab === value ? "border-grayscale-white text-grayscale-white" : "border-transparent text-grayscale-400 hover:text-grayscale-200"
             )}
           >
@@ -168,7 +168,7 @@ export function ApprovalConsole() {
               {t("error")}
             </p>
           ) : pending.length === 0 ? (
-            <p role="status" className="py-16 text-center text-body-text-b3-md text-grayscale-400">
+            <p role="status" className="py-16 text-center text-title-text-t2-bd text-grayscale-400">
               {t("queueEmpty")}
             </p>
           ) : (

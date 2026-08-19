@@ -31,7 +31,7 @@ reports/*.html
 !packages/cli/bin/
 !packages/cli/bin/**
 
-# Python demo agent local installs (GMCP-95)
+# Python demo agent (GMCP-95) local installs
 .pydeps/
 .venv/
 __pycache__/

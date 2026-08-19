@@ -9,14 +9,15 @@ import { expect, test } from "@playwright/test";
 test("GMCP-88 SCR-501 shows the upstreams, the failure policy and the preferences", async ({ page }) => {
   await page.goto("/settings");
 
-  const row = page.getByRole("row").filter({ hasText: "file_server" });
-  await expect(row.getByText("http://file-mcp:8801/sse")).toBeVisible();
-  // One of file_server's three tools changed its description since it was first seen.
+  const row = page.getByRole("row").filter({ hasText: "file-server" });
+  // The endpoint the compose stack actually routes to (infra/postgres/002-mcp-servers.sql).
+  await expect(row.getByText("http://demo-mcp-tools:3003")).toBeVisible();
+  // One of file-server's tools changed its description since it was first seen.
   await expect(row.getByText("변경 감지 1")).toBeVisible();
 
-  await expect(page.getByRole("row").filter({ hasText: "mail_server" }).getByText("정상")).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: "mail-server" }).getByText("정상")).toBeVisible();
   // A disconnected server reports nothing, so its snapshot state is unknown rather than clean.
-  await expect(page.getByRole("row").filter({ hasText: "db_server" }).getByText("연결 끊김")).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: "db-server" }).getByText("연결 끊김")).toBeVisible();
 
   // The gateway ships fail-closed, raw storage off, and a 120s approval window.
   await expect(page.getByRole("radio", { name: /Fail-Closed/ })).toHaveAttribute("aria-checked", "true");
@@ -89,7 +90,7 @@ test("SCR-501 downgrading a server's trust applies immediately with a confirmati
 
   await trust.selectOption("limited");
 
-  await expect(page.getByText("mail_server 서버의 신뢰 등급이 limited(으)로 변경되었습니다.")).toBeVisible();
+  await expect(page.getByText("mail-server 서버의 신뢰 등급이 limited(으)로 변경되었습니다.")).toBeVisible();
   await expect(trust).toHaveValue("limited");
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
 });
@@ -105,7 +106,7 @@ test("SCR-501 upgrading a server's trust requires confirmation", async ({ page }
   const dialog = page.getByRole("alertdialog", { name: "신뢰 등급 상향 확인" });
   await expect(dialog).toBeVisible();
   // The count comes from the 409 body, so this is the gateway's impact figure, not a guess.
-  await expect(dialog.getByText(/db_server.*상향 후 더 이상 적용되지 않을 수 있습니다/)).toBeVisible();
+  await expect(dialog.getByText(/db-server.*상향 후 더 이상 적용되지 않을 수 있습니다/)).toBeVisible();
   await expect(dialog.getByText("상향 시 이 서버에서 오는 Tool Call의 위험 점수 가중치가 낮아집니다.")).toBeVisible();
 
   // The select must not have jumped ahead while the confirmation is pending.
@@ -115,7 +116,7 @@ test("SCR-501 upgrading a server's trust requires confirmation", async ({ page }
 
   await expect(dialog).toBeHidden();
   await expect(trust).toHaveValue("trusted");
-  await expect(page.getByText("db_server 서버의 신뢰 등급이 trusted(으)로 변경되었습니다.")).toBeVisible();
+  await expect(page.getByText("db-server 서버의 신뢰 등급이 trusted(으)로 변경되었습니다.")).toBeVisible();
 });
 
 test("SCR-501 canceling an upgrade leaves the grade unchanged", async ({ page }) => {
@@ -136,12 +137,12 @@ test("SCR-501 canceling an upgrade leaves the grade unchanged", async ({ page })
 test("SCR-501 a Settings trust change is reflected on the Home inventory chip", async ({ page }) => {
   await page.goto("/settings");
   await page.locator("#trust-mail-server").selectOption("limited");
-  await expect(page.getByText("mail_server 서버의 신뢰 등급이 limited(으)로 변경되었습니다.")).toBeVisible();
+  await expect(page.getByText("mail-server 서버의 신뢰 등급이 limited(으)로 변경되었습니다.")).toBeVisible();
 
   // Client-side nav rather than page.goto, which would reload and reset the mock's in-memory
   // state — the real control plane persists, so this only matters for the mocked harness.
   await page.getByRole("link", { name: "Gateway" }).click();
-  await expect(page.getByRole("button", { name: /mail_server.*limited/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /mail-server.*limited/ })).toBeVisible();
 });
 
 test("SCR-501 saves the preferences that carry no risk", async ({ page }) => {

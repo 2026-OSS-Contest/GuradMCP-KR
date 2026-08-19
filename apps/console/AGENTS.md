@@ -110,6 +110,14 @@ Two more rules that come from the same failure:
 ## Dev, build and test
 
 - The dev server runs Turbopack (`next dev --turbopack`).
+- **Open it on `localhost`.** MSW mocks the API from a service worker, and a service worker only
+  registers in a secure context — of the addresses that reach the dev server only `localhost`,
+  `127.0.0.1` and `[::1]` qualify. On `0.0.0.0` or a LAN IP the worker never registers, so nothing
+  is mocked: every `/api/v1` call 404s against a server that serves no such route, and the screens
+  fill with offline states and a live stream that retries for ever. The provider logs the reason,
+  but the symptom points nowhere near it. Reaching the console from another device needs HTTPS —
+  `next dev --experimental-https` or a tunnel — and `allowedDevOrigins` in `next.config.ts`, since
+  Next answers cross-origin dev requests with 403 otherwise.
 - Do **not** run `next build` while `next dev` is running — it clobbers `.next` and the dev
   server then serves 500s. Stop the dev server first.
 - Playwright specs live in `e2e/`, but `@playwright/test` is a **root** devDependency; run them
@@ -134,40 +142,52 @@ Two more rules that come from the same failure:
   project (`guardmcp-kr-console`), and `vercel project inspect guardmcp-kr-console` prints its
   Root Directory and Node version without touching the tree.
 
-### Two things break a Vercel build, every time
+### Three things break a Vercel build
 
-Both are dormant in normal development and only bite on Vercel. Neither fix is committed,
-because both are only wanted for a deploy — apply them, deploy, then revert.
+All three are handled in the tree now; this section is why the code looks the way it does, and
+what to check first when a deploy fails anyway. Each is dormant in normal development, and each
+was confirmed by a deploy that failed on it.
 
 1. **`output: "standalone"` fails the build.** `next.config.ts` sets it for the Docker image
    (`containers.yml`), but Vercel's builder then cannot find `.next/next-server.js.nft.json`
    and dies with `ENOENT` *after* reporting a successful compile — so the log looks fine until
-   the last line. Guard it on Vercel's own env var:
+   the last line. It is guarded on Vercel's own env var, which the platform always sets:
 
    ```ts
    output: process.env.VERCEL ? undefined : "standalone",
    ```
 
-2. **MSW cannot start in a production build.** `mocks/scenario.ts` gates `MOCK_API` on
-   `NODE_ENV === "development"`, and Vercel builds with `NODE_ENV=production`. No environment
-   variable alone can switch the mocks on: without a code change the deployed console renders
-   its shell, fetches `/api/v1/…` against its own origin and 404s everywhere. To deploy a
-   mock-backed demo, widen the gate and pass the flag at **build** time — `NEXT_PUBLIC_*` is
+2. **MSW cannot start in a production build.** Vercel builds with `NODE_ENV=production`, so a
+   `NODE_ENV === "development"` gate alone leaves the deployed console rendering its shell,
+   fetching `/api/v1/…` against its own origin and 404ing everywhere. `mocks/scenario.ts` takes
+   an opt-in flag as well, and it has to be passed at **build** time — `NEXT_PUBLIC_*` is
    inlined during the build, so `--build-env` is required and `--env` does nothing:
-
-   ```ts
-   const MOCKS_WANTED =
-     process.env.NODE_ENV === "development" || process.env.NEXT_PUBLIC_ENABLE_MOCK_API === "1";
-   export const MOCK_API = MOCKS_WANTED && !process.env.NEXT_PUBLIC_API_BASE_URL;
-   ```
 
    ```bash
    vercel deploy --prod --yes --build-env NEXT_PUBLIC_ENABLE_MOCK_API=1
    ```
 
-   `msw` is a devDependency, which is fine — Vercel installs devDependencies — and
-   `public/mockServiceWorker.js` is committed, so nothing else is needed.
+   Without that flag nothing changes, so the gate costs an ordinary build nothing. `msw` is a
+   devDependency, which is fine — Vercel installs devDependencies — and
+   `public/mockServiceWorker.js` is committed, so nothing else is needed. The scenario switcher
+   is **not** carried in by this: the floating flask tests `NODE_ENV === "development"` on its
+   own, so a mock-backed deploy serves the mocks and draws no dev control over them.
 
+3. **A stray `pnpm-lock.yaml` under `apps/console` fails the install.** The Vercel project's
+   Root Directory *is* `apps/console`, so a lockfile sitting there decides the package manager
+   for the whole build: the builder switched to pnpm and `--frozen-lockfile` refused a lockfile
+   that predated `@guardmcp/design-tokens`. This repository is npm workspaces (`packageManager:
+   npm@10.9.4`, and CI runs `npm ci`), so nothing under `apps/console` should carry a lockfile
+   of its own. Two were deleted in GMCP-117; if a deploy dies at `Installing dependencies...`,
+   check that they have not come back — running `pnpm install` inside `apps/console` recreates
+   them.
+
+- **`NEXT_PUBLIC_ENABLE_MOCK_API` belongs to demo deploys only.** It must never appear in
+  `containers.yml`, `apps/console/Dockerfile`, or any release pipeline — a build carrying it
+  serves fabricated data and is otherwise indistinguishable from a real one. Two things make that
+  hard to do by accident: the build log prints a `MOCK API ENABLED` banner, and the status bar
+  carries a 목 데이터 marker on every screen for as long as the flag is set. If you see either in
+  something meant to be real, the flag leaked.
 - Setting `NEXT_PUBLIC_API_BASE_URL` switches the mocks off no matter what else is set; leave it
   unset for a mock-backed deploy.
 - Verify a deploy by loading it and checking that `/api/v1/overview` answers **200**. The app

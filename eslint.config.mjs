@@ -12,6 +12,10 @@ export default tseslint.config(
       "**/dist/**",
       "**/build/**",
       "**/coverage/**",
+      // Python demo agent's local dependency install (GMCP-95); gitignored, and the
+      // third-party JS vendored inside some wheels is not this repository's to lint.
+      "**/.pydeps/**",
+      "**/.venv/**",
       "**/playwright-report/**",
       "**/next-env.d.ts",
     ],

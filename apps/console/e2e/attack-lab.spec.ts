@@ -54,7 +54,9 @@ test("SCR-201 a guarded run shows the verdict, policy, risk score and the broken
   // The blocked call carries its deciding policy and risk score.
   await expect(pane.getByText("block_env_file_read")).toBeVisible();
   await expect(pane.getByText("위험 점수")).toBeVisible();
-  await expect(pane.getByText("92")).toBeVisible();
+  // 38 is the score the gateway recorded for this event (docs/env-leak-demo.md); the policy
+  // decided it, not the number (docs/risk-scoring.md §2).
+  await expect(pane.getByText("38", { exact: true })).toBeVisible();
   // The follow-up call was never made, because the chain stopped at the block.
   await expect(pane.getByText(/호출 안 됨 – 선행 호출 차단으로 체인 중단/)).toBeVisible();
   // The pane reports where the calls went.
@@ -72,7 +74,7 @@ test("SCR-201 stamps the approval seal when a call needs one", async ({ page }) 
 
   // T-02 ends on an approval rather than a block, so it carries the other seal variant.
   await expect(pane.getByTestId("seal-require_approval")).toBeVisible();
-  await expect(pane.getByText("approve_external_email")).toBeVisible();
+  await expect(pane.getByText("approve_external_email_with_korean_pii")).toBeVisible();
 });
 
 test("SCR-201 an unguarded run exposes the payload it leaked", async ({ page }) => {
@@ -83,8 +85,9 @@ test("SCR-201 an unguarded run exposes the payload it leaked", async ({ page }) 
   await page.getByRole("button", { name: "미적용 실행" }).click();
 
   await expect(pane.getByText("실행됨 · 토큰 노출")).toBeVisible();
-  await expect(pane.getByText("sk-a3f9d8e2f14b...")).toBeVisible();
-  await expect(pane.getByText("hunter2!@#")).toBeVisible();
+  // The sandbox's own synthetic values (apps/demo-mcp-tools/sandbox/.env), not invented ones.
+  await expect(pane.getByText("sk-DEMO000000000000000000000000000000FAKE")).toBeVisible();
+  await expect(pane.getByText("demo-fake-smtp-secret-not-real")).toBeVisible();
   await expect(pane.getByText("전송됨 · 첨부: .env 내용")).toBeVisible();
   await expect(pane.getByText("샌드박스")).toBeVisible();
 });
@@ -102,8 +105,8 @@ test("SCR-201 the summary and the stream report the run", async ({ page }) => {
   // The feed is wider than the cards: it also reports the calls that simply passed.
   const stream = page.getByRole("region", { name: "실시간 스트림" });
   await expect(stream.getByRole("row")).toHaveCount(4); // header + 3 events
-  await expect(stream.getByText("list_directory")).toBeVisible();
-  await expect(stream.getByText("readme.md")).toBeVisible();
+  await expect(stream.getByText("list_files")).toBeVisible();
+  await expect(stream.getByText("README.md")).toBeVisible();
 });
 
 test("SCR-201 only one run is in flight at a time", async ({ page }) => {

@@ -94,7 +94,7 @@ export function YamlPane({ policy, yaml, loading, unavailable, stats, demo }: Ya
               {t("yaml.title")}
             </h2>
             {/* The control plane reports no source path, so the caption is simply absent there. */}
-            {policy?.path && <p className="text-caption-mono-c-rg break-all text-grayscale-white">{policy.path}</p>}
+            {policy?.path && <p className="text-caption-mono-c-rg break-all text-(--primitive-opacity-white-alpha-50)">{policy.path}</p>}
           </div>
           <button
             type="button"

@@ -198,6 +198,39 @@ class ControlPlaneApiTest : ApiTestSupport() {
     }
 
     @Test
+    fun `chain-verify reports valid with every verdict verified for an untampered seeded session`() {
+        val response = get("/api/v1/sessions/${DemoSeed.SESSION_INJECTION_ID}/chain-verify")
+
+        assertEquals(200, response.statusCode())
+        val body = parseMap(response.body())
+        assertEquals("valid", body["status"])
+        assertEquals(1, body["verifiedCount"])
+        assertEquals(1, body["totalCount"])
+        assertEquals(emptyList<String>(), body["mismatchEventIds"])
+        assertNotNull(body["lastVerifiedHash"])
+        assertNull(body["firstMismatchEventId"])
+    }
+
+    @Test
+    fun `chain-verify pins the tampered seeded session's mismatch to the corrupted verdict`() {
+        val response = get("/api/v1/sessions/${DemoSeed.SESSION_BROKEN_CHAIN_ID}/chain-verify")
+
+        assertEquals(200, response.statusCode())
+        val body = parseMap(response.body())
+        assertEquals("broken", body["status"])
+        assertEquals(1, body["verifiedCount"])
+        assertEquals(2, body["totalCount"])
+        val mismatchIds = body["mismatchEventIds"] as List<*>
+        assertEquals(listOf(body["firstMismatchEventId"]), mismatchIds)
+    }
+
+    @Test
+    fun `chain-verify for an unknown session is a 404`() {
+        val response = get("/api/v1/sessions/${UUID.randomUUID()}/chain-verify")
+        assertEquals(404, response.statusCode())
+    }
+
+    @Test
     fun `large session pagination round-trips without gaps, overlap or duplicates`() {
         val firstPage = parseMap(get("/api/v1/sessions/${DemoSeed.SESSION_LARGE_ID}/timeline?limit=1000").body())
         val firstNodes = (firstPage["nodes"] as List<*>).map { it as Map<*, *> }

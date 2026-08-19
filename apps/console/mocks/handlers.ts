@@ -13,7 +13,8 @@ import {
   type ServersResponse,
   type ServerTrustChangeRequest,
 } from "@/lib/api/types";
-import { allApprovals, decide, raiseApproval, resetApprovals, resolveRaised } from "./approvals";
+import { allApprovals, decide, raiseApproval, resetApprovals } from "./approvals";
+import { benchmarkReport, benchmarkSamples } from "./benchmark";
 import { ATTACK_SCENARIOS, attackRun } from "./attack-lab";
 import { acknowledgeToolDiff, allDiffsOf, pendingDiffsOf, reapproveToolDiffs } from "./tool-diffs";
 
@@ -36,13 +37,7 @@ import {
   overviewOf,
   recentEvents,
 } from "./data";
-import {
-  SESSIONS,
-  eventLookup,
-  policyDetail,
-  revealOf,
-  timelineOf,
-} from "./replay";
+import { eventLookup, revealOf, sessions, timelineOf } from "./replay";
 import { currentSettings, patchSettings } from "./settings";
 import { readScenario } from "./scenario";
 
@@ -220,7 +215,7 @@ export const handlers = [
   // SCR-301 Replay (GMCP-28 wire contract). Empty scenario has no recorded sessions.
   http.get("*/api/v1/sessions", async () =>
     respond({
-      items: readScenario() === "empty" ? [] : SESSIONS,
+      items: readScenario() === "empty" ? [] : sessions(),
       nextCursor: null,
     }),
   ),
@@ -347,9 +342,10 @@ export const handlers = [
     const id = String(params.id);
     await delay(LATENCY_MS);
     if (id in POLICY_YAML) return HttpResponse.json({ id, yaml: policyYaml(id) });
-    // The replay fixtures still reference older synthetic ids and their chips must resolve.
-    if (id.startsWith("mask_kr") || id.startsWith("deny_")) return HttpResponse.json(policyDetail(id));
-    // Anything else has no source to serve — which is every policy against a real gateway.
+    // Every id the timelines chip is a policy that exists on disk, so the catalogue above answers
+    // all of them; the fallback the replay fixtures used to need is gone with the synthetic ids
+    // they carried (GMCP-117). Anything else has no source to serve — which, against a real
+    // gateway, is every policy.
     return new HttpResponse(null, { status: 404 });
   }),
 
@@ -404,14 +400,17 @@ export const handlers = [
       // it a tick later, so the count visibly changes between the 10s /overview polls. The
       // ledger moves with the event, so the next /overview agrees with what was just sent.
       // An empty console has no approvals to raise, so the stream stays quiet there.
-      if (readScenario() !== "empty") {
-        if (seq % 3 === 0) {
-          raiseApproval();
-          client.send({ event: "approval.created", data: { id: `apr-${seq}` } });
-        } else if (seq % 3 === 1) {
-          resolveRaised();
-          client.send({ event: "approval.resolved", data: { id: `apr-${seq - 1}` } });
-        }
+      //
+      // Once per connection, and it stays. Raising a call and withdrawing it a tick later showed
+      // the badge moving both ways, but on SCR-402 it also put a card into the queue and took it
+      // out again — an approval that arrives and then vanishes reads as the list glitching, not
+      // as the gateway holding a call. Raised and left, the same event proves the badge follows
+      // the stream and the queue shows what the badge counts.
+      //
+      // `approval.resolved` still has a path in dev: deciding a card sends one.
+      if (readScenario() !== "empty" && seq === 0) {
+        raiseApproval();
+        client.send({ event: "approval.created", data: { id: `apr-${seq}` } });
       }
       // Someone edited a pack on disk and the gateway reloaded it. Rare on purpose: the SCR-302
       // banner it raises is a call to action, and one arriving every few seconds is noise.
@@ -421,6 +420,19 @@ export const handlers = [
       }
       seq += 1;
     }, STREAM_INTERVAL_MS);
+  }),
+
+  // ── SCR-601 Benchmark (GMCP-61) ───────────────────────────────────────────
+  // Neither path exists on the control plane; these two are what the console needs built. The
+  // bodies are a real `npm run bench` run, not invented numbers — see mocks/benchmark.ts.
+  http.get("*/api/v1/benchmark/report", async () => {
+    await delay(LATENCY_MS);
+    return HttpResponse.json(benchmarkReport);
+  }),
+
+  http.get("*/api/v1/benchmark/samples", async () => {
+    await delay(LATENCY_MS);
+    return HttpResponse.json({ samples: benchmarkSamples });
   }),
 
   // Deep-link support (spec §3.3): a single node lookup by eventId. Registered after the

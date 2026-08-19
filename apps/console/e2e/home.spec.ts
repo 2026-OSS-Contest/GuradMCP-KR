@@ -12,8 +12,8 @@ test("GMCP-88 SCR-101 renders KPI cards, the inventory and recent events", async
 
   // Server inventory with connection state and trust tier (no.2)
   await expect(page.getByRole("heading", { name: "MCP 서버 인벤토리" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /file_server/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /db_server.*untrusted/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /file-server/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /db-server.*untrusted/ })).toBeVisible();
 
   // Recent events deep-link into the replay screen (no.5)
   await expect(page.getByRole("heading", { name: "최근 보안 이벤트" })).toBeVisible();
@@ -26,7 +26,7 @@ test("GMCP-88 SCR-101 renders KPI cards, the inventory and recent events", async
 test("SCR-101 inventory accordion reveals a server's tools", async ({ page }) => {
   await page.goto("/");
 
-  const mailServer = page.getByRole("button", { name: /mail_server/ });
+  const mailServer = page.getByRole("button", { name: /mail-server/ });
   await expect(mailServer).toHaveAttribute("aria-expanded", "false");
 
   await mailServer.click();

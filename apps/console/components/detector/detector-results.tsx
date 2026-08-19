@@ -8,11 +8,11 @@ import { labelOf, subtypeOf } from "@/lib/detection-labels";
 import { toVerdict } from "@/lib/verdict";
 import { cn } from "@/lib/utils";
 
-// The design's red-700 / yellow-600 grounds. White type holds on the red (AA) but not on the
-// yellow — it measured 2.10:1 there, so that chip takes near-black type instead, at 8.18:1.
+// See approval-card: the design's white type needs a ground dark enough to carry it, so the
+// warn chip sits on yellow-800 (5.95:1) rather than yellow-600 (2.10:1).
 const TAG_TONE: Record<Verdict, string> = {
   block: "bg-red-700 text-grayscale-white",
-  warn: "bg-yellow-600 text-grayscale-950",
+  warn: "bg-yellow-800 text-grayscale-white",
   require_approval: "bg-(--primitive-opacity-require-approval-alpha-25) text-violet-100",
   allow: "bg-(--primitive-opacity-allow-alpha-10) text-verdict-allow"
 };
@@ -61,13 +61,13 @@ export function DetectorResults({
         aria-label={t("findings")}
         className={cn("flex min-h-0 flex-col gap-3", hasFindings ? "max-h-1/2 flex-none" : "flex-1")}
       >
-        <h2 className="flex-none text-body-text-b2-md text-grayscale-300">{t("findings")}</h2>
+        <h2 className="flex-none text-body-text-b3-md text-grayscale-300">{t("findings")}</h2>
 
         {!preview ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
             <DetectorEmptyIcon aria-hidden className="size-10" />
-            <p className="text-body-text-b1-md text-grayscale-white">{t("emptyTitle")}</p>
-            <p className="text-body-text-b3-md text-grayscale-400">{t("emptyBody")}</p>
+            <p className="text-title-text-t2-bd text-grayscale-white">{t("emptyTitle")}</p>
+            <p className="text-body-text-b2-md text-grayscale-400">{t("emptyBody")}</p>
           </div>
         ) : preview.findings.length === 0 ? (
           <p role="status" className="flex flex-1 items-center justify-center text-body-text-b3-md text-grayscale-400">
@@ -112,7 +112,7 @@ export function DetectorResults({
 
       <section aria-label={t("maskedResult")} className="flex min-h-0 flex-1 flex-col gap-3">
         <div className="flex flex-none items-center gap-2">
-          <h2 className="flex-1 text-body-text-b2-md text-grayscale-300">{t("maskedResult")}</h2>
+          <h2 className="flex-1 text-body-text-b3-md text-grayscale-300">{t("maskedResult")}</h2>
           <button
             type="button"
             onClick={() => void copy()}

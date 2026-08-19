@@ -18,7 +18,7 @@ export function OfflineBanner() {
   return (
     <div role="status" className="flex flex-none items-center gap-4 bg-(--primitive-opacity-warn-alpha-10) px-8">
       <span className="flex flex-1 items-center gap-2 py-2 text-body-text-b3-md text-yellow-100">
-        <BannerInfoIcon className="size-4 flex-none" aria-hidden />
+        <BannerInfoIcon className="size-4 flex-none text-(--primitive-color-yellow-100)" aria-hidden />
         {t("offlineBanner")}
       </span>
       {overview.fetchedAt && (

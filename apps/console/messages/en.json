@@ -6,6 +6,7 @@
     "detector": "Detector",
     "approval": "Approval",
     "policies": "Policies",
+    "benchmark": "Benchmark",
     "settings": "Settings"
   },
   "shell": {
@@ -21,7 +22,8 @@
     "lastFetched": "Last checked",
     "sessionEvents": "{count, plural, one {# event} other {# events}}",
     "sessionEmpty": "No recorded sessions yet. Run the demo to create one.",
-    "sessionError": "Could not load the session list. Check the gateway connection, then reopen this menu."
+    "sessionError": "Could not load the session list. Check the gateway connection, then reopen this menu.",
+    "mockData": "Mock data"
   },
   "verdict": {
     "allow": "Allowed",
@@ -140,8 +142,6 @@
       "detections": "Detections",
       "detectionUnit": "",
       "detectionList": "Detection list",
-      "expand": "Expand",
-      "collapse": "Collapse",
       "chainVerified": "Chain verified",
       "chainFailed": "Chain verification failed",
       "reveal": "Reveal original",
@@ -151,7 +151,12 @@
       "args": "Arguments",
       "argsCount": "{count}",
       "normalizedPath": "Normalized path",
-      "morePolicies": "+{count}"
+      "morePolicies": "+{count}",
+      "agentSummary": "Agent report",
+      "inputOriginal": "Input",
+      "returnSummary": "Returned data",
+      "requestDirection": "Request verdict",
+      "responseDirection": "Response verdict"
     },
     "policy": {
       "goToPolicy": "Go to policy",
@@ -331,6 +336,66 @@
     "settings": {
       "title": "Settings",
       "desc": "Upstream servers, failure policy and logging"
+    }
+  },
+  "benchmark": {
+    "title": "Detection Benchmark",
+    "subtitle": "{count} checks — datasets · attack scenarios · policy fixtures",
+    "run": "Run benchmark",
+    "runAgain": "Run again",
+    "measuring": "Measuring…",
+    "idle": "Run the benchmark to see its results here.",
+    "error": "Could not load the benchmark results.",
+    "section": {
+      "pii": "PII dataset",
+      "injection": "Prompt injection",
+      "serviceToken": "Korean service tokens",
+      "entropy": "High-entropy secrets",
+      "scenario": "Attack scenarios",
+      "fixture": "Policy fixtures"
+    },
+    "passed": "Gate passed",
+    "failed": "Gate not met",
+    "measuredOn": "{count} checks measured",
+    "quality": "Detection quality",
+    "metric": {
+      "recall": "Recall",
+      "fpr": "False positive",
+      "blockRate": "Block rate",
+      "p95": "P95 latency"
+    },
+    "atLeast": "target ≥ {value}",
+    "atMost": "target ≤ {value}",
+    "perType": "Recall by type",
+    "validation": "Format validation",
+    "validationBody": "With format validation off the false-positive rate is {without}; with it on, {with}. It prevented {prevented} false positives.",
+    "reproduce": "Reproduce",
+    "copyCommand": "Copy command",
+    "generatedAt": "Measured at {at}",
+    "close": "Close",
+    "yes": "Yes",
+    "no": "No",
+    "blocked": "Blocked",
+    "allowed": "Allowed",
+    "rowPassed": "As expected",
+    "rowFailed": "Not as expected",
+    "label": {
+      "positive": "Should be caught",
+      "negative": "Benign"
+    },
+    "field": {
+      "text": "Sample text",
+      "kind": "Type",
+      "label": "Label",
+      "detected": "Detected",
+      "result": "Result",
+      "probe": "Probe input",
+      "args": "Tool arguments",
+      "expected": "Expected",
+      "actual": "Actual",
+      "policy": "Policy",
+      "expectation": "Expectation",
+      "matched": "Matched policies"
     }
   },
   "settings": {

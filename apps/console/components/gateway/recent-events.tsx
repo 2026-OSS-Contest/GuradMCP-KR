@@ -25,11 +25,17 @@ export const EVENTS_COLUMN = "w-[315px] min-[1920px]:w-[664px]";
 
 function EventRow({ event, isNew }: { event: SecurityEvent; isNew: boolean }) {
   return (
-    <li>
+    // The rule belongs to the row, not to the link: it sits at the row's bottom edge, while the
+    // link is only the part that highlights. Together on one element the highlight had to stretch
+    // down to the rule, which is where its 16px of bottom-only padding came from — nothing above
+    // the text, nothing beside it, and a tall band underneath.
+    <li className="pb-2 shadow-[inset_0_-1px_0_0_var(--primitive-opacity-white-alpha-10)]">
       <Link
         href={`/replay/${event.sessionId}?event=${event.id}`}
         className={cn(
-          "flex items-center gap-3 pb-4 transition-colors hover:bg-white/5 shadow-[inset_0_-1px_0_0_var(--primitive-opacity-white-alpha-10)]",
+          // -mx-2 against px-2: the highlight reaches 8px past the text on each side without
+          // moving the text, so the row still lines up with the panel's other columns.
+          "-mx-2 flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-white/5",
           // A freshly streamed event fades in from a highlight (spec §6.3).
           isNew && "event-tint motion-reduce:animate-none"
         )}
@@ -75,7 +81,7 @@ export function RecentEvents({ demoDisabled }: { demoDisabled: boolean }) {
 
   return (
     <div className={cn("flex flex-none flex-col gap-4", EVENTS_COLUMN)}>
-      <section className="flex min-h-0 flex-1 flex-col gap-4 rounded-lg bg-grayscale-900 p-4">
+      <section className="flex min-h-0 flex-1 flex-col gap-4 rounded-xl bg-grayscale-900 p-4">
         <h2 className="pb-3 text-body-text-b1-md text-grayscale-300 shadow-[inset_0_-1px_0_0_var(--primitive-opacity-white-alpha-10)]">
           {t("title")}
         </h2>
@@ -96,9 +102,13 @@ export function RecentEvents({ demoDisabled }: { demoDisabled: boolean }) {
           // `role="log"` belongs on the wrapper, not the list: an explicit role replaces the
           // element's implicit one, so a `<ul role="log">` stops being a list and orphans every
           // `<li>` inside it. The spec asks for both (§4.5), so they take one node each.
-          // `p-1 -m-1`: see session-list — without it the scroll container clips the focus ring.
-          <div role="log" aria-live="polite" className="-m-1 flex min-h-0 flex-1 flex-col overflow-y-auto p-1">
-            <ul className="flex flex-col gap-4">
+          // `p-3 -m-3`: see session-list — without it the scroll container clips the focus ring.
+          // 12px rather than 4 because the highlight now reaches 8px past the text, and the ring
+          // is drawn around the highlight: 8 for the highlight plus 4 for the ring.
+          <div role="log" aria-live="polite" className="-m-3 flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
+            {/* -mt-2 and gap-2 give back exactly what the row's own padding added, so the rows sit
+                where they did: text at the same y, rule at the same y, same rhythm down the list. */}
+            <ul className="-mt-2 flex flex-col gap-2">
               {events.map((event) => (
                 <EventRow key={event.id} event={event} isNew={fresh.has(event.id)} />
               ))}
@@ -112,7 +122,7 @@ export function RecentEvents({ demoDisabled }: { demoDisabled: boolean }) {
         aria-disabled={demoDisabled}
         tabIndex={demoDisabled ? -1 : undefined}
         className={cn(
-          "flex h-12 flex-none items-center justify-center gap-2 rounded-lg bg-blue-800 px-6 text-body-text-b2-md transition-colors hover:bg-blue-700",
+          "flex h-12 flex-none items-center justify-center gap-2 rounded-xl bg-blue-800 px-6 text-body-text-b2-md transition-colors hover:bg-blue-700",
           demoDisabled && "pointer-events-none opacity-50"
         )}
       >

@@ -146,7 +146,7 @@ export function SettingsScreen() {
           role="status"
           className="text-body-text-b3-md flex items-center gap-2 bg-grayscale-700 px-8 py-3 text-grayscale-white"
         >
-          <BannerInfoIcon className="size-4 flex-none" aria-hidden />
+          <BannerInfoIcon className="size-4 flex-none text-(--primitive-color-yellow-100)" aria-hidden />
           {t(notice)}
         </p>
       )}
@@ -158,7 +158,7 @@ export function SettingsScreen() {
           role="status"
           className="text-body-text-b3-md flex items-center gap-2 bg-grayscale-800 px-8 py-3 text-grayscale-white"
         >
-          <BannerInfoIcon className="size-4 flex-none" aria-hidden />
+          <BannerInfoIcon className="size-4 flex-none text-(--primitive-color-yellow-100)" aria-hidden />
           {toast}
         </p>
       )}

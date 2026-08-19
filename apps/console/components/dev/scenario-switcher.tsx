@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { FlaskConical, X } from "lucide-react";
 import { RESOURCE_REFRESH_EVENT } from "@/lib/api/use-resource";
 import { cn } from "@/lib/utils";
-import { MOCK_API, SCENARIOS, readScenario, writeScenario, type ScenarioId } from "@/mocks/scenario";
+import { SCENARIOS, SHOW_SCENARIO_SWITCHER, readScenario, writeScenario, type ScenarioId } from "@/mocks/scenario";
 
 /** Labels stay untranslated — this panel only ever renders for developers. */
 const LABELS: Record<ScenarioId, { title: string; hint: string }> = {
@@ -20,7 +20,7 @@ export function ScenarioSwitcher() {
   // localStorage is unavailable while rendering, so adopt the stored value after mount.
   useEffect(() => setScenario(readScenario()), []);
 
-  if (!MOCK_API) return null;
+  if (!SHOW_SCENARIO_SWITCHER) return null;
 
   const select = (id: ScenarioId) => {
     writeScenario(id);

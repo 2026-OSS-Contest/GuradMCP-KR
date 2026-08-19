@@ -1,0 +1,9 @@
+name: pack-b
+version: 1.0.0
+description: Fixture pack for extends-chain cycle detection tests
+dsl_version: 1
+default_action: allow
+evaluation_strategy: severity-max
+extends:
+  - pack-a
+policies: []

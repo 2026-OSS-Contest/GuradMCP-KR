@@ -149,7 +149,7 @@ export function DetectorInput({
             onClick={() => onDirectionChange(value)}
             aria-pressed={direction === value}
             className={cn(
-              "flex h-9 items-center rounded-md px-4 font-mono text-body-mono-b2-rg transition-colors",
+              "flex h-9 items-center rounded-md px-4 text-body-text-b2-md transition-colors",
               direction === value
                 ? "bg-(--primitive-opacity-white-alpha-10) text-grayscale-white"
                 : "text-grayscale-400 hover:text-grayscale-200"

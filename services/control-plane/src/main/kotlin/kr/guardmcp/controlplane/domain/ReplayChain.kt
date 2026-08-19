@@ -1,6 +1,7 @@
 package kr.guardmcp.controlplane.domain
 
 import java.security.MessageDigest
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -44,13 +45,19 @@ object ReplayChain {
     /**
      * Recomputes and checks the chain over [nodes] in the order given. Non-verdict
      * nodes are skipped: only verdicts are chained.
+     *
+     * Continues past a mismatch rather than stopping at the first one (GMCP-83 §4.1), advancing
+     * on each node's *stored* hash so one corrupted node does not cascade every later,
+     * still-self-consistent node into a false mismatch too — the same localization
+     * [GuardEventHasher.verify] does for the real chain.
      */
     fun validate(nodes: List<TimelineNode>): ChainResult {
+        val verdictNodes = nodes.filter { it.type == TimelineNodeType.VERDICT }
         var expectedPrevHash = GENESIS_HASH
-        for (node in nodes) {
-            if (node.type != TimelineNodeType.VERDICT) continue
+        val mismatches = mutableListOf<UUID>()
+        var lastGoodHash: String? = null
+        for (node in verdictNodes) {
             val detail = requireNotNull(node.detail) { "VERDICT node ${node.eventId} is missing its detail" }
-            if (detail.prevHash != expectedPrevHash) return ChainResult(ChainStatus.BROKEN, node.eventId)
             val recomputed = sha256(
                 payload(
                     node.eventId,
@@ -62,10 +69,16 @@ object ReplayChain {
                     expectedPrevHash,
                 ),
             )
-            if (recomputed != detail.hash) return ChainResult(ChainStatus.BROKEN, node.eventId)
+            val ok = detail.prevHash == expectedPrevHash && recomputed == detail.hash
+            if (ok) lastGoodHash = detail.hash else mismatches += node.eventId
             expectedPrevHash = detail.hash
         }
-        return ChainResult(ChainStatus.VALID, null)
+        val status = if (mismatches.isEmpty()) ChainStatus.VALID else ChainStatus.BROKEN
+        return ChainResult(
+            status, mismatches.firstOrNull(),
+            verdictNodes.size - mismatches.size, verdictNodes.size,
+            mismatches, lastGoodHash, Instant.now(),
+        )
     }
 }
 

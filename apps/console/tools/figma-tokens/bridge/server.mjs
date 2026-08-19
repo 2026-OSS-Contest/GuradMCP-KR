@@ -215,6 +215,21 @@ function genNode(node, rules, seq, abs, parentDir) {
       if (node.sizing.h === "FILL") s.push("width:100%");
       if (node.sizing.v === "FILL") s.push("height:100%");
     }
+    // A run Figma set to HUG grows with its own content and never wraps. In CSS it is just another
+    // flex item, so it can be squeezed down to its automatic minimum — and that minimum breaks
+    // after a hyphen, which is how `#s-0712` came out of the draft as `#s-` over `0712` when the
+    // design has it on one line. Forbid the squeeze rather than pin the width the way the frames
+    // do above: at `flex:none` the run measures itself, so a missing font still shows up as an
+    // overflow instead of being hidden inside a box held open at Figma's number.
+    if (node.type === "TEXT") {
+      if (node.sizing.h === "HUG") {
+        s.push("white-space:nowrap");
+        if (parentDir === "HORIZONTAL") s.push("flex:none");
+      }
+      // A FILL run is meant to wrap inside the width its parent hands it. Its automatic minimum
+      // would floor it at min-content instead and push its siblings out of the row.
+      if (node.sizing.h === "FILL" && parentDir) s.push("min-width:0");
+    }
   } else if (typeof node.w === "number" && node.type !== "TEXT") {
     s.push(`width:${node.w}px`, `height:${node.h}px`);
   }

@@ -1,16 +1,18 @@
 import type {
+  ApiErrorBody,
   ApiEventLookupResponse,
-  ApiSessionsResponse,
   ApiSessionTimelineResponse,
+  ApiSessionsResponse,
   Approval,
   ApprovalDecision,
   AttackRun,
   AttackRunMode,
   AttackScenariosResponse,
+  BenchmarkReport,
+  BenchmarkSamplesResponse,
   DetectDirection,
   DetectionPreview,
   EventDetail,
-  ApiErrorBody,
   GatewaySettings,
   Overview,
   PolicyDetail,
@@ -26,7 +28,7 @@ import type {
   SettingsUpdate,
   TimelineResponse,
   ToolDefinitionDiff,
-  ToolDiffsResponse,
+  ToolDiffsResponse
 } from "./types";
 import {
   toEventDetailFromLookup,
@@ -292,3 +294,16 @@ export const setPolicyEnabled = (id: string, enabled: boolean, signal?: AbortSig
  */
 export const getPolicyStats = (id: string, signal?: AbortSignal) =>
   get<PolicyStats>(`/policies/${encodeURIComponent(id)}/stats`, signal);
+
+/**
+ * The benchmark report (GMCP-61). `attack-lab/benchmark/run.ts` produces it; nothing serves it
+ * yet, so this reaches only the mock. The path is the one the console asks the control plane for.
+ */
+export const getBenchmarkReport = (signal?: AbortSignal) => get<BenchmarkReport>("/benchmark/report", signal);
+
+/**
+ * The samples the report was measured on, each already judged. The report itself carries only
+ * aggregates for these, so a per-sample verdict has to come from here — see the note in types.ts.
+ */
+export const getBenchmarkSamples = (signal?: AbortSignal) =>
+  get<BenchmarkSamplesResponse>("/benchmark/samples", signal);
