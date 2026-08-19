@@ -3,6 +3,7 @@ package kr.guardmcp.controlplane.api
 import com.fasterxml.jackson.annotation.JsonInclude
 import kr.guardmcp.controlplane.domain.AuditStructuredLogger
 import kr.guardmcp.controlplane.domain.GuardAction
+import kr.guardmcp.controlplane.domain.GuardEventDraft
 import kr.guardmcp.controlplane.domain.GuardEventRecord
 import kr.guardmcp.controlplane.domain.GuardEventRepository
 import kr.guardmcp.controlplane.domain.GuardSettingsStore
@@ -116,7 +117,7 @@ class AuditEventController(
         val verdict = GuardAction.fromWire(request.verdict)
             ?: throw ApiException(HttpStatus.BAD_REQUEST, "invalid_verdict", "unknown verdict '${request.verdict}'")
 
-        val record = GuardEventRecord(
+        val draft = GuardEventDraft(
             eventId = request.eventId,
             sessionId = request.sessionId,
             ts = request.ts,
@@ -132,9 +133,10 @@ class AuditEventController(
             // gateway sent — defense in depth against a misconfigured or compromised emitter.
             rawPayload = request.rawPayload?.takeIf { settingsStore.current().storeRawOptIn },
         )
-        val stored = repository.insert(record)
-        auditLog.logIngested(record)
-        return GuardEventIngestResponse(record.eventId, stored)
+        // GuardEventRepository.insert assigns seq/prevHash/hash under the session lock (GMCP-83).
+        val stored = repository.insert(draft)
+        auditLog.logIngested(draft)
+        return GuardEventIngestResponse(draft.eventId, stored)
     }
 
     /**

@@ -5,9 +5,10 @@ import kr.guardmcp.controlplane.domain.LiveReplaySource
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.jdbc.core.JdbcTemplate
 import java.time.Instant
 import java.util.UUID
 
@@ -22,6 +23,9 @@ import java.util.UUID
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ReplayLiveEventsApiTest : ApiTestSupport() {
+
+    @Autowired
+    private lateinit var jdbcTemplate: JdbcTemplate
 
     private fun ingest(
         sessionId: String,
@@ -88,8 +92,9 @@ class ReplayLiveEventsApiTest : ApiTestSupport() {
 
         val uuid = LiveReplaySource.sessionUuid(sessionId)
         val timeline = parseMap(get("/api/v1/sessions/$uuid/timeline").body())
-        // Nothing stored a hash for these events, so no verification is claimed either way.
-        assertEquals("unknown", timeline["chainStatus"])
+        // GuardEventRepository.insert stores a real hash chain now (GMCP-83), so an untampered
+        // ingested session verifies rather than reporting unknown.
+        assertEquals("valid", timeline["chainStatus"])
 
         @Suppress("UNCHECKED_CAST")
         val nodes = timeline["nodes"] as List<Map<String, Any?>>
@@ -132,8 +137,9 @@ class ReplayLiveEventsApiTest : ApiTestSupport() {
 
         val uuid = LiveReplaySource.sessionUuid(sessionId)
         val timeline = parseMap(get("/api/v1/sessions/$uuid/timeline").body())
-        // Nothing stored a hash for these events, so no verification is claimed either way.
-        assertEquals("unknown", timeline["chainStatus"])
+        // GuardEventRepository.insert stores a real hash chain now (GMCP-83), so an untampered
+        // ingested session verifies rather than reporting unknown.
+        assertEquals("valid", timeline["chainStatus"])
         @Suppress("UNCHECKED_CAST")
         val nodes = timeline["nodes"] as List<Map<String, Any?>>
         assertEquals(listOf("warn", "block"), nodes.map { it["verdict"] })
@@ -158,26 +164,62 @@ class ReplayLiveEventsApiTest : ApiTestSupport() {
     }
 
     /**
-     * The reason projected sessions report `unknown` rather than `valid`. Two events with
-     * different content produce different hashes, and a recompute-then-self-compare check
-     * calls both chains VALID — so a VALID here would say nothing about whether the rows
-     * are the ones the gateway wrote. Until GMCP-83 stores a hash to check against, no
-     * ingested content may produce a verification claim.
+     * GMCP-83 §6/§9 DoD: a direct DB edit to a stored field (not going through the ingest
+     * endpoint at all) must be caught by `chain-verify`, and pinned to the exact row that
+     * changed — not the ones after it, which are still self-consistent with what is stored.
      */
     @Test
-    fun `no ingested content can make a projected session claim a verified chain`() {
-        val untampered = "s-live-${UUID.randomUUID()}"
-        ingest(untampered, verdict = "block", riskScore = 38)
+    fun `a direct DB edit to a stored field is caught by chain-verify and pinned to that row`() {
+        val sessionId = "s-live-${UUID.randomUUID()}"
+        val start = Instant.parse("2026-08-11T02:00:00Z")
+        ingest(sessionId, verdict = "block", riskScore = 92, ts = start)
+        val tamperedId = ingest(sessionId, verdict = "require_approval", riskScore = 70, ts = start.plusMillis(40))
+        ingest(sessionId, verdict = "allow", riskScore = 5, ts = start.plusMillis(80))
 
-        val altered = "s-live-${UUID.randomUUID()}"
-        ingest(altered, verdict = "allow", riskScore = 3, policyIds = emptyList())
+        jdbcTemplate.update("UPDATE guard_event SET risk_score = ? WHERE event_id = ?", 10, tamperedId)
 
-        for (sessionId in listOf(untampered, altered)) {
-            val uuid = LiveReplaySource.sessionUuid(sessionId)
-            val timeline = parseMap(get("/api/v1/sessions/$uuid/timeline").body())
-            assertEquals("unknown", timeline["chainStatus"], "projected session $sessionId claimed a chain verdict")
-            assertNull(timeline["brokenAt"])
-        }
+        val uuid = LiveReplaySource.sessionUuid(sessionId)
+        val verify = parseMap(get("/api/v1/sessions/$uuid/chain-verify").body())
+
+        assertEquals("broken", verify["status"])
+        assertEquals(tamperedId.toString(), verify["firstMismatchEventId"])
+        assertEquals(listOf(tamperedId.toString()), verify["mismatchEventIds"])
+        assertEquals(2, verify["verifiedCount"])
+        assertEquals(3, verify["totalCount"])
+
+        val timeline = parseMap(get("/api/v1/sessions/$uuid/timeline").body())
+        assertEquals("broken", timeline["chainStatus"])
+        assertEquals(tamperedId.toString(), timeline["brokenAt"])
+    }
+
+    @Test
+    fun `an untampered session's chain-verify reports valid with every event verified`() {
+        val sessionId = "s-live-${UUID.randomUUID()}"
+        ingest(sessionId, verdict = "block", riskScore = 38)
+        ingest(sessionId, verdict = "allow", riskScore = 3, policyIds = emptyList())
+
+        val uuid = LiveReplaySource.sessionUuid(sessionId)
+        val verify = parseMap(get("/api/v1/sessions/$uuid/chain-verify").body())
+
+        assertEquals("valid", verify["status"])
+        assertEquals(2, verify["verifiedCount"])
+        assertEquals(2, verify["totalCount"])
+        assertEquals(emptyList<String>(), verify["mismatchEventIds"])
+        assertNotNull(verify["lastVerifiedHash"])
+    }
+
+    @Test
+    fun `tampering the stored hash column itself is also caught`() {
+        val sessionId = "s-live-${UUID.randomUUID()}"
+        val eventId = ingest(sessionId, verdict = "block", riskScore = 38)
+
+        jdbcTemplate.update("UPDATE guard_event SET hash = repeat('0', 64) WHERE event_id = ?", eventId)
+
+        val uuid = LiveReplaySource.sessionUuid(sessionId)
+        val verify = parseMap(get("/api/v1/sessions/$uuid/chain-verify").body())
+
+        assertEquals("broken", verify["status"])
+        assertEquals(listOf(eventId.toString()), verify["mismatchEventIds"])
     }
 
     @Test

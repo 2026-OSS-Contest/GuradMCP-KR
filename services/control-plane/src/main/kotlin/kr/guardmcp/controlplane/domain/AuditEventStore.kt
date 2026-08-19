@@ -11,6 +11,7 @@ import java.sql.PreparedStatement
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Wire/storage shape for pipeline stage ⑧ (docs/task-docs/GMCP-24/audit-logging-implementation.md
@@ -34,6 +35,37 @@ data class GuardEventRecord(
     /** NFR-04 opt-in only; null unless [kr.guardmcp.controlplane.domain.GuardSettingsStore]'s
      *  `storeRawOptIn` was true (`PUT /api/v1/settings`) at ingest time. */
     val rawPayload: String?,
+    /**
+     * GMCP-83 hash chain fields (docs/task-docs/GMCP-83/audit-hash-chain-spec.md §2). Nullable,
+     * not because a freshly-ingested row can have one unset ([GuardEventRepository.insert]
+     * always fills all three) but because a row written before this ticket has none — see
+     * [ChainStatus.UNKNOWN]. Defaulted to null so every existing test/production fixture that
+     * builds a [GuardEventRecord] without these (e.g. `LiveReplaySourceKotest`'s `record()`)
+     * keeps compiling and keeps meaning "no chain to verify."
+     */
+    val seq: Long? = null,
+    val prevHash: String? = null,
+    val hash: String? = null,
+)
+
+/**
+ * What the ingest endpoint has before a row exists: everything [GuardEventRecord] carries
+ * except the chain fields, which only [GuardEventRepository.insert] can assign — it alone knows
+ * the session's last `seq`/`hash` under the per-session lock that makes assigning them safe.
+ */
+data class GuardEventDraft(
+    val eventId: UUID,
+    val sessionId: String,
+    val ts: Instant,
+    val direction: String,
+    val toolName: String,
+    val argsDigest: String,
+    val verdict: String,
+    val riskScore: BigDecimal,
+    val matchedPolicyIds: List<String>,
+    val detections: List<Map<String, Any?>>,
+    val maskDiffRef: String?,
+    val rawPayload: String?,
 )
 
 /**
@@ -44,6 +76,10 @@ data class GuardEventRecord(
 interface AuditEventQueries {
     fun findSessionIds(): List<String>
     fun findBySessionId(sessionId: String): List<GuardEventRecord>
+
+    /** `seq` ascending — the chain's integrity order (GMCP-83 §4.1), not [findBySessionId]'s
+     *  `ts` display order. A row from before the chain existed sorts last (`seq IS NULL`). */
+    fun findBySessionIdOrderBySeq(sessionId: String): List<GuardEventRecord>
     fun findById(eventId: UUID): GuardEventRecord?
 }
 
@@ -56,29 +92,83 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
     // (see ApiTestSupport's note), so this reads/writes the jsonb column with its own instance.
     private val objectMapper = ObjectMapper()
 
-    /** Idempotent: a re-delivered event (gateway's bounded publish queue never retries, but a
-     *  future retry policy might) lands the same row instead of failing the request. Returns
-     *  whether this call actually stored a new row, as opposed to hitting the ON CONFLICT DO
-     *  NOTHING no-op for an event_id that's already there. */
-    fun insert(event: GuardEventRecord): Boolean {
-        val rowsAffected = jdbcTemplate.update({ connection ->
-            val statement: PreparedStatement = connection.prepareStatement(INSERT_SQL)
-            statement.setObject(1, event.eventId)
-            statement.setString(2, event.sessionId)
-            statement.setTimestamp(3, Timestamp.from(event.ts))
-            statement.setString(4, event.direction)
-            statement.setString(5, event.toolName)
-            statement.setString(6, event.argsDigest)
-            statement.setString(7, event.verdict)
-            statement.setBigDecimal(8, event.riskScore)
-            statement.setArray(9, connection.createArrayOf("text", event.matchedPolicyIds.toTypedArray()))
-            statement.setObject(10, jsonb(objectMapper.writeValueAsString(event.detections)))
-            statement.setString(11, event.maskDiffRef)
-            statement.setString(12, event.rawPayload)
-            statement
-        })
-        return rowsAffected > 0
-    }
+    // One lock object per session id, not one global lock: sessions are independent chains
+    // (spec §1), so serializing unrelated sessions' inserts against each other would only add
+    // contention with no correctness benefit. This is a single-instance (in-JVM) guarantee —
+    // matching this codebase's existing concurrency pattern (`AuditChain`, `GuardSettingsStore`:
+    // `synchronized(lock)`, no distributed lock infra anywhere in control-plane) — not a
+    // cross-instance one; horizontal scaling of this service would need a real distributed lock
+    // (spec §3.3's Redis suggestion), which is out of scope here.
+    private val sessionLocks = ConcurrentHashMap<String, Any>()
+
+    /**
+     * Assigns `seq`/`prev_hash`/`hash` and persists the row (spec §3.3, pipeline stage ⑧).
+     *
+     * The per-session lock is the outermost scope around both the "read the last event" and
+     * the "write this one" steps — not wrapped in `@Transactional`, deliberately: a declarative
+     * transaction only commits *after* this method returns (see `GuardSettingsStore`'s doc
+     * comment for the same reasoning), so a lock released *inside* the transactional method
+     * would let a second thread read a stale "last event" and mint a duplicate `seq` before the
+     * first thread's insert is even durable. `synchronized` here, wrapping a plain autocommit
+     * insert, is what actually makes the read-then-write atomic.
+     *
+     * Idempotent: a re-delivered event (gateway's bounded publish queue never retries, but a
+     * future retry policy might) is detected under the same lock — before a `seq` is minted for
+     * it — rather than only at the `ON CONFLICT DO NOTHING` (kept as a defense-in-depth backstop,
+     * not the primary de-dup path: relying on it alone here would burn a `seq` number on every
+     * redelivery). Returns whether this call actually stored a new row.
+     */
+    fun insert(draft: GuardEventDraft): Boolean =
+        synchronized(sessionLocks.computeIfAbsent(draft.sessionId) { Any() }) {
+            if (findById(draft.eventId) != null) return@synchronized false
+
+            val last = lastBySessionId(draft.sessionId)
+            val seq = (last?.seq ?: 0L) + 1
+            val prevHash = last?.hash ?: GuardEventHasher.genesisHash(draft.sessionId)
+            val record = GuardEventRecord(
+                eventId = draft.eventId,
+                sessionId = draft.sessionId,
+                ts = draft.ts,
+                direction = draft.direction,
+                toolName = draft.toolName,
+                argsDigest = draft.argsDigest,
+                verdict = draft.verdict,
+                riskScore = draft.riskScore,
+                matchedPolicyIds = draft.matchedPolicyIds,
+                detections = draft.detections,
+                maskDiffRef = draft.maskDiffRef,
+                rawPayload = draft.rawPayload,
+                seq = seq,
+                prevHash = prevHash,
+                hash = null,
+            )
+            val hash = GuardEventHasher.computeHash(prevHash, GuardEventHasher.payload(record))
+
+            val rowsAffected = jdbcTemplate.update({ connection ->
+                val statement: PreparedStatement = connection.prepareStatement(INSERT_SQL)
+                statement.setObject(1, record.eventId)
+                statement.setString(2, record.sessionId)
+                statement.setTimestamp(3, Timestamp.from(record.ts))
+                statement.setString(4, record.direction)
+                statement.setString(5, record.toolName)
+                statement.setString(6, record.argsDigest)
+                statement.setString(7, record.verdict)
+                statement.setBigDecimal(8, record.riskScore)
+                statement.setArray(9, connection.createArrayOf("text", record.matchedPolicyIds.toTypedArray()))
+                statement.setObject(10, jsonb(objectMapper.writeValueAsString(record.detections)))
+                statement.setString(11, record.maskDiffRef)
+                statement.setString(12, record.rawPayload)
+                statement.setLong(13, seq)
+                statement.setString(14, prevHash)
+                statement.setString(15, hash)
+                statement
+            })
+            rowsAffected > 0
+        }
+
+    /** The chain's tip for a session, or `null` for its first event (spec §3.1 genesis case). */
+    private fun lastBySessionId(sessionId: String): GuardEventRecord? =
+        jdbcTemplate.query(SELECT_LAST_BY_SESSION_SQL, rowMapper, sessionId).firstOrNull()
 
     override fun findById(eventId: UUID): GuardEventRecord? =
         jdbcTemplate.query(SELECT_SQL, rowMapper, eventId).firstOrNull()
@@ -104,6 +194,10 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
      */
     override fun findBySessionId(sessionId: String): List<GuardEventRecord> =
         jdbcTemplate.query(SELECT_BY_SESSION_SQL, rowMapper, sessionId)
+
+    /** Chain integrity order (GMCP-83 §4.1) — see [AuditEventQueries.findBySessionIdOrderBySeq]. */
+    override fun findBySessionIdOrderBySeq(sessionId: String): List<GuardEventRecord> =
+        jdbcTemplate.query(SELECT_BY_SESSION_ORDER_SEQ_SQL, rowMapper, sessionId)
 
     /**
      * Newest-first, optionally scoped to a session and to strictly-after an anchor point
@@ -150,6 +244,9 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
             rs.getString("detections"),
             object : TypeReference<List<Map<String, Any?>>>() {},
         )
+        // rs.getLong returns 0 for SQL NULL; wasNull() is the only way to tell "no seq yet"
+        // (a pre-chain row) apart from an actual seq of 0 (which never occurs — seq starts at 1).
+        val seq = rs.getLong("seq").takeUnless { rs.wasNull() }
         GuardEventRecord(
             eventId = rs.getObject("event_id", UUID::class.java),
             sessionId = rs.getString("session_id"),
@@ -163,6 +260,9 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
             detections = detections,
             maskDiffRef = rs.getString("mask_diff_ref"),
             rawPayload = rs.getString("raw_payload"),
+            seq = seq,
+            prevHash = rs.getString("prev_hash"),
+            hash = rs.getString("hash"),
         )
     }
 
@@ -175,14 +275,14 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
         private const val INSERT_SQL = """
             INSERT INTO guard_event
                 (event_id, session_id, ts, direction, tool_name, args_digest, verdict, risk_score,
-                 matched_policy_ids, detections, mask_diff_ref, raw_payload)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 matched_policy_ids, detections, mask_diff_ref, raw_payload, seq, prev_hash, hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (event_id) DO NOTHING
         """
 
         private const val SELECT_COLUMNS_FROM = """
             SELECT event_id, session_id, ts, direction, tool_name, args_digest, verdict, risk_score,
-                   matched_policy_ids, detections, mask_diff_ref, raw_payload
+                   matched_policy_ids, detections, mask_diff_ref, raw_payload, seq, prev_hash, hash
             FROM guard_event
         """
 
@@ -194,11 +294,22 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
         """
 
         private const val SELECT_BY_SESSION_SQL = """
-            SELECT event_id, session_id, ts, direction, tool_name, args_digest, verdict, risk_score,
-                   matched_policy_ids, detections, mask_diff_ref, raw_payload
-            FROM guard_event
+            $SELECT_COLUMNS_FROM
             WHERE session_id = ?
             ORDER BY ts, event_id
+        """
+
+        private const val SELECT_BY_SESSION_ORDER_SEQ_SQL = """
+            $SELECT_COLUMNS_FROM
+            WHERE session_id = ?
+            ORDER BY seq ASC NULLS LAST, ts, event_id
+        """
+
+        private const val SELECT_LAST_BY_SESSION_SQL = """
+            $SELECT_COLUMNS_FROM
+            WHERE session_id = ?
+            ORDER BY seq DESC NULLS LAST, ts DESC
+            LIMIT 1
         """
 
         private const val SELECT_SQL = "$SELECT_COLUMNS_FROM WHERE event_id = ?"
@@ -215,7 +326,7 @@ class AuditStructuredLogger {
     private val objectMapper = ObjectMapper()
     private val logger = org.slf4j.LoggerFactory.getLogger("guardmcp.audit")
 
-    fun logIngested(event: GuardEventRecord) {
+    fun logIngested(event: GuardEventDraft) {
         val line = objectMapper.writeValueAsString(
             linkedMapOf(
                 "timestamp" to Instant.now().toString(),
