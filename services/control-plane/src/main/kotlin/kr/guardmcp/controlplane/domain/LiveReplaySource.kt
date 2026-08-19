@@ -94,6 +94,7 @@ class LiveReplaySource(private val repository: AuditEventQueries) {
             toolName = record.toolName,
             direction = if (record.direction == "response") ToolCallDirection.RES else ToolCallDirection.REQ,
             argsDigest = record.argsDigest,
+            hasRawPayload = record.rawPayloadRef != null,
         )
     }
 

@@ -166,10 +166,14 @@ export interface GuardEvent {
   /** FR-INJ-04 (GMCP-57): the optional adjudicator's answer and its own latency, when it ran. */
   llmAdjudication?: LlmAdjudication;
   /**
-   * NFR-04 opt-in only: populated by `buildGuardEvent` (actionRouter.ts) solely when
-   * `AUDIT_STORE_RAW_PAYLOAD=true`. `./auditPublisher.ts` must be the only reader — it strips
-   * this from the shared bus object synchronously before any other `guardEventBus` subscriber
-   * (e.g. a future SSE writer) can observe it. Every other consumer must treat it as absent.
+   * NFR-04/GMCP-84 §9 opt-in only: populated by `buildGuardEvent` (actionRouter.ts) solely when
+   * both `AUDIT_STORE_RAW_PAYLOAD=true` *and* the Control Plane's live `rawPayloadStorageEnabled`
+   * setting (synced via `../settings/failurePolicyCache.js`) currently say yes. `./auditPublisher.ts`
+   * must be the only reader — it strips this from the shared bus object synchronously before any
+   * other `guardEventBus` subscriber (e.g. a future SSE writer) can observe it. Every other
+   * consumer must treat it as absent. The Control Plane re-checks its own opt-in flag again at
+   * ingest regardless (`AuditEventController.ingest`) — this is a convenience gate to avoid
+   * sending payloads that would just be dropped, not the enforcement point (GMCP-84 §5.1).
    */
   rawPayload?: string;
 }

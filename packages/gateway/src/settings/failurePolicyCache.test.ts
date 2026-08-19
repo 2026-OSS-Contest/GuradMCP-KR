@@ -2,9 +2,13 @@ import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getFailurePolicy,
+  getRawPayloadStorageEnabled,
   parseFailurePolicySnapshot,
+  parseRawPayloadStorageEnabledSnapshot,
   resetFailurePolicyCache,
+  resetRawPayloadStorageEnabledCache,
   setFailurePolicy,
+  setRawPayloadStorageEnabled,
   startFailurePolicySync
 } from "./failurePolicyCache.js";
 
@@ -13,6 +17,7 @@ const syncs: Array<{ stop(): void }> = [];
 
 afterEach(async () => {
   resetFailurePolicyCache();
+  resetRawPayloadStorageEnabledCache();
   syncs.splice(0).forEach((sync) => sync.stop());
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
 });
@@ -52,6 +57,38 @@ describe("parseFailurePolicySnapshot", () => {
   });
 });
 
+describe("raw-payload-storage cache (GMCP-84 §9)", () => {
+  it("fails closed (off) when the cache has never been synced", () => {
+    expect(getRawPayloadStorageEnabled()).toBe(false);
+  });
+
+  it("reflects a value that was set", () => {
+    setRawPayloadStorageEnabled(true);
+    expect(getRawPayloadStorageEnabled()).toBe(true);
+  });
+
+  it("returns to false after a reset (cold-start simulation)", () => {
+    setRawPayloadStorageEnabled(true);
+    resetRawPayloadStorageEnabledCache();
+    expect(getRawPayloadStorageEnabled()).toBe(false);
+  });
+});
+
+describe("parseRawPayloadStorageEnabledSnapshot", () => {
+  it("parses a valid { rawPayloadStorageEnabled } payload", () => {
+    expect(parseRawPayloadStorageEnabledSnapshot(JSON.stringify({ rawPayloadStorageEnabled: true }))).toBe(true);
+    expect(parseRawPayloadStorageEnabledSnapshot(JSON.stringify({ rawPayloadStorageEnabled: false }))).toBe(false);
+  });
+
+  it("returns undefined when the field is missing, so the cache is left untouched", () => {
+    expect(parseRawPayloadStorageEnabledSnapshot(JSON.stringify({ failMode: "fail_open" }))).toBeUndefined();
+  });
+
+  it("returns undefined for malformed JSON", () => {
+    expect(parseRawPayloadStorageEnabledSnapshot("not json")).toBeUndefined();
+  });
+});
+
 describe("startFailurePolicySync", () => {
   it("is a no-op when no Control Plane URL is configured", () => {
     const sync = startFailurePolicySync(undefined);
@@ -78,6 +115,25 @@ describe("startFailurePolicySync", () => {
 
     sendUpdate?.();
     await vi.waitFor(() => expect(getFailurePolicy()).toBe("fail_closed"));
+  });
+
+  it("also syncs rawPayloadStorageEnabled off the same frame (GMCP-84 §9)", async () => {
+    let sendUpdate: (() => void) | undefined;
+    const upstream = createServer((request, response) => {
+      if (request.url !== "/api/v1/settings/stream") { response.writeHead(404); response.end(); return; }
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.write(`event: settings.changed\ndata: ${JSON.stringify({ failMode: "fail_closed", rawPayloadStorageEnabled: true })}\n\n`);
+      sendUpdate = () => response.write(`event: settings.changed\ndata: ${JSON.stringify({ failMode: "fail_closed", rawPayloadStorageEnabled: false })}\n\n`);
+    });
+    const baseUrl = await listen(upstream);
+
+    const sync = startFailurePolicySync(baseUrl);
+    syncs.push(sync);
+
+    await vi.waitFor(() => expect(getRawPayloadStorageEnabled()).toBe(true));
+
+    sendUpdate?.();
+    await vi.waitFor(() => expect(getRawPayloadStorageEnabled()).toBe(false));
   });
 
   it("discards a malformed frame instead of reverting to fail_closed", async () => {

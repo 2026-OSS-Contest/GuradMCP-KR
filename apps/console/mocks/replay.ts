@@ -45,7 +45,11 @@ function toNode(story: Story, step: StoryStep): ApiTimelineNode {
     // `maskDiffRef` is the URL the design has the Mask Diff view fetch separately. Nothing
     // implements that route (see the note on `ApiVerdictDetail`), so the diff travels inline and
     // this is filled in here for contract shape alone rather than repeated in the story.
-    detail: step.detail ? { ...step.detail, maskDiffRef: `/api/v1/events/${step.id}/mask-diff` } : null
+    detail: step.detail ? { ...step.detail, maskDiffRef: `/api/v1/events/${step.id}/mask-diff` } : null,
+    // GMCP-84 §8.3: every VERDICT node in the demo story stands in for a real GuardEvent with a
+    // stored raw_payload_ref, so `원문 열람` has something to reveal in dev/e2e the same way a
+    // real opt-in-enabled backend would report it.
+    hasRawPayload: Boolean(step.detail)
   };
 }
 

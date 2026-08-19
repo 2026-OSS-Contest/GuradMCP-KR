@@ -46,6 +46,7 @@ private fun record(
     seq: Long? = null,
     prevHash: String? = null,
     hash: String? = null,
+    rawPayloadRef: UUID? = null,
 ) = GuardEventRecord(
     eventId = eventId,
     sessionId = sessionId,
@@ -58,7 +59,7 @@ private fun record(
     matchedPolicyIds = policyIds,
     detections = detections,
     maskDiffRef = null,
-    rawPayload = null,
+    rawPayloadRef = rawPayloadRef,
     seq = seq,
     prevHash = prevHash,
     hash = hash,

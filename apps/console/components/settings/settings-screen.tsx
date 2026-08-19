@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { BannerInfoIcon } from "@/components/icons";
 import { ApiError, getServers, getSettings, putServerTrust, updateSettings } from "@/lib/api/client";
+import { hasOperatorPermissions } from "@/lib/api/permissions";
 import type {
   FailMode,
   GatewaySettings,
@@ -55,7 +56,11 @@ export function SettingsScreen() {
     setBusy("settings");
     setNotice(null);
     try {
-      await updateSettings(update);
+      const result = await updateSettings(update);
+      // GMCP-84 §6.2: the true→false rawPayloadStorageEnabled response carries a retention note
+      // ("기존에 저장된 원문은 유지됩니다...") — surface it the same way a trust change surfaces its toast.
+      if (result.note) setToast(result.note);
+      else if (update.rawPayloadStorageEnabled === true) setToast(t("storeRawDialog.enabledToast"));
     } catch {
       setNotice("saveFailed");
     } finally {
@@ -63,7 +68,7 @@ export function SettingsScreen() {
       setPending(null);
       setPulse((previous) => previous + 1);
     }
-  }, []);
+  }, [t]);
 
   /**
    * FR-GW-02 §5.1: the gateway decides which changes need a second look. A demotion is applied
@@ -120,7 +125,7 @@ export function SettingsScreen() {
 
   const onStoreRawChange = (next: boolean) => {
     if (next) return setPending({ kind: "storeRaw" });
-    void save({ storeRawOptIn: false });
+    void save({ rawPayloadStorageEnabled: false });
   };
 
   const onTrustChange = (server: McpServer, trust: TrustLevel) => {
@@ -179,6 +184,9 @@ export function SettingsScreen() {
             onLocaleChange={(locale) => void changeLocale(locale)}
             onTimeoutChange={(approvalTimeoutSeconds) => void save({ approvalTimeoutSeconds })}
             disabled={busy === "settings"}
+            // GMCP-84 §8.1: `settings:write` (the same claim `events:reveal` uses, §7) is required
+            // specifically for this toggle — every other control on this screen is unaffected.
+            storeRawDisabled={busy === "settings" || !hasOperatorPermissions()}
           />
         </div>
       </div>
@@ -199,10 +207,15 @@ export function SettingsScreen() {
         <RiskDialog
           title={t("storeRawDialog.title")}
           body={t("storeRawDialog.body")}
+          // GMCP-84 §8.1: unlike the pre-84 version of this dialog, turning raw storage on now
+          // requires the same explicit checkbox fail-open does — the control plane 422s a
+          // false→true PUT without `acknowledgedNotice: true` regardless (§6.2), so the checkbox
+          // is not just UX polish here.
+          acknowledgement={t("storeRawDialog.acknowledge")}
           confirmLabel={t("storeRawDialog.confirm")}
           pending={busy === "settings"}
           onCancel={() => setPending(null)}
-          onConfirm={() => void save({ storeRawOptIn: true })}
+          onConfirm={() => void save({ rawPayloadStorageEnabled: true, acknowledgedNotice: true })}
         />
       )}
 

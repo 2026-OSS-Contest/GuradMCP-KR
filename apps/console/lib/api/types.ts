@@ -265,7 +265,15 @@ export interface EventDetail {
   // Tool-call / tool-result node: the direction verdict.
   direction?: DirectionVerdict;
 
-  /** Whether the reveal-original action is available to this operator (spec §5.3 no.5). */
+  /**
+   * GMCP-84 §8.2: whether this event has a stored raw payload at all (`hasRawPayload` off the
+   * wire). Distinct from `canReveal`: this event may have one but the current operator may lack
+   * `events:reveal` — the panel renders three states off these two fields (no permission: button
+   * hidden; permission but not stored: disabled + tooltip; both: active), not one.
+   */
+  hasRawPayload?: boolean;
+  /** Whether the reveal-original action is available to this operator (spec §5.3 no.5) —
+   *  `hasRawPayload && <this build carries an operator identity>` (`hasOperatorPermissions()`). */
   canReveal?: boolean;
   /** Present when canReveal — the raw/masked content for the reveal modal. */
   reveal?: RevealContent;
@@ -353,6 +361,13 @@ export interface ApiTimelineNode {
   verdict?: Verdict;
   riskScore?: number;
   detail: ApiVerdictDetail | null;
+  /**
+   * GMCP-84 §8.3: whether this event has a stored, revealable raw payload — real, not
+   * mock-supplied enrichment, unlike the fields below. Only ever true for a VERDICT node backed
+   * by a real ingested GuardEvent with a non-null `raw_payload_ref`; absent/false everywhere else
+   * (seeded demo sessions, non-VERDICT nodes).
+   */
+  hasRawPayload?: boolean;
 
   // The four below back the node-type-specific panel sections the design shows (frames
   // `…-사용자-입력-단계`, `…-agent-단계`, `…-tool-call-단계`, `…-tool-결과-단계`) and the GMCP-28
@@ -594,9 +609,14 @@ export interface GatewaySettings {
   failMode: FailMode;
   /**
    * Whether the audit log keeps the raw text beside the masked form. Off by default: turning it
-   * on means the console starts storing exactly what it exists to redact, so the screen asks.
+   * on means the console starts storing exactly what it exists to redact, so the screen asks
+   * (GMCP-84 §8.1's notice modal) before it goes through, and the control plane re-enforces that
+   * gate server-side via `acknowledgedNotice` on `SettingsUpdate` (§6.2).
    */
-  storeRawOptIn: boolean;
+  rawPayloadStorageEnabled: boolean;
+  /** Last time it was turned on, and by whom (GMCP-84 §5.4) — `null` until the first time. */
+  rawPayloadStorageEnabledAt?: string | null;
+  rawPayloadStorageEnabledBy?: string | null;
   locale: "ko" | "en";
   /** Seconds a held call waits before the gateway fails it closed. The design's default is 120. */
   approvalTimeoutSeconds: number;
@@ -606,14 +626,22 @@ export interface GatewaySettings {
    * it exists so `SettingsUpdate` can carry it on the one write that requires it.
    */
   riskAcknowledged?: boolean;
+  /**
+   * `PUT` response only (GMCP-84 §6.2): present when `rawPayloadStorageEnabled` just went
+   * true→false, explaining that existing stored payloads are not deleted by this call. Never
+   * returned by `GET`, and never sent on a request.
+   */
+  note?: string;
 }
 
 /**
  * `PUT /settings` — every field independent, so one control never resends another's value.
- * `riskAcknowledged: true` must ride along with `failMode: "fail_open"` (GMCP-68 REQ-08) — the
- * control plane returns 400 otherwise, regardless of what the console's own dialog already gated.
+ * `riskAcknowledged: true` must ride along with `failMode: "fail_open"` (GMCP-68 REQ-08), and
+ * `acknowledgedNotice: true` must ride along with `rawPayloadStorageEnabled: true` on the
+ * false→true transition (GMCP-84 §6.2) — the control plane 400s/422s otherwise, regardless of
+ * what the console's own dialog already gated.
  */
-export type SettingsUpdate = Partial<GatewaySettings>;
+export type SettingsUpdate = Partial<GatewaySettings> & { acknowledgedNotice?: boolean };
 
 // ── SCR-302 Policy Builder (spec §5.5, FR-POL-02/04) ────────────────────────
 // `GET /policy-packs`, `GET /policies`, `PUT /policy-packs/{packId}` and `PUT /policies/{policyId}`

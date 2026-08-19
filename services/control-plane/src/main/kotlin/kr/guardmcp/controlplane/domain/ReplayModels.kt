@@ -84,6 +84,10 @@ data class TimelineNode(
     @get:JsonInclude(JsonInclude.Include.NON_NULL) val verdict: Verdict? = null,
     @get:JsonInclude(JsonInclude.Include.NON_NULL) val riskScore: Int? = null,
     val detail: VerdictDetail? = null,
+    /** GMCP-84 §8.3: whether this event has a stored, revealable raw payload. Only ever true for
+     *  a VERDICT node backed by a real ingested [GuardEventRecord] with a non-null
+     *  `rawPayloadRef`; seeded/demo nodes have no raw payload to reveal, so this defaults false. */
+    val hasRawPayload: Boolean = false,
 )
 
 data class ReplaySession(

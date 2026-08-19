@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { revealEvent } from "@/lib/api/client";
+import { hasOperatorPermissions } from "@/lib/api/permissions";
 import type { DirectionVerdict, EventDetail, RevealContent, TimelineNodeType } from "@/lib/api/types";
 import { VerdictBadge } from "@/components/verdict-badge";
 import { RevealLockIcon, VerdictAllowIcon, VerdictWarnIcon } from "@/components/icons";
@@ -318,11 +319,22 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
         {detail.chain && <ChainPill status={detail.chain.status} hash={detail.chain.hash} />}
       </div>
 
-      {detail.canReveal && (
+      {/*
+        GMCP-84 §8.2: three states off two independent signals.
+        - No operator identity at all (`hasOperatorPermissions()` false): button not rendered —
+          the real gate is server-side (PermissionService) regardless, but there is no point
+          offering a control that will always 403.
+        - Operator identity present but this event has no stored raw payload (`hasRawPayload`
+          false): rendered, disabled, with a tooltip explaining why.
+        - Both true: the normal active button.
+      */}
+      {hasOperatorPermissions() && (
         <button
           type="button"
           onClick={() => setConfirmOpen(true)}
-          className="flex h-12 flex-none items-center justify-center gap-2 rounded-xl bg-blue-800 text-body-text-b2-md transition-colors hover:bg-blue-700"
+          disabled={!detail.hasRawPayload}
+          title={detail.hasRawPayload ? undefined : t("revealUnavailable")}
+          className="flex h-12 flex-none items-center justify-center gap-2 rounded-xl bg-blue-800 text-body-text-b2-md transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-grayscale-800 disabled:text-grayscale-300 disabled:hover:bg-grayscale-800"
         >
           <RevealLockIcon className="h-6 w-5 flex-none" aria-hidden />
           {t("reveal")}

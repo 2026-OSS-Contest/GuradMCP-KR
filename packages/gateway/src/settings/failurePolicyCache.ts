@@ -25,6 +25,26 @@ export function resetFailurePolicyCache(): void {
   cached = null;
 }
 
+// GMCP-84 §9: the same `settings.changed` frame the Control Plane pushes for `failMode` also
+// carries `rawPayloadStorageEnabled` (GuardSettingsStore.sendSnapshot), so this reuses the one
+// SSE connection above rather than opening a second stream just for this flag. Cold-start default
+// is `false` for the same NFR-04/REQ-07 reasoning `getFailurePolicy` uses for fail-closed: an
+// opt-in the gateway hasn't heard confirmed by the Control Plane yet must never be assumed on.
+let rawPayloadStorageEnabledCache = false;
+
+export function getRawPayloadStorageEnabled(): boolean {
+  return rawPayloadStorageEnabledCache;
+}
+
+export function setRawPayloadStorageEnabled(enabled: boolean): void {
+  rawPayloadStorageEnabledCache = enabled;
+}
+
+/** Test-only reset back to the cold state; production never needs this. */
+export function resetRawPayloadStorageEnabledCache(): void {
+  rawPayloadStorageEnabledCache = false;
+}
+
 function isFailurePolicy(value: unknown): value is FailurePolicy {
   return value === "fail_closed" || value === "fail_open";
 }
@@ -47,6 +67,23 @@ export function parseFailurePolicySnapshot(raw: string): FailurePolicy | undefin
   }
   if (!isRecord(parsed) || !isFailurePolicy(parsed.failMode)) return undefined;
   return parsed.failMode;
+}
+
+/**
+ * Parses the same frame's `{ rawPayloadStorageEnabled: boolean }` field (GMCP-84 §9). `undefined`
+ * for a frame that doesn't carry this field at all (an older Control Plane, or a malformed
+ * frame) so the caller leaves the cache untouched rather than flipping it to `false` on every
+ * frame that happens not to mention it.
+ */
+export function parseRawPayloadStorageEnabledSnapshot(raw: string): boolean | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  if (!isRecord(parsed) || typeof parsed.rawPayloadStorageEnabled !== "boolean") return undefined;
+  return parsed.rawPayloadStorageEnabled;
 }
 
 export interface FailurePolicySync {
@@ -76,6 +113,8 @@ export function startFailurePolicySync(baseUrl: string | undefined): FailurePoli
         await readSseFrames(response.body, (data) => {
           const policy = parseFailurePolicySnapshot(data);
           if (policy) setFailurePolicy(policy);
+          const rawPayloadStorageEnabled = parseRawPayloadStorageEnabledSnapshot(data);
+          if (rawPayloadStorageEnabled !== undefined) setRawPayloadStorageEnabled(rawPayloadStorageEnabled);
         });
       } catch (error) {
         if (stopped) return;

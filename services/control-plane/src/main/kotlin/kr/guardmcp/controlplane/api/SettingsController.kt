@@ -3,6 +3,8 @@ package kr.guardmcp.controlplane.api
 import jakarta.servlet.http.HttpServletRequest
 import kr.guardmcp.controlplane.domain.FailurePolicy
 import kr.guardmcp.controlplane.domain.GuardSettingsStore
+import kr.guardmcp.controlplane.domain.Permission
+import kr.guardmcp.controlplane.domain.PermissionService
 import kr.guardmcp.controlplane.domain.SettingsResponse
 import kr.guardmcp.controlplane.domain.toResponse
 import org.springframework.http.HttpStatus
@@ -16,33 +18,35 @@ import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 
 /**
- * `failMode`/`riskAcknowledged` are GMCP-68's own fields (§2.1/REQ-08); `storeRawOptIn`/
+ * `failMode`/`riskAcknowledged` are GMCP-68's own fields (§2.1/REQ-08); `rawPayloadStorageEnabled`/
  * `locale`/`approvalTimeoutSeconds` ride along on the same request/response shape because the
  * console's `SettingsUpdate` (`Partial<GatewaySettings>`) already sends them from the same
- * screen (SCR-501, GMCP-80 §3.8.2) — see `SettingsResponse`'s doc comment.
+ * screen (SCR-501). `acknowledgedNotice` (GMCP-84 §6.2) only matters on the specific
+ * false→true `rawPayloadStorageEnabled` transition — see [updateSettings].
  */
 data class SettingsUpdateRequest(
     val failMode: String? = null,
     val riskAcknowledged: Boolean? = null,
-    val storeRawOptIn: Boolean? = null,
+    val rawPayloadStorageEnabled: Boolean? = null,
+    val acknowledgedNotice: Boolean? = null,
     val locale: String? = null,
     val approvalTimeoutSeconds: Int? = null,
 )
 
 /**
- * `GET`/`PUT`/`stream /api/v1/settings` (GMCP-68 §5.1, GMCP-80 §3.8.2). No console session/auth
- * exists anywhere in this service yet (see [Actor]'s doc comment), and GMCP-68 already wired
- * this endpoint end to end — console -> `PUT` -> Postgres -> SSE -> gateway cache — with no
- * role check. `X-Actor-Id` is read only for the audit trail's `updatedBy` (same "record who, but
- * don't gate on it" placeholder [kr.guardmcp.controlplane.domain.ServerRegistryStore.changeTrust]
- * uses), not as an access-control gate: a real gate here would 403 every request the console
- * actually sends today (it sends neither header — `apps/console/lib/api/client.ts` has no
- * `X-Actor-*` anywhere) while doing nothing against a direct API call, which can set the header
- * to whatever it wants. The real trust boundary this endpoint has is `riskAcknowledged` below.
+ * `GET`/`PUT`/`stream /api/v1/settings` (GMCP-68 §5.1, GMCP-84 §6.1/§6.2). No console session/auth
+ * exists anywhere in this service yet (see [Actor]'s doc comment), and GMCP-68 originally wired
+ * this endpoint end to end — console -> `PUT` -> Postgres -> SSE -> gateway cache — with no role
+ * check at all. That absence of a gate stands for `failMode`/`locale`/`approvalTimeoutSeconds`
+ * still (a real gate there would 403 every request the console sends today, since it sends no
+ * `X-Actor-*`/[Actor.OPERATOR_TOKEN_HEADER] headers). `rawPayloadStorageEnabled` is different:
+ * GMCP-84 §7 explicitly requires `settings:write` for "the opt-in toggle", so only a request that
+ * actually touches this field goes through [PermissionService] — the console must start sending
+ * the operator headers, but only for this one control (see SCR-501 §8.1).
  */
 @RestController
 @RequestMapping("/api/v1")
-class SettingsController(private val store: GuardSettingsStore) {
+class SettingsController(private val store: GuardSettingsStore, private val permissionService: PermissionService) {
     @GetMapping("/settings")
     fun getSettings(): SettingsResponse = store.current().toResponse()
 
@@ -51,6 +55,7 @@ class SettingsController(private val store: GuardSettingsStore) {
         @RequestBody request: SettingsUpdateRequest,
         @RequestHeader(value = Actor.ID_HEADER, required = false) actorId: String?,
         @RequestHeader(value = Actor.ROLE_HEADER, required = false) actorRole: String?,
+        @RequestHeader(value = Actor.OPERATOR_TOKEN_HEADER, required = false) operatorToken: String?,
         servletRequest: HttpServletRequest,
     ): SettingsResponse {
         val actor = Actor.from(actorId, actorRole)
@@ -79,15 +84,42 @@ class SettingsController(private val store: GuardSettingsStore) {
             )
         }
 
-        return store.update(
+        val before = store.current()
+        if (request.rawPayloadStorageEnabled != null) {
+            // §7: "PUT /settings의 opt-in 토글도 같은 권한(settings:write)으로 보호한다" — scoped to
+            // this field so the console's existing failMode/locale-only calls, which send none
+            // of these headers, keep working unchanged.
+            if (!permissionService.hasPermission(actor, Permission.SETTINGS_WRITE, operatorToken)) {
+                throw ApiException(HttpStatus.FORBIDDEN, "settings_forbidden", "settings:write permission required")
+            }
+            // §6.2: off→on requires the console's notice-modal acknowledgement, enforced here so
+            // it cannot be bypassed by calling the API directly.
+            if (!before.rawPayloadStorageEnabled && request.rawPayloadStorageEnabled && request.acknowledgedNotice != true) {
+                throw ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "acknowledgment_required",
+                    "rawPayloadStorageEnabled requires acknowledgedNotice=true",
+                )
+            }
+        }
+
+        val updated = store.update(
             failurePolicy = failMode,
             riskAcknowledged = request.riskAcknowledged,
-            storeRawOptIn = request.storeRawOptIn,
+            rawPayloadStorageEnabled = request.rawPayloadStorageEnabled,
             locale = request.locale,
             approvalTimeoutSeconds = request.approvalTimeoutSeconds,
             actor = actor.id,
             requestIp = servletRequest.remoteAddr,
-        ).toResponse()
+        )
+        // §6.2: opt-in withdrawal never deletes what's already stored — say so once, on the
+        // response to the request that just did it, rather than on every subsequent GET.
+        val note = if (before.rawPayloadStorageEnabled && !updated.rawPayloadStorageEnabled) {
+            "기존에 저장된 원문은 유지됩니다. 삭제하려면 별도 요청이 필요합니다."
+        } else {
+            null
+        }
+        return updated.toResponse(note)
     }
 
     /** Hot-reload push channel for the gateway's failure-policy cache (§4.3, mirrors /servers/stream). */

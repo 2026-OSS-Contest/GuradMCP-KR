@@ -32,7 +32,9 @@ data class GuardSettings(
     val failurePolicy: FailurePolicy,
     val riskAcknowledged: Boolean,
     val riskAcknowledgedAt: Instant?,
-    val storeRawOptIn: Boolean,
+    val rawPayloadStorageEnabled: Boolean,
+    val rawPayloadStorageEnabledAt: Instant?,
+    val rawPayloadStorageEnabledBy: String?,
     val locale: String,
     val approvalTimeoutSeconds: Int,
     val updatedBy: String?,
@@ -40,23 +42,35 @@ data class GuardSettings(
     val version: Long,
 )
 
-/** Wire shape for `GET`/`PUT /api/v1/settings` — matches the console's `GatewaySettings`
- *  (apps/console/lib/api/types.ts) field-for-field, including `failMode` rather than
- *  `failurePolicy`, since the console already shipped against that name (SCR-501, GMCP-88). */
+/**
+ * Wire shape for `GET`/`PUT /api/v1/settings` — matches the console's `GatewaySettings`
+ * (apps/console/lib/api/types.ts) field-for-field, including `failMode` rather than
+ * `failurePolicy`, since the console already shipped against that name (SCR-501, GMCP-88).
+ *
+ * `note` (GMCP-84 §6.2) is populated only by [kr.guardmcp.controlplane.api.SettingsController]
+ * on the specific true→false raw-storage transition it documents — never persisted, never read
+ * back on a plain `GET`.
+ */
 data class SettingsResponse(
     val failMode: String,
     val riskAcknowledged: Boolean,
-    val storeRawOptIn: Boolean,
+    val rawPayloadStorageEnabled: Boolean,
+    val rawPayloadStorageEnabledAt: Instant?,
+    val rawPayloadStorageEnabledBy: String?,
     val locale: String,
     val approvalTimeoutSeconds: Int,
+    val note: String? = null,
 )
 
-fun GuardSettings.toResponse() = SettingsResponse(
+fun GuardSettings.toResponse(note: String? = null) = SettingsResponse(
     failMode = failurePolicy.wire,
     riskAcknowledged = riskAcknowledged,
-    storeRawOptIn = storeRawOptIn,
+    rawPayloadStorageEnabled = rawPayloadStorageEnabled,
+    rawPayloadStorageEnabledAt = rawPayloadStorageEnabledAt,
+    rawPayloadStorageEnabledBy = rawPayloadStorageEnabledBy,
     locale = locale,
     approvalTimeoutSeconds = approvalTimeoutSeconds,
+    note = note,
 )
 
 /**
@@ -97,7 +111,7 @@ class GuardSettingsStore(
     fun update(
         failurePolicy: FailurePolicy?,
         riskAcknowledged: Boolean?,
-        storeRawOptIn: Boolean?,
+        rawPayloadStorageEnabled: Boolean?,
         locale: String?,
         approvalTimeoutSeconds: Int?,
         actor: String,
@@ -105,7 +119,7 @@ class GuardSettingsStore(
     ): GuardSettings {
         val updated = synchronized(lock) {
             transactionTemplate.execute {
-                doUpdate(failurePolicy, riskAcknowledged, storeRawOptIn, locale, approvalTimeoutSeconds, actor, requestIp)
+                doUpdate(failurePolicy, riskAcknowledged, rawPayloadStorageEnabled, locale, approvalTimeoutSeconds, actor, requestIp)
             }
         }
         // Push outside the lock, same reasoning as ServerRegistryStore.changeTrust: broadcasting
@@ -120,7 +134,7 @@ class GuardSettingsStore(
     private fun doUpdate(
         failurePolicy: FailurePolicy?,
         riskAcknowledged: Boolean?,
-        storeRawOptIn: Boolean?,
+        rawPayloadStorageEnabled: Boolean?,
         locale: String?,
         approvalTimeoutSeconds: Int?,
         actor: String,
@@ -128,6 +142,9 @@ class GuardSettingsStore(
     ): GuardSettings {
         val before = fetch()
         val now = clock.instant()
+        // GMCP-84 §5.4: "마지막으로 켜진 시각/사용자" — stamped on every fresh false→true
+        // transition, not just the first one ever.
+        val turningOn = rawPayloadStorageEnabled == true && !before.rawPayloadStorageEnabled
         val next = before.copy(
             failurePolicy = failurePolicy ?: before.failurePolicy,
             // REQ-09: reverting to fail_closed clears the acknowledgement — the *next* time
@@ -142,7 +159,9 @@ class GuardSettingsStore(
                 FailurePolicy.FAIL_CLOSED -> null
                 null -> before.riskAcknowledgedAt
             },
-            storeRawOptIn = storeRawOptIn ?: before.storeRawOptIn,
+            rawPayloadStorageEnabled = rawPayloadStorageEnabled ?: before.rawPayloadStorageEnabled,
+            rawPayloadStorageEnabledAt = if (turningOn) now else before.rawPayloadStorageEnabledAt,
+            rawPayloadStorageEnabledBy = if (turningOn) actor else before.rawPayloadStorageEnabledBy,
             locale = locale ?: before.locale,
             approvalTimeoutSeconds = approvalTimeoutSeconds ?: before.approvalTimeoutSeconds,
             updatedBy = actor,
@@ -163,12 +182,12 @@ class GuardSettingsStore(
         }
         // NFR-04: only the transition *into* raw-payload storage is audited, matching
         // ServerRegistryStore.changeTrust only auditing an upgrade, not every write.
-        if (!before.storeRawOptIn && next.storeRawOptIn) {
+        if (turningOn) {
             auditLog.record(
                 action = "SETTINGS_RAW_PAYLOAD_OPT_IN_CHANGED",
                 actor = actor,
-                before = mapOf("storeRawOptIn" to false),
-                after = mapOf("storeRawOptIn" to true),
+                before = mapOf("rawPayloadStorageEnabled" to false),
+                after = mapOf("rawPayloadStorageEnabled" to true),
                 severity = "high",
                 requestIp = requestIp,
             )
@@ -196,8 +215,17 @@ class GuardSettingsStore(
     private fun sendSnapshot(emitter: SseEmitter, settings: GuardSettings) {
         try {
             emitter.send(
+                // GMCP-84 §9: the gateway's raw-payload settings cache subscribes to this same
+                // stream (mirroring packages/gateway/src/settings/failurePolicyCache.ts) rather
+                // than polling `GET /settings` on its own TTL.
                 SseEmitter.event().name("settings.changed")
-                    .data(mapOf("failMode" to settings.failurePolicy.wire, "version" to settings.version)),
+                    .data(
+                        mapOf(
+                            "failMode" to settings.failurePolicy.wire,
+                            "rawPayloadStorageEnabled" to settings.rawPayloadStorageEnabled,
+                            "version" to settings.version,
+                        ),
+                    ),
             )
         } catch (exception: Exception) {
             synchronized(lock) { emitters -= emitter }
@@ -213,13 +241,15 @@ class GuardSettingsStore(
             statement.setString(1, settings.failurePolicy.wire)
             statement.setBoolean(2, settings.riskAcknowledged)
             statement.setTimestamp(3, settings.riskAcknowledgedAt?.let(Timestamp::from))
-            statement.setBoolean(4, settings.storeRawOptIn)
-            statement.setString(5, settings.locale)
-            statement.setInt(6, settings.approvalTimeoutSeconds)
-            statement.setString(7, settings.updatedBy)
-            statement.setTimestamp(8, Timestamp.from(settings.updatedAt))
-            statement.setLong(9, settings.version)
-            statement.setObject(10, settings.id)
+            statement.setBoolean(4, settings.rawPayloadStorageEnabled)
+            statement.setTimestamp(5, settings.rawPayloadStorageEnabledAt?.let(Timestamp::from))
+            statement.setString(6, settings.rawPayloadStorageEnabledBy)
+            statement.setString(7, settings.locale)
+            statement.setInt(8, settings.approvalTimeoutSeconds)
+            statement.setString(9, settings.updatedBy)
+            statement.setTimestamp(10, Timestamp.from(settings.updatedAt))
+            statement.setLong(11, settings.version)
+            statement.setObject(12, settings.id)
             statement
         })
     }
@@ -230,7 +260,9 @@ class GuardSettingsStore(
             failurePolicy = FailurePolicy.fromWire(rs.getString("failure_policy")) ?: FailurePolicy.FAIL_CLOSED,
             riskAcknowledged = rs.getBoolean("risk_acknowledged"),
             riskAcknowledgedAt = rs.getTimestamp("risk_acknowledged_at")?.toInstant(),
-            storeRawOptIn = rs.getBoolean("store_raw_opt_in"),
+            rawPayloadStorageEnabled = rs.getBoolean("raw_payload_storage_enabled"),
+            rawPayloadStorageEnabledAt = rs.getTimestamp("raw_payload_storage_enabled_at")?.toInstant(),
+            rawPayloadStorageEnabledBy = rs.getString("raw_payload_storage_enabled_by"),
             locale = rs.getString("locale"),
             approvalTimeoutSeconds = rs.getInt("approval_timeout_seconds"),
             updatedBy = rs.getString("updated_by"),
@@ -241,7 +273,8 @@ class GuardSettingsStore(
 
     companion object {
         private const val SELECT_SQL = """
-            SELECT id, failure_policy, risk_acknowledged, risk_acknowledged_at, store_raw_opt_in,
+            SELECT id, failure_policy, risk_acknowledged, risk_acknowledged_at,
+                   raw_payload_storage_enabled, raw_payload_storage_enabled_at, raw_payload_storage_enabled_by,
                    locale, approval_timeout_seconds, updated_by, updated_at, version
             FROM guard_settings
             LIMIT 1
@@ -250,7 +283,8 @@ class GuardSettingsStore(
         private const val UPDATE_SQL = """
             UPDATE guard_settings
             SET failure_policy = ?, risk_acknowledged = ?, risk_acknowledged_at = ?,
-                store_raw_opt_in = ?, locale = ?, approval_timeout_seconds = ?,
+                raw_payload_storage_enabled = ?, raw_payload_storage_enabled_at = ?, raw_payload_storage_enabled_by = ?,
+                locale = ?, approval_timeout_seconds = ?,
                 updated_by = ?, updated_at = ?, version = ?
             WHERE id = ?
         """
