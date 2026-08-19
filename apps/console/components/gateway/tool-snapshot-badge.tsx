@@ -186,9 +186,11 @@ export function ToolSnapshotBadge({
   const canReapprove = diffs !== null && diffs.every((diff) => diff.diffType !== "tool_removed");
 
   return (
-    <div className="relative" ref={containerRef}>
+    // flex-none, so a row too narrow for it moves the whole badge to the next line rather than
+    // breaking its label inside the pill.
+    <div className="relative flex-none" ref={containerRef}>
       <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} className="transition-opacity hover:opacity-80">
-        <Tag tone="alert" shape="pill" className="text-caption-text-c-md">
+        <Tag tone="alert" shape="pill" className="text-caption-text-c-md whitespace-nowrap">
           <SnapshotChangedIcon className="size-4 flex-none" aria-hidden />
           {t("snapshotChanged")}
         </Tag>

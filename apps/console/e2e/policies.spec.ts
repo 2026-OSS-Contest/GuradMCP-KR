@@ -37,10 +37,13 @@ test("SCR-302 selecting a pack swaps the table beneath it", async ({ page }) => 
 
   // default's policies are gone and korean-pii's are in their place.
   await expect(page.getByRole("row").filter({ hasText: "block_env_file_read" })).toBeHidden();
-  await expect(page.getByRole("row").filter({ hasText: "mask_korean_phone" })).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: "mask_korean_pii_response" })).toBeVisible();
 
   // A dry-run policy evaluates without acting: it is chipped as such instead of by verdict, and
-  // it has no fired count to show.
+  // it has no fired count to show. It sits in the pack that ships disabled — putting that state
+  // on a policy the packs actually enforce would contradict SCR-601, where the same policy is
+  // shown deciding cases (GMCP-117).
+  await page.getByRole("button", { name: "developer-relaxed", exact: true }).click();
   const dryRun = page.getByRole("row").filter({ hasText: "warn_external_url_fetch" });
   await expect(dryRun.getByText("dry-run")).toBeVisible();
   await expect(dryRun.getByText("–")).toBeVisible();
@@ -51,7 +54,7 @@ test("SCR-302 selecting a policy swaps the YAML pane", async ({ page }) => {
   const yaml = page.getByRole("region", { name: "YAML" });
   await expect(yaml.getByText("block-env-file-read.yaml")).toBeVisible();
 
-  await page.getByRole("row").filter({ hasText: "approve_external_email" }).click();
+  await page.getByRole("row").filter({ hasText: "approve_external_email_with_secret" }).click();
 
   await expect(yaml.getByText("require-approval-external-secret-email.yaml")).toBeVisible();
   await expect(yaml.getByText("timeout_seconds: 120")).toBeVisible();
@@ -86,13 +89,14 @@ test("SCR-302 confirming the prompt disables the policy", async ({ page }) => {
   // The screen refetches after the PUT rather than trusting the click, so the row going muted is
   // the reloaded payload rendering — not optimistic state. (A `page.reload()` would prove nothing
   // here: MSW lives in the page, so reloading reseeds the mock's store along with everything else.)
+  // The frame dims the whole row rather than greying one cell's text, so the badges go with it.
   const row = page.getByRole("row").filter({ hasText: "block_env_file_read" });
-  await expect(row.getByText("critical")).toHaveClass(/text-grayscale-500/);
+  await expect(row).toHaveCSS("opacity", "0.25");
 });
 
 test("SCR-302 a policy that neither blocks nor is critical toggles without a prompt", async ({ page }) => {
   await page.goto("/policies");
-  const toggle = page.getByRole("switch", { name: "approve_external_email 정책 사용" });
+  const toggle = page.getByRole("switch", { name: "approve_external_email_with_secret 정책 사용" });
 
   await toggle.click();
 
@@ -131,23 +135,21 @@ test("SCR-302 counts what a dry-run policy would have decided", async ({ page })
 
 test("SCR-302 refuses to offer a switch the gateway cannot honour", async ({ page }) => {
   await page.goto("/policies");
-  await page.getByRole("button", { name: "korean-pii", exact: true }).click();
 
   // `enabled` is the console's own field — `PolicyUpdateRequest` has no such property. A policy
   // reported without it cannot be switched, so the control says so instead of taking a click,
-  // answering 200 and changing nothing.
-  const inert = page.getByRole("switch", { name: "block_untrusted_injection_response 정책 사용" });
+  // answering 200 and changing nothing. One seeded row is deliberately served that way.
+  const inert = page.getByRole("switch", { name: "warn_injection_request 정책 사용" });
   await expect(inert).toBeDisabled();
   await expect(inert).toHaveAttribute("title", /지원하지 않습니다/);
 
   // A policy the gateway does report as switchable keeps a live control.
-  await expect(page.getByRole("switch", { name: "mask_korean_phone 정책 사용" })).toBeEnabled();
+  await expect(page.getByRole("switch", { name: "block_env_file_read 정책 사용" })).toBeEnabled();
 });
 
 test("SCR-302 says when the gateway serves no source for a policy", async ({ page }) => {
   await page.goto("/policies");
-  await page.getByRole("button", { name: "korean-pii", exact: true }).click();
-  await page.getByRole("row").filter({ hasText: "block_untrusted_injection_response" }).click();
+  await page.getByRole("row").filter({ hasText: "warn_injection_request" }).click();
 
   // An empty pane would read as "this policy has no definition"; what happened is that the
   // gateway serves no endpoint returning one.
@@ -185,7 +187,7 @@ test("SCR-302 says what to do when the gateway is unreachable", async ({ page })
 
 test("SCR-302 says so when a toggle does not reach the gateway", async ({ page }) => {
   await page.goto("/policies");
-  const toggle = page.getByRole("switch", { name: "approve_external_email 정책 사용" });
+  const toggle = page.getByRole("switch", { name: "approve_external_email_with_secret 정책 사용" });
   await expect(toggle).toHaveAttribute("aria-checked", "true");
 
   // Drop the gateway *after* the screen has loaded, by writing the scenario straight to storage

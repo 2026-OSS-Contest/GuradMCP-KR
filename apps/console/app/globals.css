@@ -12,6 +12,21 @@
     @apply bg-background text-foreground font-sans antialiased;
   }
 
+  /* One scrollbar everywhere: a dark-grey thumb on no track at all, thin, and — the part that
+     matters — laid over the content rather than given a column of its own. A bar that takes space
+     changes a panel's height the moment its content overflows, which is what the reveal modal's
+     raw column did against its masked twin.
+
+     Only the standard properties, deliberately. `::-webkit-scrollbar` is the one route to a
+     border-radius, but giving it a size is also what switches Chromium off overlay scrollbars and
+     onto the space-taking kind. The overlay thumb is already a rounded capsule on the platforms
+     that have one, and it fades in on scroll and hover by itself — so the trade buys back exactly
+     the behaviour the radius was there to imitate. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--primitive-color-grayscale-700) transparent;
+  }
+
   /* Every keyboard-reachable control takes the same 2px 쪽색 ring (기획서 10.7, NFR-08). Declared
      once here rather than per component, so a control cannot ship without one — 5 of the 59
      components had their own and the rest had nothing.

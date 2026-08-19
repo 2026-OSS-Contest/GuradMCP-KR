@@ -42,6 +42,9 @@ ENV NODE_ENV=production \
 WORKDIR /app
 COPY --from=build --chown=node:node /workspace/apps/console/.next/standalone ./
 COPY --from=build --chown=node:node /workspace/apps/console/.next/static ./apps/console/.next/static
+# standalone does not bundle public/, so the logo, verdict seals and the MSW worker
+# 404 in the container without this line. Vercel serves public/ itself and never showed it.
+COPY --from=build --chown=node:node /workspace/apps/console/public ./apps/console/public
 USER node
 EXPOSE 3000
 CMD ["sh", "-ec", "if [ -f apps/console/server.js ]; then exec node apps/console/server.js; else exec node server.js; fi"]

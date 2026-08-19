@@ -22,7 +22,7 @@ export function ReloadBanner({ onRefresh }: ReloadBannerProps) {
       role="status"
       className="flex h-[37px] flex-none items-center gap-4 bg-(--primitive-opacity-warn-alpha-10) px-8"
     >
-      <BannerInfoIcon aria-hidden className="size-4 flex-none" />
+      <BannerInfoIcon aria-hidden className="size-4 flex-none text-(--primitive-color-yellow-100)" />
       <p className="text-body-text-b3-md flex-1 text-yellow-100">{t("message")}</p>
       <button
         type="button"

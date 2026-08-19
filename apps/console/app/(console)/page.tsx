@@ -30,7 +30,10 @@ export default function GatewayPage() {
   }
 
   return (
-    <div data-scr="SCR-101" className="flex flex-1 flex-col gap-4 px-8 py-6">
+    // min-h-0: without it `flex-1` lets this grow past the shell as events arrive, and the row
+    // below inherits an unbounded height — so the panels' own scrollers never get a ceiling and
+    // the whole screen stretches instead.
+    <div data-scr="SCR-101" className="flex min-h-0 flex-1 flex-col gap-4 px-8 py-6">
       <KpiCards overview={overview.data} failed={Boolean(overview.error) && !overview.data} />
       <div className="flex min-h-0 flex-1 gap-4">
         <ServerInventory servers={registered} loading={serversPending} failed={Boolean(servers.error) && !servers.data} />

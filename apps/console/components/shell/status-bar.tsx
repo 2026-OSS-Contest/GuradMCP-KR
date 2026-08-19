@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { GatewayStatus } from "@/lib/api/types";
 import { isOffline, useOverview } from "@/components/providers/overview-provider";
@@ -9,6 +10,7 @@ import { VerdictBadge } from "@/components/verdict-badge";
 import { Tag } from "@/components/ui/tag";
 import { SessionPicker } from "./session-picker";
 import { usePendingApprovals } from "./use-pending-approvals";
+import { MOCK_API_IN_PRODUCTION } from "@/mocks/scenario";
 import { cn } from "@/lib/utils";
 
 /**
@@ -28,10 +30,19 @@ const Divider = () => <span className="h-5 w-px flex-none bg-(--primitive-opacit
 export function StatusBar() {
   const t = useTranslations("shell");
   const overview = useOverview();
+  const pathname = usePathname();
 
   const status: GatewayStatus = isOffline(overview) ? "disconnected" : (overview.data?.status ?? "protected");
   const { Icon, label, text } = STATUS[status];
   const packs = overview.data?.policies.packs ?? [];
+  // Nothing registered yet: SCR-101's empty frame keeps the bar's 60px ground and its rule and
+  // draws nothing on it. Every item here reports on servers that do not exist — 보호 중 above all,
+  // which would claim protection over nothing — so the bar carries no contents while the gateway
+  // is asking for its first server. Only there: the other screens' empty frames keep the bar as
+  // it is, and only once the poll has answered, since while it is loading there is no such claim
+  // to make either way.
+  const nothingRegistered =
+    pathname === "/" && overview.data !== undefined && overview.data.servers.total === 0;
   // Seeded by the /overview poll, kept live by approval.created/resolved SSE events (spec §4.1).
   const pending = usePendingApprovals(overview.data?.pendingApprovals ?? 0, overview.requestedAt);
 
@@ -45,11 +56,24 @@ export function StatusBar() {
           two sides on different lines — measured at 1440, the left labels sat at cy 33.5 against
           the picker's 30. Centring the row puts every label on cy ≈ 29.5. Worth a designer's
           confirmation if the bottom edge was deliberate. */}
+      {nothingRegistered ? null : (
       <div className="flex flex-1 items-center gap-3">
         <span className={cn("flex flex-none items-center gap-2 text-body-text-b3-md", text)}>
           <Icon className="size-5 flex-none" aria-hidden />
           {t(label)}
         </span>
+
+        {/* A build serving mock data says so, in the one place every screen shows. See
+            `MOCK_API_IN_PRODUCTION` — this is the guard against the flag reaching a pipeline it
+            does not belong in, rather than a line in a checklist nobody re-reads. */}
+        {MOCK_API_IN_PRODUCTION && (
+          <>
+            <Divider />
+            <span className="flex flex-none items-center gap-2 text-body-text-b3-md text-verdict-warn">
+              {t("mockData")}
+            </span>
+          </>
+        )}
 
         {packs.length > 0 && (
           <>
@@ -84,8 +108,9 @@ export function StatusBar() {
           </>
         )}
       </div>
+      )}
 
-      <SessionPicker />
+      {nothingRegistered ? null : <SessionPicker />}
     </header>
   );
 }

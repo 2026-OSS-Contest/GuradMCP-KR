@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { Info, X } from "lucide-react";
 import type { RevealContent } from "@/lib/api/types";
+import { RevealMaskedIcon, RevealRawIcon } from "@/components/icons";
 import { MaskedContent } from "./masked-content";
 
 /**
@@ -33,7 +34,7 @@ export function RevealModal({ content, onClose }: { content: RevealContent; onCl
               <h2 id="reveal-modal-title" className="text-body-text-b1-md text-grayscale-300">
                 Mask Diff
               </h2>
-              <span className="flex items-center gap-1 rounded-full bg-(--primitive-opacity-white-alpha-25) px-2 py-0.5 text-body-text-b3-md text-grayscale-white">
+              <span className="flex items-center gap-1 rounded-full bg-(--primitive-opacity-white-alpha-25) px-2 py-0.5 text-caption-text-c-md text-grayscale-white">
                 {t("revealing")}
               </span>
             </span>
@@ -58,32 +59,28 @@ export function RevealModal({ content, onClose }: { content: RevealContent; onCl
 
         <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto md:grid-cols-2">
           <section className="flex flex-col gap-2">
-            <h3 className="flex items-center gap-2 text-body-text-b3-md text-red-300">
-              <span aria-hidden>○–</span>
+            {/* The frame carries the colour on the icon and leaves the label white and bold. */}
+            <h3 className="flex items-center gap-2 text-body-text-b3-bd text-grayscale-white">
+              <RevealRawIcon className="size-5 flex-none text-red-500" aria-hidden />
               {t("raw")}
             </h3>
             {/* Same numbered-line layout as MaskedContent so a raw line and its masked
                 counterpart share a row height and stay aligned across the two columns. */}
-            <div className="rounded-lg bg-(--primitive-opacity-black-alpha-75) p-3">
-              <div className="flex flex-col gap-1 font-mono text-caption-mono-c-rg text-grayscale-200">
-                {content.raw.split("\n").map((text, index) => (
-                  <div key={index} className="flex gap-2">
-                    <span className="flex-none text-(--primitive-opacity-white-alpha-50)">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <span className="min-w-0 break-words whitespace-pre-wrap">{text}</span>
-                  </div>
-                ))}
-              </div>
+            {/* The same component as the masked column: one numbered-line layout for both means a
+                raw line and its counterpart cannot drift apart. Scrolls sideways rather than
+                wrapping — a line that wraps on one side and not the other puts every row below it
+                out of step, which is the whole point of setting them side by side. */}
+            <div className="overflow-x-auto rounded-lg bg-(--primitive-opacity-black-alpha-75) p-3">
+              <MaskedContent lines={content.raw} nowrap />
             </div>
           </section>
           <section className="flex flex-col gap-2">
-            <h3 className="flex items-center gap-2 text-body-text-b3-md text-green-500">
-              <span aria-hidden>→</span>
+            <h3 className="flex items-center gap-2 text-body-text-b3-bd text-grayscale-white">
+              <RevealMaskedIcon className="size-5 flex-none text-green-700" aria-hidden />
               {t("masked")}
             </h3>
-            <div className="rounded-lg bg-(--primitive-opacity-allow-alpha-10) p-3">
-              <MaskedContent lines={content.masked} />
+            <div className="overflow-x-auto rounded-lg bg-(--primitive-opacity-allow-alpha-10) p-3">
+              <MaskedContent lines={content.masked} nowrap />
             </div>
           </section>
         </div>

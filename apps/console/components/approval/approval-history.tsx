@@ -24,7 +24,7 @@ export function ApprovalHistory({ approvals }: { approvals: Approval[] }) {
 
   if (approvals.length === 0) {
     return (
-      <p role="status" className="py-16 text-center text-body-text-b3-md text-grayscale-400">
+      <p role="status" className="py-16 text-center text-title-text-t2-bd text-grayscale-400">
         {t("historyEmpty")}
       </p>
     );
@@ -33,12 +33,12 @@ export function ApprovalHistory({ approvals }: { approvals: Approval[] }) {
   return (
     <table className="w-full table-fixed border-collapse">
       <thead>
-        <tr className="bg-(--primitive-opacity-white-alpha-6) text-left text-body-text-b3-md text-grayscale-300">
-          <th scope="col" className="w-28 rounded-l-md px-4 py-3 font-normal">{t("colTime")}</th>
-          <th scope="col" className="px-4 py-3 font-normal">{t("colTool")}</th>
-          <th scope="col" className="w-48 px-4 py-3 font-normal">{t("colDecision")}</th>
-          <th scope="col" className="w-44 px-4 py-3 font-normal">{t("colDecidedBy")}</th>
-          <th scope="col" className="w-28 rounded-r-md px-4 py-3 font-normal">{t("colTook")}</th>
+        <tr className="bg-(--primitive-opacity-white-alpha-6) text-left text-body-text-b2-md text-grayscale-300">
+          <th scope="col" className="[font-weight:inherit] w-28 rounded-l-md px-4 py-3">{t("colTime")}</th>
+          <th scope="col" className="[font-weight:inherit] px-4 py-3">{t("colTool")}</th>
+          <th scope="col" className="[font-weight:inherit] w-48 px-4 py-3">{t("colDecision")}</th>
+          <th scope="col" className="[font-weight:inherit] w-44 px-4 py-3">{t("colDecidedBy")}</th>
+          <th scope="col" className="[font-weight:inherit] w-28 rounded-r-md px-4 py-3">{t("colTook")}</th>
         </tr>
       </thead>
       <tbody>
