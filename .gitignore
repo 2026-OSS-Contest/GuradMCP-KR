@@ -30,3 +30,9 @@ reports/*.html
 # The guardmcp CLI's npm "bin" entry, not Java/Gradle build output (GMCP-97).
 !packages/cli/bin/
 !packages/cli/bin/**
+
+# Python demo agent (GMCP-95) local installs
+.pydeps/
+.venv/
+__pycache__/
+*.egg-info/

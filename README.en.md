@@ -44,6 +44,17 @@ AI Agent → GuardMCP-KR Gateway → MCP Tools
 - **Korean defaults:** covers Korean phone numbers, RRN-like values, business registration numbers, bank accounts, and more.
 - **No-code extension:** policies and detection/attack samples can be contributed as YAML or datasets.
 
+## Agent examples (two ecosystems)
+
+Adopting the gateway means changing the URL your tool calls go to and no agent code. The same T-01 attack scenario is reproduced in two stacks to show exactly that.
+
+| Ecosystem | Location | Run |
+| --- | --- | --- |
+| Kotlin / LangChain4j | [`apps/demo-agent`](apps/demo-agent) | [`./scripts/demo-env-leak.sh`](scripts/demo-env-leak.sh) |
+| Python / LangGraph | [`apps/demo-agent/langgraph`](apps/demo-agent/langgraph) | [`./scripts/demo-langgraph-t01.sh`](scripts/demo-langgraph-t01.sh) |
+
+Both follow the instruction hidden in a malicious README (read `.env`, mail it out) and **stop at step one under `block_env_file_read`**. Neither script prints for you to read: they assert that the guarded run stopped the chain, and that the unguarded run **actually leaks** — without which the guarded result proves nothing.
+
 ## Author a policy
 
 The [Policy Authoring Guide](docs/policy-guide/README.en.md) documents every DSL v1 `match` axis, all five actions, evaluation rules, the approval block, and policy-pack layout. Runnable examples live in [`policy-packs/default`](policy-packs/default) and [`policy-packs/korean-pii`](policy-packs/korean-pii).
