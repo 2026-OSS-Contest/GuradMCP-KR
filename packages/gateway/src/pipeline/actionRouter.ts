@@ -17,6 +17,7 @@ import {
 import { buildMaskPreview, buildRiskTags } from "./approvalPreview.js";
 import { explainDecision, type ApprovalResolution } from "./explanation.js";
 import { recordMaskDiff } from "./maskDiff.js";
+import { getRawPayloadStorageEnabled } from "../settings/failurePolicyCache.js";
 import type {
   Action,
   GuardEvent,
@@ -30,8 +31,15 @@ export interface RouterDeps {
   approvalBackend: ApprovalBackend;
 }
 
-// NFR-04: off by default. See GuardEvent.rawPayload (types.ts) for who's allowed to read this.
-const storeRawPayload = process.env.AUDIT_STORE_RAW_PAYLOAD === "true";
+// NFR-04/GMCP-84 §9: off by default, and a two-factor gate rather than either alone. The env var
+// is this deployment's own opt-in (must be set explicitly, matching NFR-04's "opt-in" framing at
+// the process level); `getRawPayloadStorageEnabled()` is the live Control Plane setting synced
+// over `/api/v1/settings/stream` (failurePolicyCache.ts), so toggling it off in the console stops
+// the gateway from attaching raw payloads immediately, without a gateway restart. See
+// GuardEvent.rawPayload (types.ts) for who's allowed to read this once attached.
+function shouldStoreRawPayload(): boolean {
+  return process.env.AUDIT_STORE_RAW_PAYLOAD === "true" && getRawPayloadStorageEnabled();
+}
 
 const defaultApprovalConfig = {
   timeoutSeconds: 120,
@@ -334,7 +342,7 @@ function buildGuardEvent(
     ...(decision.llmAdjudication !== undefined
       ? { llmAdjudication: decision.llmAdjudication }
       : {}),
-    ...(storeRawPayload ? { rawPayload: ctx.payload } : {}),
+    ...(shouldStoreRawPayload() ? { rawPayload: ctx.payload } : {}),
     ...extras,
   };
 }

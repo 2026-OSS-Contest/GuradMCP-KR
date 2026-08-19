@@ -99,7 +99,22 @@ export const handlers = [
         { status: 400 }
       );
     }
-    return HttpResponse.json(patchSettings(update));
+    // Mirrors GMCP-84 §6.2/SettingsController: the false→true rawPayloadStorageEnabled
+    // transition 422s without acknowledgedNotice, same reasoning as the fail_open guard above.
+    if (update.rawPayloadStorageEnabled === true && !currentSettings().rawPayloadStorageEnabled && update.acknowledgedNotice !== true) {
+      return HttpResponse.json(
+        { code: "acknowledgment_required", message: "rawPayloadStorageEnabled requires acknowledgedNotice=true" },
+        { status: 422 }
+      );
+    }
+    const before = currentSettings();
+    const updated = patchSettings(update);
+    // GMCP-84 §6.2: the true→false response carries a one-time retention note.
+    const note =
+      before.rawPayloadStorageEnabled && update.rawPayloadStorageEnabled === false
+        ? "기존에 저장된 원문은 유지됩니다. 삭제하려면 별도 요청이 필요합니다."
+        : undefined;
+    return HttpResponse.json(note ? { ...updated, note } : updated);
   }),
 
   // FR-GW-02 §5.1: downgrade applies immediately; an upgrade needs a follow-up confirmed:true

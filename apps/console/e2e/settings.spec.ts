@@ -21,7 +21,7 @@ test("GMCP-88 SCR-501 shows the upstreams, the failure policy and the preference
 
   // The gateway ships fail-closed, raw storage off, and a 120s approval window.
   await expect(page.getByRole("radio", { name: /Fail-Closed/ })).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByRole("switch", { name: "원문 저장 opt-in" })).toHaveAttribute("aria-checked", "false");
+  await expect(page.getByRole("switch", { name: "원문 민감정보 저장" })).toHaveAttribute("aria-checked", "false");
   await expect(page.getByRole("combobox", { name: "승인 타임아웃" })).toHaveValue("120");
 });
 
@@ -57,24 +57,30 @@ test("SCR-501 confirming fail-open applies it, and going back does not ask", asy
   await expect(page.getByRole("radio", { name: /Fail-Closed/ })).toHaveAttribute("aria-checked", "true");
 });
 
-test("SCR-501 turning raw storage on explains itself first", async ({ page }) => {
+test("GMCP-84 §8.1/§10.4 turning raw storage on requires the notice checkbox first", async ({ page }) => {
   await page.goto("/settings");
-  const toggle = page.getByRole("switch", { name: "원문 저장 opt-in" });
+  const toggle = page.getByRole("switch", { name: "원문 민감정보 저장" });
 
   await toggle.click();
 
   const dialog = page.getByRole("alertdialog");
-  await expect(dialog.getByText(/원문이 저장되어 이후 기능에 활용됩니다/)).toBeVisible();
-  // Unlike fail-open this one only explains — there is no acknowledgement to tick.
-  await expect(dialog.getByRole("checkbox")).toBeHidden();
+  await expect(dialog.getByText(/모든 열람은 감사 로그에 남습니다/)).toBeVisible();
+  // Unlike the pre-GMCP-84 version of this dialog, the confirm button now stays inert until the
+  // notice is acknowledged — same rule as fail-open.
+  await expect(dialog.getByRole("button", { name: "원문 저장 켜기" })).toBeDisabled();
 
-  await dialog.getByRole("button", { name: "적용" }).click();
+  await dialog.getByRole("checkbox", { name: "위 내용을 이해했습니다" }).check();
+  await expect(dialog.getByRole("button", { name: "원문 저장 켜기" })).toBeEnabled();
+  await dialog.getByRole("button", { name: "원문 저장 켜기" }).click();
   await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByText("원문 저장이 활성화되었습니다.")).toBeVisible();
 
-  // And turning it back off stops the collection, so it applies immediately.
+  // And turning it back off stops the collection, so it applies immediately with no dialog —
+  // but the retention note explains that what's already stored is not deleted (§6.2).
   await toggle.click();
   await expect(page.getByRole("alertdialog")).toBeHidden();
   await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect(page.getByText(/기존에 저장된 원문은 유지됩니다/)).toBeVisible();
 });
 
 // FR-GW-02 §5.1 — `PUT /servers/{id}/trust`. Which direction needs confirming is the gateway's

@@ -35,6 +35,7 @@ import {
   toSessionsResponse,
   toTimelineResponse,
 } from "./replay-adapter";
+import { getOperatorHeaders } from "./permissions";
 
 /** Empty in development, where MSW answers these same-origin requests. */
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
@@ -60,21 +61,21 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function post<T>(path: string, signal?: AbortSignal): Promise<T> {
+async function post<T>(path: string, signal?: AbortSignal, extraHeaders?: HeadersInit): Promise<T> {
   const response = await fetch(`${BASE}/api/v1${path}`, {
     method: "POST",
     signal,
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...extraHeaders },
   });
   if (!response.ok) throw new ApiError(response.status, response.statusText);
   return (await response.json()) as T;
 }
 
-async function putJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+async function putJson<T>(path: string, body: unknown, signal?: AbortSignal, extraHeaders?: HeadersInit): Promise<T> {
   const response = await fetch(`${BASE}/api/v1${path}`, {
     method: "PUT",
     signal,
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    headers: { Accept: "application/json", "Content-Type": "application/json", ...extraHeaders },
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new ApiError(response.status, response.statusText);
@@ -125,11 +126,12 @@ async function put<T>(
   path: string,
   body: unknown,
   signal?: AbortSignal,
+  extraHeaders?: HeadersInit,
 ): Promise<T> {
   const response = await fetch(`${BASE}/api/v1${path}`, {
     method: "PUT",
     signal,
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    headers: { Accept: "application/json", "Content-Type": "application/json", ...extraHeaders },
     body: JSON.stringify(body),
   });
   const payload = await response.json().catch(() => undefined);
@@ -198,9 +200,13 @@ export const reapproveTool = (
 
 export const getPolicy = (id: string, signal?: AbortSignal) =>
   get<PolicyDetail>(`/policies/${encodeURIComponent(id)}`, signal);
-/** Reveal-original (spec §5.3 no.5): records the access in the audit log. */
+/**
+ * Reveal-original (GMCP-84 §6.3): records the access in the audit log. Carries the operator
+ * headers `getOperatorHeaders` builds — without them the control plane's `PermissionService`
+ * 403s regardless of what the UI decided to show (§7).
+ */
 export const revealEvent = (id: string, signal?: AbortSignal) =>
-  post<RevealContent>(`/events/${encodeURIComponent(id)}/reveal`, signal);
+  post<RevealContent>(`/events/${encodeURIComponent(id)}/reveal`, signal, getOperatorHeaders());
 
 // SCR-201 Attack Lab (spec §5.2).
 export const getAttackScenarios = (signal?: AbortSignal) =>
@@ -248,9 +254,21 @@ export const getApprovals = (signal?: AbortSignal) =>
  */
 export const getSettings = (signal?: AbortSignal) => get<GatewaySettings>("/settings", signal);
 
-/** Each control sends only what it changed, so one never resends another's value. */
+/**
+ * Each control sends only what it changed, so one never resends another's value.
+ *
+ * `rawPayloadStorageEnabled` additionally carries the operator headers (GMCP-84 §7): the control
+ * plane requires `settings:write` only for that one field, so every other field-only update
+ * (failMode, locale, approvalTimeoutSeconds) keeps working with no headers at all, exactly as
+ * before.
+ */
 export const updateSettings = (update: SettingsUpdate, signal?: AbortSignal) =>
-  putJson<GatewaySettings>("/settings", update, signal);
+  put<GatewaySettings>(
+    "/settings",
+    update,
+    signal,
+    update.rawPayloadStorageEnabled !== undefined ? getOperatorHeaders() : undefined,
+  );
 
 // Retuning an upstream's trust tier goes through `putServerTrust` above — FR-GW-02's real
 // `PUT /servers/{id}/trust`, not the `PUT /servers/{id}` an earlier reading here assumed while

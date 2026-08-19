@@ -1,6 +1,8 @@
 package kr.guardmcp.controlplane.api
 
 import kr.guardmcp.controlplane.domain.GuardEventRepository
+import kr.guardmcp.controlplane.domain.RevealAuditLog
+import kr.guardmcp.controlplane.domain.RevealResult
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -15,12 +17,15 @@ import java.time.Instant
 import java.util.UUID
 
 /** `security.reveal-token` must be configured for any reveal call to succeed (NFR-04) — see
- *  [AuditEventController.hasValidOperatorToken]'s doc comment: unconfigured (blank) always denies. */
+ *  [PermissionService]'s doc comment: unconfigured (blank) always denies. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestPropertySource(properties = ["security.reveal-token=test-operator-token"])
 class AuditEventApiTest : ApiTestSupport() {
     @Autowired
     private lateinit var repository: GuardEventRepository
+
+    @Autowired
+    private lateinit var revealAuditLog: RevealAuditLog
 
     @Test
     fun `every pipeline verdict persists with policy ids, detections, and risk score`() {
@@ -38,7 +43,7 @@ class AuditEventApiTest : ApiTestSupport() {
             assertEquals(listOf("block_env_file_read"), stored.matchedPolicyIds)
             assertEquals(1, stored.detections.size)
             assertEquals(0, BigDecimal("87").compareTo(stored.riskScore))
-            assertNull(stored.rawPayload)
+            assertNull(stored.rawPayloadRef)
         }
     }
 
@@ -97,11 +102,11 @@ class AuditEventApiTest : ApiTestSupport() {
 
     @Test
     fun `raw payload is dropped by default even when the gateway sends one`() {
-        // guard_settings.store_raw_opt_in defaults to false (V4 migration) — NFR-04.
+        // guard_settings.raw_payload_storage_enabled defaults to false (V4/V7 migrations) — NFR-04.
         val eventId = UUID.randomUUID()
         send("POST", "/api/v1/events", ingestPayload(eventId, rawPayload = "010-1234-5678 unmasked"))
 
-        assertNull(repository.findById(eventId)?.rawPayload)
+        assertNull(repository.findById(eventId)?.rawPayloadRef)
     }
 
     @Test
@@ -199,7 +204,7 @@ class AuditEventApiTest : ApiTestSupport() {
         val response = client.send(
             HttpRequest.newBuilder(uri("/api/v1/events/$eventId/reveal"))
                 .header("Content-Type", "application/json")
-                .header(OPERATOR_TOKEN_HEADER, "test-operator-token")
+                .header(Actor.OPERATOR_TOKEN_HEADER, "test-operator-token")
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build(),
             HttpResponse.BodyHandlers.ofString(),
@@ -224,27 +229,45 @@ class AuditEventApiTest : ApiTestSupport() {
             HttpResponse.BodyHandlers.ofString(),
         )
         assertEquals(403, missingToken.statusCode())
-        assertEquals("reveal_unauthorized", parseMap(missingToken.body())["code"])
+        assertEquals("reveal_forbidden", parseMap(missingToken.body())["code"])
 
         val wrongToken = client.send(
             HttpRequest.newBuilder(uri("/api/v1/events/$eventId/reveal"))
                 .header("Content-Type", "application/json")
                 .header(Actor.ID_HEADER, "operator@company.co.kr")
                 .header(Actor.ROLE_HEADER, "operator")
-                .header(OPERATOR_TOKEN_HEADER, "not-the-configured-token")
+                .header(Actor.OPERATOR_TOKEN_HEADER, "not-the-configured-token")
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build(),
             HttpResponse.BodyHandlers.ofString(),
         )
         assertEquals(403, wrongToken.statusCode())
-        assertEquals("reveal_unauthorized", parseMap(wrongToken.body())["code"])
+        assertEquals("reveal_forbidden", parseMap(wrongToken.body())["code"])
     }
 
     @Test
-    fun `reveal by an operator when no raw payload was stored is a 409, not a 404`() {
-        // guard_settings.store_raw_opt_in defaults to false, so rawPayload is never persisted
-        // regardless of what the caller sends (NFR-04) — see the sibling opt-in test, which
-        // restores this shared singleton row afterward rather than leaving it toggled on.
+    fun `a denied reveal attempt (no permission) is itself recorded in reveal_audit_log`() {
+        val eventId = UUID.randomUUID()
+        send("POST", "/api/v1/events", ingestPayload(eventId))
+
+        client.send(
+            HttpRequest.newBuilder(uri("/api/v1/events/$eventId/reveal"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+
+        val entries = revealAuditLog.findByEventId(eventId)
+        assertEquals(1, entries.size)
+        assertEquals(RevealResult.DENIED_NO_PERMISSION, entries.single().result)
+    }
+
+    @Test
+    fun `reveal by an operator when no raw payload was stored is a 409, not a 404, and is audited`() {
+        // guard_settings.raw_payload_storage_enabled defaults to false, so rawPayload is never
+        // persisted regardless of what the caller sends (NFR-04) — see the sibling opt-in test,
+        // which restores this shared singleton row afterward rather than leaving it toggled on.
         val eventId = UUID.randomUUID()
         send("POST", "/api/v1/events", ingestPayload(eventId, rawPayload = "010-1234-5678 unmasked"))
 
@@ -252,14 +275,20 @@ class AuditEventApiTest : ApiTestSupport() {
 
         assertEquals(409, response.statusCode())
         assertEquals("raw_payload_not_stored", parseMap(response.body())["code"])
+        val entries = revealAuditLog.findByEventId(eventId)
+        assertEquals(1, entries.size)
+        assertEquals(RevealResult.DENIED_NOT_STORED, entries.single().result)
     }
 
     @Test
-    fun `reveal of an unknown or malformed eventId is a 404`() {
+    fun `reveal of an unknown eventId is a 404 after the permission check passes`() {
         val unknown = revealAsOperator(UUID.randomUUID())
         assertEquals(404, unknown.statusCode())
         assertEquals("event_not_found", parseMap(unknown.body())["code"])
+    }
 
+    @Test
+    fun `reveal of a malformed eventId is a 404 without touching permission or the audit log`() {
         val malformed = revealAsOperator(null, rawPath = "/api/v1/events/not-a-uuid/reveal")
         assertEquals(404, malformed.statusCode())
         assertEquals("event_not_found", parseMap(malformed.body())["code"])
@@ -271,7 +300,7 @@ class AuditEventApiTest : ApiTestSupport() {
                 .header("Content-Type", "application/json")
                 .header(Actor.ID_HEADER, "operator@company.co.kr")
                 .header(Actor.ROLE_HEADER, "operator")
-                .header(OPERATOR_TOKEN_HEADER, "test-operator-token")
+                .header(Actor.OPERATOR_TOKEN_HEADER, "test-operator-token")
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build(),
             HttpResponse.BodyHandlers.ofString(),
@@ -306,8 +335,4 @@ class AuditEventApiTest : ApiTestSupport() {
         "maskDiffRef" to null,
         "rawPayload" to rawPayload,
     )
-
-    private companion object {
-        const val OPERATOR_TOKEN_HEADER = "X-Operator-Token"
-    }
 }

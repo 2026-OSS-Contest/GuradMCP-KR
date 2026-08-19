@@ -146,6 +146,7 @@
       "chainFailed": "Chain verification failed",
       "reveal": "Reveal original",
       "revealed": "Original revealed. The access is recorded in the audit log.",
+      "revealUnavailable": "No raw payload stored",
       "noSelection": "Select an event on the timeline.",
       "target": "Target",
       "args": "Arguments",
@@ -444,7 +445,9 @@
     },
     "log": {
       "title": "Log",
-      "storeRaw": "Store raw text (opt-in)"
+      "storeRaw": "Store raw sensitive data",
+      "storeRawHint": "By default, logs and events store only masked copies.",
+      "storeRawPermissionRequired": "Admin permission required"
     },
     "general": {
       "title": "General",
@@ -463,9 +466,11 @@
       "confirm": "Save"
     },
     "storeRawDialog": {
-      "title": "Enable raw storage",
-      "body": "With raw storage on, the original text is kept and used by later features. Continue?",
-      "confirm": "Apply"
+      "title": "Turn on raw storage?",
+      "body": "Turning this on stores the raw text of detected PII and credentials, encrypted, in a separate table. Only authorized users can reveal it, and every reveal is recorded in the audit log. This setting is separate from your organization's data retention and privacy policies — responsibility for the storage itself rests with the operator.",
+      "acknowledge": "I understand the above",
+      "confirm": "Turn on raw storage",
+      "enabledToast": "Raw storage has been enabled."
     },
     "trustDialog": {
       "title": "Raise trust level",

@@ -12,7 +12,9 @@ import type { GatewaySettings } from "@/lib/api/types";
 
 const DEFAULTS: GatewaySettings = {
   failMode: "fail_closed",
-  storeRawOptIn: false,
+  rawPayloadStorageEnabled: false,
+  rawPayloadStorageEnabledAt: null,
+  rawPayloadStorageEnabledBy: null,
   locale: "ko",
   approvalTimeoutSeconds: 120
 };
@@ -21,7 +23,17 @@ let settings: GatewaySettings = { ...DEFAULTS };
 
 export const currentSettings = (): GatewaySettings => settings;
 
-export function patchSettings(update: Partial<GatewaySettings>): GatewaySettings {
-  settings = { ...settings, ...update };
+/**
+ * GMCP-84 §5.4: stamps `rawPayloadStorageEnabledAt/By` on a fresh false→true transition, the
+ * same rule `GuardSettingsStore.doUpdate` applies server-side — so a dev/e2e run against the mock
+ * sees the same fields populated a real backend would.
+ */
+export function patchSettings(update: Partial<GatewaySettings>, actor = "operator@company.co.kr"): GatewaySettings {
+  const turningOn = update.rawPayloadStorageEnabled === true && !settings.rawPayloadStorageEnabled;
+  settings = {
+    ...settings,
+    ...update,
+    ...(turningOn ? { rawPayloadStorageEnabledAt: new Date().toISOString(), rawPayloadStorageEnabledBy: actor } : {})
+  };
   return settings;
 }

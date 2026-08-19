@@ -28,7 +28,7 @@ private fun draftRecord(
     matchedPolicyIds = matchedPolicyIds,
     detections = detections,
     maskDiffRef = null,
-    rawPayload = null,
+    rawPayloadRef = null,
     seq = seq,
 )
 

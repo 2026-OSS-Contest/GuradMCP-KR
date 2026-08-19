@@ -59,6 +59,13 @@ test("SCR-301 reveal-original confirms, then shows the raw vs masked content", a
   await expect(reveal).toBeHidden();
 });
 
+test("GMCP-84 §10.4: an account without events:reveal never sees the reveal button", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("guardmcp.operator-permissions", "denied"));
+  await page.goto("/replay");
+  await blockNode(page).click();
+  await expect(page.getByTestId("event-detail").getByRole("button", { name: /원문 열람/ })).toHaveCount(0);
+});
+
 // ── GMCP-11 timeline ────────────────────────────────────────────────────────
 
 test("GMCP-11 timeline renders the session nodes and playback controls", async ({ page }) => {

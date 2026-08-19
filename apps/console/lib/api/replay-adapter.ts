@@ -20,6 +20,7 @@ import type {
   TimelineResponse,
   Verdict
 } from "./types";
+import { hasOperatorPermissions } from "./permissions";
 
 const NODE_TYPE: Record<ApiTimelineNodeType, TimelineNodeType> = {
   USER_INPUT: "user",
@@ -124,12 +125,13 @@ export function toEventDetail(
     body: node.content,
     call: node.argsJson === undefined ? undefined : toCall(node.argsJson),
     direction: node.directionVerdict && toDirection(node.directionVerdict),
-    // 화면설계서 5.3 no.5 gates the reveal button on the operator's permission, and every
-    // node-type frame draws it — including the agent and tool-call ones this used to
-    // withhold it from, on a guess about which kinds "plausibly carry maskable content"
-    // that neither the spec nor the frames make. Permission is not something the timeline
-    // contract carries, so the button is offered wherever the design offers it.
-    canReveal: true
+    // GMCP-84 §8.2: the reveal button now gates on two real signals rather than a hardcoded
+    // `true` — whether this event actually has a stored raw payload (`hasRawPayload`, off the
+    // wire) and whether this build carries an operator identity at all
+    // (`hasOperatorPermissions()`). The server is still the real trust boundary regardless
+    // (`PermissionService`) — this only decides what the button offers.
+    hasRawPayload: node.hasRawPayload ?? false,
+    canReveal: (node.hasRawPayload ?? false) && hasOperatorPermissions()
     // normalizedPath/reveal: no source in this API yet, left undefined — see the GMCP-28 wire
     // contract note in ./types.ts.
   };
