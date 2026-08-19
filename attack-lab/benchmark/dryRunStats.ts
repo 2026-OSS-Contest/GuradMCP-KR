@@ -32,6 +32,13 @@ interface PolicyStatsResponse {
   window: string;
   firedLast30d: number;
   lastTriggeredAt: string | null;
+  /**
+   * Whether this policy is actually running in dry-run. Not in the contract today —
+   * the control plane's `Policy` carries no such field — so it arrives undefined and
+   * this pass reports an absence rather than inferring one. When GMCP-77 adds it,
+   * reading it here is the only change needed.
+   */
+  dryRun?: boolean;
 }
 
 const window = "30d";
@@ -51,6 +58,8 @@ export async function readDryRunObservations(
     return { available: false, reason: "CONTROL_PLANE_URL is not set; dry-run activity was not consulted" };
   }
   const observations: DryRunPolicyObservation[] = [];
+  /** Set only by an explicit signal from the control plane, never inferred from counts. */
+  let confirmedDryRun = false;
   for (const { id } of policies) {
     const url = `${baseUrl.replace(/\/$/, "")}/api/v1/policies/${encodeURIComponent(id)}/stats?window=${window}&dryRun=true`;
     let response: Response;
@@ -74,17 +83,26 @@ export async function readDryRunObservations(
       firedLast30d: body.firedLast30d,
       lastTriggeredAt: body.lastTriggeredAt,
     });
+    if (body.dryRun === true) confirmedDryRun = true;
   }
   const totalFired = observations.reduce((sum, { firedLast30d }) => sum + firedLast30d, 0);
-  if (totalFired === 0) {
-    // The honest reading of all-zeros today: nothing is marked dry-run, so nothing was
-    // observed. Reporting it as "0 false positives" would be a measurement nobody took.
-    return {
-      available: false,
-      reason: "no policy is running in dry-run yet (GMCP-77), so there is no observed activity to report",
-    };
+  // A policy that fired under `dryRun=true` is itself proof that dry-run is running,
+  // so activity needs no separate signal to be reportable.
+  if (totalFired > 0 || confirmedDryRun) {
+    return { available: true, source: baseUrl, window, policies: observations, totalFired };
   }
-  return { available: true, source: baseUrl, window, policies: observations, totalFired };
+  // All zeros, and nothing said whether any policy is in dry-run. Two different worlds
+  // produce this: no policy is in dry-run, or policies are and a clean period had no
+  // false positives. The second is a real and good result that must not be thrown away
+  // as "unobserved" — and this pass cannot tell them apart, so it says that instead of
+  // picking one. Previously it asserted the first, which becomes wrong the moment
+  // GMCP-77 turns dry-run on (GMCP-118).
+  return {
+    available: false,
+    reason:
+      "policy stats report no dry-run activity and the contract does not say which policies are in dry-run, "
+      + "so zero fires cannot be told apart from no dry-run policies",
+  };
 }
 
 function isStats(value: unknown): value is PolicyStatsResponse {
@@ -93,5 +111,6 @@ function isStats(value: unknown): value is PolicyStatsResponse {
   return typeof record.policyId === "string"
     && typeof record.window === "string"
     && typeof record.firedLast30d === "number"
-    && (record.lastTriggeredAt === null || typeof record.lastTriggeredAt === "string");
+    && (record.lastTriggeredAt === null || typeof record.lastTriggeredAt === "string")
+    && (record.dryRun === undefined || typeof record.dryRun === "boolean");
 }

@@ -23,13 +23,40 @@ describe("dry-run observations (GMCP-31, FR-LAB-03)", () => {
     expect(result.available).toBe(false);
   });
 
-  it("reports absence rather than zero when nothing is running in dry-run", async () => {
-    // This is today's real answer: the endpoint returns 0 for every policy by construction
-    // because none is marked dry-run. "No policy fired" and "nothing was observed" are the
-    // same JSON and opposite claims, and a judge-facing report must not conflate them.
+  it("reports absence rather than zero when the counts alone cannot say", async () => {
+    // "No policy fired" and "nothing was observed" are the same JSON and opposite claims,
+    // and a judge-facing report must not conflate them.
     const result = await readDryRunObservations(policies, "http://control-plane:8080", stubFetch({}));
     expect(result.available).toBe(false);
-    expect(result.available === false && result.reason).toMatch(/GMCP-77/);
+    expect(result.available === false && result.reason).toMatch(/cannot be told apart/);
+  });
+
+  it("does not blame the absence on a cause it cannot check", async () => {
+    // The previous wording asserted "no policy is running in dry-run yet". That is true
+    // today and becomes false the moment GMCP-77 turns dry-run on with a clean period —
+    // at which point a real "zero false positives" result would be reported as nothing
+    // having been measured. The reason may describe what is missing, not why (GMCP-118).
+    const result = await readDryRunObservations(policies, "http://control-plane:8080", stubFetch({}));
+    expect(result.available === false && result.reason).not.toMatch(/no policy is running/);
+  });
+
+  it("reports a clean dry-run period as observed once the contract says so", async () => {
+    // Zero fires *and* an explicit dry-run signal is a measurement: policies were running
+    // and nothing misfired. This is the case the old count heuristic silently discarded.
+    const withSignal: typeof fetch = (async (url: string | URL) => {
+      const policyId = decodeURIComponent(String(url).split("/policies/")[1]!.split("/")[0]!);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ policyId, window: "30d", firedLast30d: 0, lastTriggeredAt: null, dryRun: true }),
+      } as Response;
+    }) as unknown as typeof fetch;
+
+    const result = await readDryRunObservations(policies, "http://control-plane:8080", withSignal);
+    expect(result.available).toBe(true);
+    if (!result.available) return;
+    expect(result.totalFired).toBe(0);
+    expect(result.policies).toHaveLength(policies.length);
   });
 
   it("reports observed activity once a policy actually runs in dry-run", async () => {
