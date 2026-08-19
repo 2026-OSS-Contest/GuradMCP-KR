@@ -1,0 +1,9 @@
+id: explicit_dry_run_block
+pack: dry-run-pack
+priority: 100
+dry_run: true
+match:
+  tool: shadow_tool
+action: block
+severity: critical
+message: Explicitly marked dry_run; must never actually block.

@@ -1,0 +1,26 @@
+{
+  "endpoint": "projects/f08eba78-4d3a-4e3b-8086-d8663c8ba21c/issues/7f911b0e-fc00-4b35-8b6d-635236b60bfd/links/",
+  "fetched_at": "20260821T160548Z",
+  "total_count": 1,
+  "results": [
+    {
+      "id": "68ccc6bf-f24f-4cd1-b87b-f32b7888e9a7",
+      "created_at": "2026-07-12T00:37:23.467729+09:00",
+      "updated_at": "2026-07-12T00:37:42.061420+09:00",
+      "deleted_at": null,
+      "title": "Tool Call Schema 명세 v1",
+      "url": "https://plane.ghkim.dev/osscontest/projects/f08eba78-4d3a-4e3b-8086-d8663c8ba21c/pages/f69cd0ef-61d3-4992-a684-adc04ddbbbed",
+      "metadata": {
+        "url": "https://plane.ghkim.dev/osscontest/projects/f08eba78-4d3a-4e3b-8086-d8663c8ba21c/pages/f69cd0ef-61d3-4992-a684-adc04ddbbbed",
+        "title": null,
+        "favicon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGNsYXNzPSJsdWNpZGUgbHVjaWRlLWxpbmstaWNvbiBsdWNpZGUtbGluayI+PHBhdGggZD0iTTEwIDEzYTUgNSAwIDAgMCA3LjU0LjU0bDMtM2E1IDUgMCAwIDAtNy4wNy03LjA3bC0xLjcyIDEuNzEiLz48cGF0aCBkPSJNMTQgMTFhNSA1IDAgMCAwLTcuNTQtLjU0bC0zIDNhNSA1IDAgMCAwIDcuMDcgNy4wN2wxLjcxLTEuNzEiLz48L3N2Zz4=",
+        "favicon_url": null
+      },
+      "created_by": null,
+      "updated_by": null,
+      "project": "f08eba78-4d3a-4e3b-8086-d8663c8ba21c",
+      "workspace": "223ebd51-279b-459a-be3f-094b62cd1208",
+      "issue": "7f911b0e-fc00-4b35-8b6d-635236b60bfd"
+    }
+  ]
+}

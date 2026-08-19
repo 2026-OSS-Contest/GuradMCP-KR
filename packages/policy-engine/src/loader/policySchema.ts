@@ -65,7 +65,10 @@ export const policyFileSchema = z
     message: z.string().optional(),
     reasonCode: z.enum(reasonCodes).optional(),
     enabled: z.boolean().optional(),
-    approval: approvalSchema.optional()
+    approval: approvalSchema.optional(),
+    // SPEC-POL-04 §3.1 (GMCP-77): default false, applied per-policy in packRegistry.ts's
+    // `loadPack` from the pack manifest's `default_dry_run` when this key is absent.
+    dry_run: z.boolean().optional()
   })
   .strict()
   .refine((value) => value.action !== "require_approval" || value.approval !== undefined, {
@@ -93,7 +96,10 @@ export const packManifestSchema = z
     evaluation_strategy: z.enum(evaluationStrategyValues).optional(),
     extends: z.array(z.string()).optional(),
     enabled: z.boolean().optional(),
-    policies: z.array(z.string()).optional()
+    policies: z.array(z.string()).optional(),
+    // SPEC-POL-04 §3.1: policies in this pack inherit `dry_run: true` unless a policy sets
+    // its own `dry_run` explicitly (packRegistry.ts's `loadPack`, applied per-file).
+    default_dry_run: z.boolean().optional()
   })
   .strict();
 

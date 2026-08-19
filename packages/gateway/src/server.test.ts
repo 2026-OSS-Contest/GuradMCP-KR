@@ -202,6 +202,77 @@ describe("gateway HTTP boundary", () => {
     expect(JSON.stringify(body._guardmcp)).not.toContain("110-123-456789");
   });
 
+  describe("dry-run policies (SPEC-POL-04, GMCP-77)", () => {
+    // korean-pii's shipped `block_large_address_dump` (dry_run: true) is the spec's own
+    // worked example: direction response, detections any_of [PII.ADDRESS], risk_score gte 60,
+    // action block. A single address from an unregistered (=> untrusted) server scores well
+    // above 60 for the `customer_lookup` tool (base 40 + confidence + tool weight, *1.6
+    // untrusted multiplier — see risk.ts), so it matches every time this test runs.
+    const address = "경기도 성남시 분당구 판교로 10";
+
+    it("T-DR-01/T-DR-02: never blocks or withholds masking — the real verdict and upstream delivery are untouched by the shadow match", async () => {
+      const upstream = createServer((request, response) => {
+        response.setHeader("content-type", "application/json");
+        if (request.url === "/tools/call/customer_lookup") {
+          return response.end(JSON.stringify({ content: [{ address }] }));
+        }
+        response.statusCode = 404;
+        return response.end("{}");
+      });
+      process.env.DEMO_MCP_TOOLS_URL = await listen(upstream);
+
+      const guardEvents: Array<Record<string, unknown>> = [];
+      const unsubscribe = onGuardBusMessage((message) => {
+        if (message.type === "guard.event")
+          guardEvents.push(message.data as Record<string, unknown>);
+      });
+
+      const url = await listen(createServer(handler));
+      const response = await fetch(`${url}/mcp`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 20,
+          method: "tools/call",
+          params: { name: "customer_lookup", arguments: {} },
+        }),
+      });
+      unsubscribe();
+
+      // Not blocked: a real block would come back as a JSON-RPC `error`, never a `result`.
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        result: { content: Array<{ address: string }> };
+        _guardmcp: { verdict: string; policyIds: string[] };
+      };
+      // Masking (mask_korean_pii_response) still ran — the shadow match changed nothing
+      // about the real pipeline's own decision.
+      expect(body.result.content[0]?.address).toBe("[ADDRESS]");
+      expect(body._guardmcp.verdict).toBe("mask_then_allow");
+      expect(body._guardmcp.policyIds).toContain("mask_korean_pii_response");
+      // §2.1/§4.1: the dry-run policy must never appear among the real matched policies.
+      expect(body._guardmcp.policyIds).not.toContain(
+        "block_large_address_dump",
+      );
+
+      const event = guardEvents.find(
+        (candidate) => candidate.verdict === "mask_then_allow",
+      );
+      expect(event).toMatchObject({
+        verdict: "mask_then_allow",
+        dryRunVerdict: "block",
+        wouldEscalate: true,
+      });
+      expect(event?.matchedPolicyIds).not.toContain(
+        "block_large_address_dump",
+      );
+      expect(event?.dryRunMatchedPolicyIds).toContain(
+        "block_large_address_dump",
+      );
+    });
+  });
+
   it("blocks .env reads without ever calling upstream, and pushes the block as a GuardEvent (M2 DoD, DoD-15 §5.1/§5.3)", async () => {
     let upstreamHits = 0;
     const upstream = createServer((_request, response) => {

@@ -1,0 +1,28 @@
+{
+  "endpoint": "projects/f08eba78-4d3a-4e3b-8086-d8663c8ba21c/issues/e2b19a2a-e812-4bcc-8879-cddd7d52759d/comments/",
+  "fetched_at": "20260821T160548Z",
+  "total_count": 1,
+  "results": [
+    {
+      "id": "953a1532-9490-4293-b1eb-8e4b6844e141",
+      "is_member": true,
+      "created_at": "2026-07-31T23:25:15.064024+09:00",
+      "updated_at": "2026-07-31T23:25:15.029177+09:00",
+      "deleted_at": null,
+      "comment_html": "&lt;p&gt;&lt;strong&gt;PR &lt;a href=\"https://github.com/2026-OSS-Contest/GuradMCP-KR/pull/53\"&gt;#53&lt;/a&gt; 리뷰 완료 — 변경 요청&lt;/strong&gt;&lt;/p&gt;&lt;p&gt;단일 생성 지점 설계·한국어 문구 품질은 우수하나:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;&lt;strong&gt;MAJOR&lt;/strong&gt;: 설명이 결정 정책이 아닌 &lt;code&gt;matchedPolicyIds[0]&lt;/code&gt;(우선순위 최하 매칭)을 지목 — 다중 매칭 시 잘못된 정책 ID·severity·reasonCode 모순, 배포 중인 korean-pii 팩으로 재현됨. &lt;code&gt;decidingPolicyId&lt;/code&gt;를 계약에 실어 내려보내는 수정안 제시&lt;/li&gt;&lt;li&gt;&lt;strong&gt;MAJOR&lt;/strong&gt;: 다중 매칭 픽스처 테스트 부재(현재 스위트는 결함이 숨는 조건만 검증)&lt;/li&gt;&lt;li&gt;MINOR: NFR-04 테스트 공허(카나리 값 방식 제안), 승인 타임아웃 차단 구분 불가, explanation 필드가 컨트롤플레인·OpenAPI·DB에 부재, 문서-구현 불일치(PII.PHONE)&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;상세는 GitHub 리뷰 본문 참조. 상태를 In Progress로 되돌립니다.&lt;/p&gt;",
+      "attachments": [],
+      "access": "INTERNAL",
+      "external_source": null,
+      "external_id": null,
+      "edited_at": null,
+      "created_by": "120b9947-429c-4de3-b67a-c033f97938f7",
+      "updated_by": null,
+      "project": "f08eba78-4d3a-4e3b-8086-d8663c8ba21c",
+      "workspace": "223ebd51-279b-459a-be3f-094b62cd1208",
+      "description": "cee9e4a2-3c8f-49ef-ad93-7d99630da81d",
+      "issue": "e2b19a2a-e812-4bcc-8879-cddd7d52759d",
+      "actor": "120b9947-429c-4de3-b67a-c033f97938f7",
+      "parent": null
+    }
+  ]
+}

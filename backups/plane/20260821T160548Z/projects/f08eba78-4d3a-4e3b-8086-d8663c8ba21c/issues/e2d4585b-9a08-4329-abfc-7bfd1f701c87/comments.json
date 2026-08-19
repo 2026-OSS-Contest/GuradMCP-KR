@@ -1,0 +1,49 @@
+{
+  "endpoint": "projects/f08eba78-4d3a-4e3b-8086-d8663c8ba21c/issues/e2d4585b-9a08-4329-abfc-7bfd1f701c87/comments/",
+  "fetched_at": "20260821T160548Z",
+  "total_count": 2,
+  "results": [
+    {
+      "id": "93384c32-0309-460e-94f9-d0c30b58aee5",
+      "is_member": true,
+      "created_at": "2026-08-11T13:30:45.369136+09:00",
+      "updated_at": "2026-08-11T13:30:45.301783+09:00",
+      "deleted_at": null,
+      "comment_html": "<p>준비 문서 PR <a href=\"https://github.com/2026-OSS-Contest/GuradMCP-KR/pull/98\">#98</a>. 동결 선언은 2026-08-20 당일. Plane → Review (준비분).</p>",
+      "attachments": [],
+      "access": "INTERNAL",
+      "external_source": null,
+      "external_id": null,
+      "edited_at": null,
+      "created_by": "120b9947-429c-4de3-b67a-c033f97938f7",
+      "updated_by": null,
+      "project": "f08eba78-4d3a-4e3b-8086-d8663c8ba21c",
+      "workspace": "223ebd51-279b-459a-be3f-094b62cd1208",
+      "description": "0af7e5bb-0179-48ac-bd1e-350b3ae4749e",
+      "issue": "e2d4585b-9a08-4329-abfc-7bfd1f701c87",
+      "actor": "120b9947-429c-4de3-b67a-c033f97938f7",
+      "parent": null
+    },
+    {
+      "id": "f4c24f29-aaea-4616-8c7b-80ea0c1f9ec7",
+      "is_member": true,
+      "created_at": "2026-07-31T21:07:32.980952+09:00",
+      "updated_at": "2026-07-31T21:07:32.949732+09:00",
+      "deleted_at": null,
+      "comment_html": "&lt;p&gt;기능 동결(8/20) 실행 준비 문서 작성 — PR: &lt;a href=\"https://github.com/2026-OSS-Contest/GuradMCP-KR/pull/57\"&gt;#57 docs: add the feature freeze runbook for W7&lt;/a&gt; (base: dev)&lt;/p&gt;&lt;p&gt;내용: 동결 원칙(허용: 버그수정·문서·시연준비 / 금지: 신규 기능), Must/Should 판정 기준(MVP/Stretch 문서 기준), 8/20 당일 실행 체크리스트(Plane Frozen 상태 활용·예외 승인 절차·팀 합의 기록 방식). 동결 이벤트 자체는 8/20 마일스톤에 팀 합의로 실행 — 그때 동결/이월 목록을 Plane에 반영 예정.&lt;/p&gt;",
+      "attachments": [],
+      "access": "INTERNAL",
+      "external_source": null,
+      "external_id": null,
+      "edited_at": null,
+      "created_by": "120b9947-429c-4de3-b67a-c033f97938f7",
+      "updated_by": null,
+      "project": "f08eba78-4d3a-4e3b-8086-d8663c8ba21c",
+      "workspace": "223ebd51-279b-459a-be3f-094b62cd1208",
+      "description": "5a2b6dd6-1639-4592-939c-b340846bbaca",
+      "issue": "e2d4585b-9a08-4329-abfc-7bfd1f701c87",
+      "actor": "120b9947-429c-4de3-b67a-c033f97938f7",
+      "parent": null
+    }
+  ]
+}

@@ -58,6 +58,13 @@ object PolicyFixtures {
             description = "Hold a tool response that discloses personal data in bulk for human approval", direction = "response",
             sourcePath = "policy-packs/korean-pii/policies/require-approval-bulk-pii-response.yaml", sourceYaml = "id: require_approval_bulk_pii_response\n",
         ),
+        // SPEC-POL-04 §4.1 (GMCP-77): mirrors policy-packs/korean-pii/policies/dry-run-block-large-address-dump.yaml.
+        PolicySyncPolicyInput(
+            id = "block_large_address_dump", packId = "korean-pii", priority = 150, action = "block", severity = "high",
+            description = "응답 내 주소 노출 시 차단 여부를 검증 중 (dry-run)", direction = "response",
+            sourcePath = "policy-packs/korean-pii/policies/dry-run-block-large-address-dump.yaml", sourceYaml = "id: block_large_address_dump\n",
+            dryRun = true,
+        ),
     )
 
     /** Populates [store] the same way a Gateway boot/hot-reload sync would. */
@@ -72,7 +79,7 @@ object PolicyFixtures {
             mapOf(
                 "id" to it.id, "packId" to it.packId, "priority" to it.priority, "action" to it.action, "severity" to it.severity,
                 "description" to it.description, "direction" to it.direction, "enabled" to true,
-                "sourcePath" to it.sourcePath, "sourceYaml" to it.sourceYaml,
+                "sourcePath" to it.sourcePath, "sourceYaml" to it.sourceYaml, "dryRun" to it.dryRun,
             )
         },
     )

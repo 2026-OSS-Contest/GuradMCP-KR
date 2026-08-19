@@ -1,0 +1,47 @@
+{
+  "endpoint": "projects/f08eba78-4d3a-4e3b-8086-d8663c8ba21c/issues/e913acdc-bec2-4ec7-835e-b2b117731059/activities/",
+  "fetched_at": "20260821T160548Z",
+  "total_count": 2,
+  "results": [
+    {
+      "id": "bac534eb-b7c1-4aaf-9f76-a2f4676b5a5c",
+      "created_at": "2026-08-17T07:44:23.823106+09:00",
+      "updated_at": "2026-08-17T07:44:23.992156+09:00",
+      "deleted_at": null,
+      "verb": "created",
+      "field": null,
+      "old_value": null,
+      "new_value": null,
+      "comment": "created the issue",
+      "attachments": [],
+      "old_identifier": null,
+      "new_identifier": null,
+      "epoch": 1786920263.0,
+      "project": "f08eba78-4d3a-4e3b-8086-d8663c8ba21c",
+      "workspace": "223ebd51-279b-459a-be3f-094b62cd1208",
+      "issue": "e913acdc-bec2-4ec7-835e-b2b117731059",
+      "issue_comment": null,
+      "actor": "c6713031-232e-4863-ae57-04f18071ad35"
+    },
+    {
+      "id": "7d17ae05-20f2-4463-a8bb-551c64be40ed",
+      "created_at": "2026-08-17T07:44:53.421912+09:00",
+      "updated_at": "2026-08-17T07:44:53.421938+09:00",
+      "deleted_at": null,
+      "verb": "updated",
+      "field": "description",
+      "old_value": "<span>&lt;p&gt;&lt;strong&gt;목적:&lt;/strong&gt; 3분 시연 영상(GMCP-45)을 콘솔 화면만 넘기면서 찍을 수 있도록, 목 데이터를 &lt;strong&gt;하나의 세션 서사&lt;/strong&gt;로 다시 만든다. 지금은 화면별로 목이 따로 놀아서 심사위원이 탭을 옮기면 같은 사건이 다른 이야기로 보인다.&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;서사(개발계획서 13장 콘티 / T-01 · PII · 승인):&lt;/strong&gt; 비신뢰 저장소의 README를 요약하다가 → 본문에 숨은 지시문이 탐지되고(T-01) → 그 지시가 유도한 .env 읽기가 차단되고 → 상담 로그의 한국 PII가 응답에서 마스킹되고 → 외부 도메인 메일 발송이 승인 대기로 잡힌다. 이 한 세션이 모든 화면에서 같은 사건으로 읽혀야 한다.&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;범위:&lt;/strong&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;게이트웨이(SCR-101): 최근 보안 이벤트가 이 세션의 판정과 일치. KPI 수치도 같은 근거에서 나올 것&lt;/li&gt;\n&lt;li&gt;라이브 콘솔(SCR-201): 미적용/적용 실행이 같은 시나리오의 두 결과로 읽힐 것&lt;/li&gt;\n&lt;li&gt;리플레이(SCR-301): 세션 목록·타임라인·이벤트 상세가 위 서사 순서대로. 원문 열람 모달의 마스킹 대상이 승인 화면의 건과 동일할 것&lt;/li&gt;\n&lt;li&gt;승인(SCR-402): 대기 건이 리플레이의 send_email 이벤트와 같은 건일 것. 처리 이력도 서사에 맞출 것&lt;/li&gt;\n&lt;li&gt;정책(SCR-302): 위 판정을 낸 정책들이 실제 policy-packs의 정책 id와 일치하고, 발동 횟수가 이벤트 수와 모순되지 않을 것&lt;/li&gt;\n&lt;li&gt;디텍터(SCR-401): 샘플 텍스트가 서사에 등장한 상담 로그와 같은 계열일 것&lt;/li&gt;\n&lt;li&gt;세팅(SCR-501): 서버 인벤토리·신뢰 등급이 서사에 등장하는 서버와 일치할 것(비신뢰 저장소 = untrusted)&lt;/li&gt;\n&lt;li&gt;벤치마크(SCR-601): 이미 실제 npm run bench 결과 기반 — 변경 없음, 정합성만 확인&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;&lt;strong&gt;시간축:&lt;/strong&gt; 고정 타임스탬프를 버리고 &lt;strong&gt;실행 시각 기준 상대 시간&lt;/strong&gt;으로 생성한다(“3분 전”, “방금”). 언제 촬영해도 살아있는 화면으로 보이게. e2e에서 시각 문자열을 단언하는 스펙은 상대 표현/패턴으로 바꾼다.&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;완료 기준:&lt;/strong&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;콘티 순서대로 화면을 넘겼을 때 같은 세션 id·같은 도구 호출·같은 정책 id가 이어짐&lt;/li&gt;\n&lt;li&gt;full / empty / offline 세 시나리오 모두 깨지지 않음&lt;/li&gt;\n&lt;li&gt;lint · typecheck · e2e 전량 통과&lt;/li&gt;\n&lt;li&gt;실제 개인정보·유효한 비밀값 없음(합성 데이터만)&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;&lt;strong&gt;참고:&lt;/strong&gt; 기능 동결 런북(GMCP-43) 1장에서 “시연 준비: 데모 시드 데이터”는 동결 이후에도 허용되는 변경으로 명시돼 있음. base 브랜치는 dev가 아니라 mock.&lt;/p&gt;</span>",
+      "new_value": "<p><strong>목적:</strong> 3분 시연 영상(GMCP-45)을 콘솔 화면만 넘기면서 찍을 수 있도록, 목 데이터를 <strong>하나의 세션 서사</strong>로 다시 만든다. 지금은 화면별로 목이 따로 놀아서 심사위원이 탭을 옮기면 같은 사건이 다른 이야기로 보인다.</p><p><strong>서사 (개발계획서 13장 콘티 / T-01 · PII · 승인):</strong> 비신뢰 저장소의 README를 요약하다가 → 본문에 숨은 지시문이 탐지되고(T-01) → 그 지시가 유도한 .env 읽기가 차단되고 → 상담 로그의 한국 PII가 응답에서 마스킹되고 → 외부 도메인 메일 발송이 승인 대기로 잡힌다. 이 한 세션이 모든 화면에서 같은 사건으로 읽혀야 한다.</p><p><strong>범위</strong></p><ul><li>게이트웨이(SCR-101): 최근 보안 이벤트가 이 세션의 판정과 일치. KPI 수치도 같은 근거에서 나올 것</li><li>라이브 콘솔(SCR-201): 미적용/적용 실행이 같은 시나리오의 두 결과로 읽힐 것</li><li>리플레이(SCR-301): 세션 목록·타임라인·이벤트 상세가 위 서사 순서대로. 원문 열람 모달의 마스킹 대상이 승인 화면의 건과 동일할 것</li><li>승인(SCR-402): 대기 건이 리플레이의 send_email 이벤트와 같은 건일 것. 처리 이력도 서사에 맞출 것</li><li>정책(SCR-302): 위 판정을 낸 정책들이 실제 policy-packs의 정책 id와 일치하고, 발동 횟수가 이벤트 수와 모순되지 않을 것</li><li>디텍터(SCR-401): 샘플 텍스트가 서사에 등장한 상담 로그와 같은 계열일 것</li><li>세팅(SCR-501): 서버 인벤토리·신뢰 등급이 서사에 등장하는 서버와 일치할 것 (비신뢰 저장소 = untrusted)</li><li>벤치마크(SCR-601): 이미 실제 npm run bench 결과 기반 — 변경 없음, 정합성만 확인</li></ul><p><strong>시간축</strong></p><p>고정 타임스탬프를 버리고 <strong>실행 시각 기준 상대 시간</strong>으로 생성한다(\"3분 전\", \"방금\"). 언제 촬영해도 살아있는 화면으로 보이게. e2e에서 시각 문자열을 단언하는 스펙은 상대 표현·패턴으로 바꾼다.</p><p><strong>완료 기준</strong></p><ul><li>콘티 순서대로 화면을 넘겼을 때 같은 세션 id · 같은 도구 호출 · 같은 정책 id가 이어짐</li><li>full / empty / offline 세 시나리오 모두 깨지지 않음</li><li>lint · typecheck · e2e 전량 통과</li><li>실제 개인정보·유효한 비밀값 없음 (합성 데이터만)</li></ul><p><strong>참고:</strong> 기능 동결 런북(GMCP-43) 1장에서 \"시연 준비: 데모 시드 데이터\"는 동결 이후에도 허용되는 변경으로 명시돼 있음. base 브랜치는 dev가 아니라 mock.</p>",
+      "comment": "updated the description to",
+      "attachments": [],
+      "old_identifier": null,
+      "new_identifier": null,
+      "epoch": 1786920293.0,
+      "project": "f08eba78-4d3a-4e3b-8086-d8663c8ba21c",
+      "workspace": "223ebd51-279b-459a-be3f-094b62cd1208",
+      "issue": "e913acdc-bec2-4ec7-835e-b2b117731059",
+      "issue_comment": null,
+      "actor": "c6713031-232e-4863-ae57-04f18071ad35"
+    }
+  ]
+}

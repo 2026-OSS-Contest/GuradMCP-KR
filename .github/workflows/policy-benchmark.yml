@@ -71,6 +71,11 @@ jobs:
           node scripts/ci/run-policy-benchmark.mjs
           --report artifacts/benchmark/metrics.json
           --summary artifacts/benchmark/summary.md
+      - name: Dry-run policy FPR gate (SPEC-POL-04 §7.2, GMCP-77)
+        if: steps.scope.outputs.required == 'true'
+        run: >-
+          npx tsx packages/cli/src/index.ts bench run --dry-run-only --fail-on-fpr 0.05
+          | tee artifacts/benchmark/dry-run-fpr.txt
       - name: Explain no-op check
         if: steps.scope.outputs.required != 'true'
         run: |

@@ -1,0 +1,28 @@
+{
+  "endpoint": "projects/f08eba78-4d3a-4e3b-8086-d8663c8ba21c/issues/ccc0c20d-a319-46ae-9699-497df2dee4a0/comments/",
+  "fetched_at": "20260821T160548Z",
+  "total_count": 1,
+  "results": [
+    {
+      "id": "85d26cfb-954d-4baf-9163-b31fd2292810",
+      "is_member": true,
+      "created_at": "2026-07-31T21:02:10.305442+09:00",
+      "updated_at": "2026-07-31T21:02:10.274576+09:00",
+      "deleted_at": null,
+      "comment_html": "&lt;p&gt;벤치마크 결과 정리 완료 — PR: &lt;a href=\"https://github.com/2026-OSS-Contest/GuradMCP-KR/pull/55\"&gt;#55 docs(benchmark): GMCP-35 벤치마크 결과 정리&lt;/a&gt; (base: dev)&lt;/p&gt;&lt;p&gt;산출물: docs/benchmark-results.md — dev@8dc45bc 실측 기준 게이트 KPI 7종 전부 통과(PII Recall 1.00 (37/37), FPR 0.00 (0/26), 공격 차단율 15/15, 시나리오 기대값 일치 29/29, 파이프라인 p95 0.192ms@10KB, author fixture 16/16, 정책 fixture 8/8). 형식 검증기로 FPR 15.4pp 감소 효과 정량화. 재현: npm ci &amp;&amp; npm run policy:validate &amp;&amp; npm run bench. 한계·개선 계획 표 포함.&lt;/p&gt;",
+      "attachments": [],
+      "access": "INTERNAL",
+      "external_source": null,
+      "external_id": null,
+      "edited_at": null,
+      "created_by": "120b9947-429c-4de3-b67a-c033f97938f7",
+      "updated_by": null,
+      "project": "f08eba78-4d3a-4e3b-8086-d8663c8ba21c",
+      "workspace": "223ebd51-279b-459a-be3f-094b62cd1208",
+      "description": "a4f9d81d-e692-407b-ab65-df030c4832fc",
+      "issue": "ccc0c20d-a319-46ae-9699-497df2dee4a0",
+      "actor": "120b9947-429c-4de3-b67a-c033f97938f7",
+      "parent": null
+    }
+  ]
+}

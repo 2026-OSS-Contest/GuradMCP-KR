@@ -647,6 +647,13 @@ function evaluatePayloadOrThrow(
  * verdict (that's GMCP-12's `decide()`, not yet on this branch). Recompute
  * the severity-max winner here so the router has a policy to source
  * severity/message/reasonCode/approval config from.
+ *
+ * SPEC-POL-04 §2.1 (GMCP-77): `result.policies`/`result.matchedPolicyIds` are already
+ * ACTIONABLE-only (see `evaluate()`'s own doc comment in policy-engine/src/index.ts), so
+ * `deciding` below can never be a shadow (`dry_run: true`) policy — that's what keeps a
+ * dry-run policy's severity/message/reasonCode from ever reaching a real block response.
+ * `result.dryRunAction`/`dryRunMatchedPolicyIds`/`wouldEscalate` are carried through
+ * unconditionally alongside, never blended into the fields above.
  */
 function toPolicyDecision(
   result: ReturnType<typeof evaluate>,
@@ -692,6 +699,13 @@ function toPolicyDecision(
             allowMaskedApproval:
               deciding.approval.allow_masked_approval ?? false,
           },
+        }
+      : {}),
+    ...(result.dryRunAction !== null
+      ? {
+          dryRunVerdict: result.dryRunAction,
+          dryRunMatchedPolicyIds: result.dryRunMatchedPolicyIds,
+          wouldEscalate: result.wouldEscalate,
         }
       : {}),
   };

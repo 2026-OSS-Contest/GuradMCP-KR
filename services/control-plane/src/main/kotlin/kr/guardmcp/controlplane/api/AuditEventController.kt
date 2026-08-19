@@ -48,6 +48,10 @@ data class GuardEventIngestRequest(
     val detections: List<Map<String, Any?>>? = null,
     val maskDiffRef: String? = null,
     val rawPayload: String? = null,
+    /** SPEC-POL-04 §4.1 (GMCP-77): absent whenever no shadow (dry_run) policy matched. */
+    val dryRunVerdict: String? = null,
+    val dryRunMatchedPolicyIds: List<String>? = null,
+    val wouldEscalate: Boolean? = null,
 )
 
 data class GuardEventIngestResponse(val eventId: UUID, val stored: Boolean)
@@ -116,6 +120,10 @@ class AuditEventController(
         }
         val verdict = GuardAction.fromWire(request.verdict)
             ?: throw ApiException(HttpStatus.BAD_REQUEST, "invalid_verdict", "unknown verdict '${request.verdict}'")
+        val dryRunVerdict = request.dryRunVerdict?.let {
+            GuardAction.fromWire(it)
+                ?: throw ApiException(HttpStatus.BAD_REQUEST, "invalid_dry_run_verdict", "unknown dryRunVerdict '$it'")
+        }
 
         val draft = GuardEventDraft(
             eventId = request.eventId,
@@ -132,6 +140,9 @@ class AuditEventController(
             // NFR-04: persisted only when THIS service has opted in, regardless of what the
             // gateway sent — defense in depth against a misconfigured or compromised emitter.
             rawPayload = request.rawPayload?.takeIf { settingsStore.current().rawPayloadStorageEnabled },
+            dryRunVerdict = dryRunVerdict?.wire,
+            dryRunMatchedPolicyIds = request.dryRunMatchedPolicyIds ?: emptyList(),
+            wouldEscalate = request.wouldEscalate ?: false,
         )
         // GuardEventRepository.insert assigns seq/prevHash/hash under the session lock (GMCP-83).
         val stored = repository.insert(draft)

@@ -1,0 +1,28 @@
+{
+  "endpoint": "projects/f08eba78-4d3a-4e3b-8086-d8663c8ba21c/issues/b0240c83-39cd-4ad3-9599-df9803028abe/comments/",
+  "fetched_at": "20260821T160548Z",
+  "total_count": 1,
+  "results": [
+    {
+      "id": "7872de5f-6995-4a18-996f-f0a4e34aaf50",
+      "is_member": true,
+      "created_at": "2026-08-19T22:06:37.782264+09:00",
+      "updated_at": "2026-08-19T22:06:37.745408+09:00",
+      "deleted_at": null,
+      "comment_html": "&lt;p&gt;&lt;strong&gt;상세 콘티 v0.2 작성 완료&lt;/strong&gt; — 산출물: &lt;code&gt;docs/submission/demo-storyboard.md&lt;/code&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;v0.1(10컷)을 촬영 실행 단위로 구체화: 9개 구간(S1~S9), 구간별 화면(SCR)·조작 단계·내레이션 대사·연출 노트 확정&lt;/li&gt;&lt;li&gt;모킹 배포(guardmcp-kr-console.vercel.app) 리허설 실측 반영: 미적용 실행 카드 재생 ~24초 → S3 슬롯 확대(0:24–0:52), Replay 원문 열람의 감사 기록 안내 모달을 S8 내레이션과 동기화&lt;/li&gt;&lt;li&gt;자동 녹화 스크립트(&lt;code&gt;scripts/record-demo-storyboard.mjs&lt;/code&gt;)가 콘티와 1:1 대응 — 재촬영 재현 가능, 총 길이 정확히 3:00&lt;/li&gt;&lt;/ul&gt;",
+      "attachments": [],
+      "access": "INTERNAL",
+      "external_source": null,
+      "external_id": null,
+      "edited_at": null,
+      "created_by": "120b9947-429c-4de3-b67a-c033f97938f7",
+      "updated_by": null,
+      "project": "f08eba78-4d3a-4e3b-8086-d8663c8ba21c",
+      "workspace": "223ebd51-279b-459a-be3f-094b62cd1208",
+      "description": "25a4ba71-a6ed-42ef-985d-bc3d61f29b00",
+      "issue": "b0240c83-39cd-4ad3-9599-df9803028abe",
+      "actor": "120b9947-429c-4de3-b67a-c033f97938f7",
+      "parent": null
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "endpoint": "projects/f08eba78-4d3a-4e3b-8086-d8663c8ba21c/issues/085d4672-a8d1-457f-b9f8-b36a7bfc838b/comments/",
+  "fetched_at": "20260821T160548Z",
+  "total_count": 1,
+  "results": [
+    {
+      "id": "429f7b7d-5f54-4ee7-839c-8246ec807e81",
+      "is_member": true,
+      "created_at": "2026-08-16T17:41:44.188315+09:00",
+      "updated_at": "2026-08-16T17:41:44.131548+09:00",
+      "deleted_at": null,
+      "comment_html": "<p><strong>PR #110</strong> — B, A-1, A-2 처리. A-3 · C-1 · C-2는 근거 남기고 종료.</p><h3>처리</h3><p><strong>B. Docker public/ 404</strong> — 런타임 스테이지에 COPY 한 줄. 4개 자산 404 → 200 확인.</p><p><strong>A-1. Mask Diff</strong> — 목 픽스처 공급. 근본 원인 확정: <code>maskDiffRef</code>가 가리키는 <code>GET /events/{id}/mask-diff</code>는 화면설계서 6.2 신규 API 8건에 없고 구현체도 없어, 어떤 클라이언트도 부를 수 없는 URL이었다.</p><p><strong>A-2. Agent 노드 제목</strong> — 서체만의 문제가 아니었다. <code>USER_INPUT</code>/<code>AGENT_STEP</code> 노드가 직전 <code>TOOL_CALL</code>의 도구명을 상속해서 제목이 <code>read_file</code>이 되고 있었다. 프레임(<code>…-agent-단계</code>)은 그 자리에 노드 자신의 요약을 title 서체로 쓴다. 상속 제거 + <code>text-title-text-t1-bd</code>. 디자이너 확인 항목이었던 \"도구명 노출이 맞는지\"는 <strong>프레임이 답을 갖고 있었다 — 도구명이 아니라 요약이다.</strong></p><h3>대조 중 발견 (C-3의 SCR-301 결과, 같은 PR에 포함)</h3><p>타임라인 6개 노드 중 <strong>판정 노드 하나만 본문이 있고 나머지 5개는 헤더만</strong> 렌더되고 있었다. GMCP-28 wire contract에 Agent 보고 · 본문 라인 · 실제 인자(<code>sha256:</code> digest만 반환) · 방향별 판정이 없어 어댑터가 전부 <code>undefined</code>로 두고 있었다. A-1과 같은 원인이라 같은 방식(optional + 목 공급)으로 함께 채웠다: 입력 원문 / Agent 보고 요약 / 대상·인자 / 반환 데이터 요약 / 요청·응답 방향 판정.</p><h3>근거 남기고 종료</h3><p><strong>A-3. 세션 카드 시간 정렬 — 재현되지 않음.</strong> 현재 빌드 재측정에서 3장 모두 동일: 시간 우측 끝 476px, 카드 우측 여백 12px, 구분선 208px. 8/14 측정과 같은 값. 레이아웃도 <code>justify-between</code> 단일 경로라 LIVE 여부로 갈리지 않는다.</p><p><strong>C-1. radius — 해당 결함 유형 없음.</strong> \"자기 배경을 그리는 SVG가 컨테이너를 꽉 채우는\" 패턴을 8개 화면 전수 탐색: 3곳뿐이고 리플레이 재생·처음으로는 #102에서 12px로 수정 완료, 디텍터 것은 원형 컨테이너 안 원형 아이콘이라 정상. 별개로 Tailwind radius 매핑이 디자인보다 한 단계 큰 문제는 남지만, 이는 AGENTS.md에 문서화된 기존 상태이지 회귀가 아니다.</p><p><strong>C-2. 모션 — reduced-motion 충족.</strong> <code>verdict-seal</code> / <code>event-tint</code> / <code>pane-shimmer</code> / <code>animate-pulse</code> 사용처 전부 <code>motion-reduce:animate-none</code>이 붙어 있다(GMCP-90). 남은 건 기획서에 10.8이 없다는 문서 공백.</p><h3>디자이너 확인 필요 (미구현)</h3><p><code>…-mask-diff-상세-보기-클릭-시</code> 프레임은 인라인 펼침이 아니라 <strong>모달</strong>을 띄우고, 그 안에 마스킹 전 원문(전화번호·계좌·주민번호 실값)이 그대로 보인다. 그대로 구현하면 원문 열람의 감사 로그 확인 절차를 우회해 원문이 노출된다. 보안 제품에서 회귀라 판단해 <strong>인라인 펼침을 유지했다.</strong> 의도 확인 후 결정.</p><h3>신규 결함 (별도 티켓 필요)</h3><p><strong>i18n <code>no Korean in en</code> 검사가 SCR-301에서 무효.</strong> <code>settle()</code>이 <code>[data-scr]</code> + <code>.animate-pulse</code> 0만 기다리는데 리플레이 타임라인은 스켈레톤이 없어 그 시점에 아직 비어 있다. 실측: settle 시점 <code>[]</code>, 2초 뒤 한국어 5건. 이 PR 이전부터 존재한 결함. 다만 목 데이터는 한국형 PII 데모라 의도적으로 한국어여서, 고치려면 chrome과 data를 구분해야 한다.</p><h3>검증</h3><p><code>npm run lint</code> 통과 · <code>npm run typecheck</code> 통과 · <code>npm run test:e2e</code> 120 passed. e2e 1건 추가(6개 노드가 각자의 설계 섹션을 렌더하는지).</p>",
+      "attachments": [],
+      "access": "INTERNAL",
+      "external_source": null,
+      "external_id": null,
+      "edited_at": null,
+      "created_by": "c6713031-232e-4863-ae57-04f18071ad35",
+      "updated_by": null,
+      "project": "f08eba78-4d3a-4e3b-8086-d8663c8ba21c",
+      "workspace": "223ebd51-279b-459a-be3f-094b62cd1208",
+      "description": "f526652b-17d6-412c-96c8-af7918a8765f",
+      "issue": "085d4672-a8d1-457f-b9f8-b36a7bfc838b",
+      "actor": "c6713031-232e-4863-ae57-04f18071ad35",
+      "parent": null
+    }
+  ]
+}

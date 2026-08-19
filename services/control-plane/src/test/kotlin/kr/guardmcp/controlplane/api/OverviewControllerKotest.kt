@@ -5,6 +5,7 @@ import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.shouldBe
 import kr.guardmcp.controlplane.domain.EventBroadcaster
 import kr.guardmcp.controlplane.domain.GuardEventRepository
+import kr.guardmcp.controlplane.domain.PolicyBenchmarkResultStore
 import kr.guardmcp.controlplane.domain.PolicyFixtures
 import kr.guardmcp.controlplane.domain.PolicyStore
 import kr.guardmcp.controlplane.domain.RawPayloadCrypto
@@ -16,8 +17,8 @@ import org.springframework.transaction.TransactionStatus
 import java.time.Clock
 
 class OverviewControllerKotest : StringSpec({
-    // This test never calls policyStats() or insert(), the only methods touching the repository
-    // or its collaborators, so unconnected/never-invoked stand-ins are safe to wire in here.
+    // This test never calls policyStats()/submitBenchmarkResult()/insert() — the only methods
+    // touching either store — so unconnected/never-invoked stand-ins are safe to wire in here.
     val neverInvokedTransactionManager = object : PlatformTransactionManager {
         override fun getTransaction(definition: TransactionDefinition?): TransactionStatus = error("not used by this test")
         override fun commit(status: TransactionStatus) = error("not used by this test")
@@ -32,6 +33,7 @@ class OverviewControllerKotest : StringSpec({
                 RawPayloadStore(JdbcTemplate(), RawPayloadCrypto("", "v1")),
                 neverInvokedTransactionManager,
             ),
+            PolicyBenchmarkResultStore(JdbcTemplate()),
             clock,
             EventBroadcaster(),
             "",

@@ -1,0 +1,28 @@
+{
+  "endpoint": "projects/f08eba78-4d3a-4e3b-8086-d8663c8ba21c/issues/633cb9fc-322b-46b2-9ca5-d994c042eede/comments/",
+  "fetched_at": "20260821T160548Z",
+  "total_count": 1,
+  "results": [
+    {
+      "id": "2104cb65-449b-4dbe-ab01-d24a1f1dc7b7",
+      "is_member": true,
+      "created_at": "2026-07-31T23:53:31.362587+09:00",
+      "updated_at": "2026-07-31T23:53:31.327013+09:00",
+      "deleted_at": null,
+      "comment_html": "&lt;p&gt;&lt;strong&gt;PR &lt;a href=\"https://github.com/2026-OSS-Contest/GuradMCP-KR/pull/61\"&gt;#61&lt;/a&gt; 리뷰 완료 — 변경 요청 (실행 검증 기반)&lt;/strong&gt;&lt;/p&gt;&lt;p&gt;승인 배지 SSE 구동·세션 드롭다운으로 SCR-000을 채우는 좋은 방향이나, 실행 재현으로 확인된 수정 필요 사항:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;&lt;strong&gt;MAJOR&lt;/strong&gt;: 폴링 재조정이 in-flight SSE 델타를 유실 → 배지가 8초간 오답 표시 재현(실제 2건인데 \"승인 대기 1\"). PR 본문의 \"표류하지 않음\" 주장과 배치&lt;/li&gt;&lt;li&gt;&lt;strong&gt;MAJOR&lt;/strong&gt;: 목 /overview 하드코딩이 자기 승인 이벤트와 모순 — empty 시나리오 빈 콘솔에 배지 출현 재현&lt;/li&gt;&lt;li&gt;&lt;strong&gt;MAJOR&lt;/strong&gt;: 오류 문구의 \"다시 열어 주세요\"가 실제 재조회를 트리거하지 않음(재오픈 시 요청 0건 재현)&lt;/li&gt;&lt;li&gt;&lt;strong&gt;MAJOR&lt;/strong&gt;: 열린 listbox에서 Tab 이탈 시 닫히지 않음 + MINOR/NIT 다수(포커스 복원, aria-controls, 영어 복수형, useEventStream 미재사용 등)&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;접근성 구조·web-first e2e·주석 품질은 우수. 상세 재현 로그·수정안은 GitHub 리뷰 본문 참조. 수정 커밋 시 20분 주기에서 재리뷰 예정. 상태는 In Progress 유지.&lt;/p&gt;",
+      "attachments": [],
+      "access": "INTERNAL",
+      "external_source": null,
+      "external_id": null,
+      "edited_at": null,
+      "created_by": "120b9947-429c-4de3-b67a-c033f97938f7",
+      "updated_by": null,
+      "project": "f08eba78-4d3a-4e3b-8086-d8663c8ba21c",
+      "workspace": "223ebd51-279b-459a-be3f-094b62cd1208",
+      "description": "ffb75652-ca9e-40f7-9162-93c5ab687460",
+      "issue": "633cb9fc-322b-46b2-9ca5-d994c042eede",
+      "actor": "120b9947-429c-4de3-b67a-c033f97938f7",
+      "parent": null
+    }
+  ]
+}

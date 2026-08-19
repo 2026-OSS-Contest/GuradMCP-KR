@@ -1,0 +1,28 @@
+{
+  "endpoint": "projects/f08eba78-4d3a-4e3b-8086-d8663c8ba21c/issues/1fda13f3-0ea3-4d82-8017-578608f3b668/comments/",
+  "fetched_at": "20260821T160548Z",
+  "total_count": 1,
+  "results": [
+    {
+      "id": "ad550be5-ec25-40d8-975a-e2f673db1350",
+      "is_member": true,
+      "created_at": "2026-07-31T21:10:04.436432+09:00",
+      "updated_at": "2026-07-31T21:10:04.405499+09:00",
+      "deleted_at": null,
+      "comment_html": "&lt;p&gt;E2E 테스트 작성 완료 — PR: &lt;a href=\"https://github.com/2026-OSS-Contest/GuradMCP-KR/pull/59\"&gt;#59&lt;/a&gt; (base: dev)&lt;/p&gt;&lt;ul&gt;&lt;li&gt;attack-replay.spec.ts: 차단 이벤트 → Replay 딥링크·상세 확인(주 시나리오), SCR-201 공격 트리거 UI 갭은 스텁 고정 테스트로 명시&lt;/li&gt;&lt;li&gt;approvals.spec.ts: 상태바 승인 대기 배지 → /approvals 진입 2경로 (승인 3택 UI는 SCR-402 스텁 상태라 실 플로우는 UI 구현 후 확장)&lt;/li&gt;&lt;li&gt;sse.spec.ts: SSE guard.event 수신 렌더링 + insert-tint 표시·해제 검증&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;검증: 전체 21개(기존 15+신규 6) 3연속 green(11.1s/11.1s/11.0s, 플레이키 0), lint·typecheck clean. 기존 MSW 목 레이어를 활용해 백엔드 없이 자립 실행. CI playwright 잡으로 자동 실행됨.&lt;/p&gt;",
+      "attachments": [],
+      "access": "INTERNAL",
+      "external_source": null,
+      "external_id": null,
+      "edited_at": null,
+      "created_by": "120b9947-429c-4de3-b67a-c033f97938f7",
+      "updated_by": null,
+      "project": "f08eba78-4d3a-4e3b-8086-d8663c8ba21c",
+      "workspace": "223ebd51-279b-459a-be3f-094b62cd1208",
+      "description": "2cee2465-294b-4dd6-a388-a1632622768f",
+      "issue": "1fda13f3-0ea3-4d82-8017-578608f3b668",
+      "actor": "120b9947-429c-4de3-b67a-c033f97938f7",
+      "parent": null
+    }
+  ]
+}

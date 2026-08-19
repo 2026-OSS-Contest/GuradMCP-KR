@@ -71,6 +71,18 @@ export interface PolicyDecision {
     allowMaskedApproval: boolean;
   };
   /**
+   * SPEC-POL-04 §3.2/§4.1 (GMCP-77): the shadow (`dry_run: true`) policy group's own
+   * severity-max action, computed by the Policy Engine alongside `verdict` but never folded
+   * into it — `verdict` above always stays the ACTIONABLE-only decision (§2.1 zero-side-effect
+   * guarantee). Absent, never `null`, when no shadow policy matched — matching this
+   * interface's existing convention for optional fields (`normalizedPath`, `errorInfo`, ...).
+   */
+  dryRunVerdict?: Action;
+  /** SPEC-POL-04 §4.1: shadow policies that matched, priority-ascending. Absent when `dryRunVerdict` is. */
+  dryRunMatchedPolicyIds?: string[];
+  /** SPEC-POL-04 §3.2 규칙5: `dryRunVerdict` outranks `verdict` on {@link ACTION_RANK}. Absent when `dryRunVerdict` is. */
+  wouldEscalate?: boolean;
+  /**
    * Present only on a decision synthesized by the pipeline's fail-closed/fail-open boundary
    * (NFR-03, GMCP-68 §4.2) — never set by the Policy Engine itself. Carried through to the
    * emitted GuardEvent by `buildGuardEvent` (actionRouter.ts).
@@ -165,6 +177,18 @@ export interface GuardEvent {
   failurePolicyApplied?: FailurePolicy;
   /** FR-INJ-04 (GMCP-57): the optional adjudicator's answer and its own latency, when it ran. */
   llmAdjudication?: LlmAdjudication;
+  /**
+   * SPEC-POL-04 §4.1 (GMCP-77): the shadow policy group's own verdict — "what would have
+   * happened if the dry-run policies that matched were actually active" — never the same
+   * field as `verdict` above, which always stays the real, actionable-only decision. Absent
+   * (never `null`) when no shadow policy matched this event, matching this type's existing
+   * convention for optional fields.
+   */
+  dryRunVerdict?: Action;
+  /** SPEC-POL-04 §4.1: shadow policies that matched, priority-ascending. Absent when `dryRunVerdict` is. */
+  dryRunMatchedPolicyIds?: string[];
+  /** SPEC-POL-04 §3.2 규칙5: `dryRunVerdict` outranks `verdict`. Absent when `dryRunVerdict` is. */
+  wouldEscalate?: boolean;
   /**
    * NFR-04/GMCP-84 §9 opt-in only: populated by `buildGuardEvent` (actionRouter.ts) solely when
    * both `AUDIT_STORE_RAW_PAYLOAD=true` *and* the Control Plane's live `rawPayloadStorageEnabled`
