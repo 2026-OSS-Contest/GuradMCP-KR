@@ -34,6 +34,7 @@ const manifestFields = new Set([
   "evaluation_strategy",
   "extends",
   "policies",
+  "default_dry_run",
 ]);
 const policyFields = new Set([
   "id",
@@ -48,6 +49,7 @@ const policyFields = new Set([
   "reasonCode",
   "enabled",
   "approval",
+  "dry_run",
 ]);
 const matchFields = new Set([
   "direction",
@@ -129,6 +131,11 @@ for (const packName of await directoryNames(root)) {
         !manifest.extends.every((entry) => typeof entry === "string"))
     )
       failures.push(`${manifestPath}: extends must be a string list`);
+    if (
+      manifest.default_dry_run !== undefined &&
+      typeof manifest.default_dry_run !== "boolean"
+    )
+      failures.push(`${manifestPath}: default_dry_run must be boolean`);
   }
 
   for (const path of await policyFiles(packPath)) {
@@ -161,6 +168,8 @@ for (const packName of await directoryNames(root)) {
     if (policy.version !== 1) failures.push(`${path}: version must be 1`);
     if (policy.enabled !== undefined && typeof policy.enabled !== "boolean")
       failures.push(`${path}: enabled must be boolean`);
+    if (policy.dry_run !== undefined && typeof policy.dry_run !== "boolean")
+      failures.push(`${path}: dry_run must be boolean`);
     if (
       policy.description !== undefined &&
       typeof policy.description !== "string"

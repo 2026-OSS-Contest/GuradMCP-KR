@@ -179,10 +179,15 @@ class ServerRegistryStore(private val clock: Clock, private val policyStore: Pol
      * YAML) — so this counts currently enabled blocking/approval-gate policies system-wide as
      * a proxy for "what might stop applying," rather than resolving per-server `server_trust`
      * targeting precisely.
+     *
+     * Excludes `dryRun` policies (SPEC-POL-04, GMCP-77): one is evaluated and scored like any
+     * other but never actually blocks or gates anything (§2.1's zero-side-effect guarantee), so
+     * counting it here would overstate this trust upgrade's real impact on an operator who is
+     * deciding whether to confirm it.
      */
     private fun affectedPolicyCount(currentTrust: TrustLevel): Int {
         if (currentTrust == TrustLevel.TRUSTED) return 0
-        return policyStore.listPolicies().count { it.action == GuardAction.BLOCK || it.action == GuardAction.REQUIRE_APPROVAL }
+        return policyStore.listPolicies().count { (it.action == GuardAction.BLOCK || it.action == GuardAction.REQUIRE_APPROVAL) && !it.dryRun }
     }
 
     /** §5.1: change is pushed to subscribers immediately rather than left to a poll interval. */

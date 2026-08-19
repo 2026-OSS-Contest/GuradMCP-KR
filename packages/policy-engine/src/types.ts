@@ -150,13 +150,51 @@ export interface Policy {
     on_timeout: "block";
     allow_masked_approval?: boolean;
   };
+  /**
+   * SPEC-POL-04 §3.1 (GMCP-77): when `true`, this policy is evaluated (matching, detection
+   * combination, risk_score conditions — everything §2.3 promises) but excluded from the
+   * severity-max action adoption and every stage after it (approval queue, masking, block
+   * response). Kept snake_case, unlike this interface's other camelCase fields, on purpose:
+   * every YAML-to-`Policy` path in this repo — this package's own `parsePolicyFile.toPolicy`,
+   * the gateway's `scripts/compile-runtime-policies.ts` codegen, and
+   * `attack-lab/benchmark/benchmark.ts`'s ad-hoc `parse(...) as Policy` — does a verbatim
+   * round-trip with no key renaming. Naming this field `dryRun` would make it silently
+   * `undefined` (and therefore actionable) everywhere except a test that constructs a
+   * `Policy` object by hand, which is exactly the failure mode that must not happen to a
+   * safety guarantee. `undefined`/`false` both mean "actionable"; only `true` means shadow.
+   */
+  dry_run?: boolean;
 }
+
+/**
+ * SPEC-POL-04 §3.2 규칙4: the shadow (dry-run) group's own severity-max verdict, computed
+ * independently of the actionable group's. `null` when no shadow policy matched.
+ */
+export interface VirtualVerdict {
+  action: Action;
+  severity: Severity;
+}
+
+/**
+ * SPEC-POL-04 §7.1: forces every matched policy into the shadow group regardless of its own
+ * `dry_run` value, for the Benchmark Runner's `--dry-run-only` replay (evaluating a whole pack
+ * as an observation without ever risking a real action). Never settable from an inbound Tool
+ * Call — see `evaluate()`/`evaluatePolicies()` callers in the gateway, which never pass it.
+ */
+export type EvaluationMode = "normal" | "shadow-all";
 
 /** Output of the GMCP-7 `evaluate()` pipeline wrapper (index.ts). */
 export interface MatchEvaluation {
   action: Action;
   matchedPolicyIds: string[];
   policies: Policy[];
+  /** SPEC-POL-04 §3.2 규칙4: shadow group's severity-max action, or `null` if none matched. */
+  dryRunAction: Action | null;
+  /** SPEC-POL-04 §4.1: shadow policies that matched, priority-ascending. */
+  dryRunMatchedPolicyIds: string[];
+  dryRunPolicies: Policy[];
+  /** SPEC-POL-04 §3.2 규칙5: `dryRunAction` outranks `action` on {@link ACTION_RANK}. */
+  wouldEscalate: boolean;
 }
 
 /**
@@ -184,10 +222,18 @@ export interface PolicyPackConfig {
 export interface EvaluationResult {
   action: Action;
   severity: Severity | null; // null when default_action was adopted
-  matchedPolicyIds: string[]; // priority-ascending; full list, not just the winner
+  /** priority-ascending; every ACTIONABLE match, not just the winner (SPEC-POL-04 §4.1: a
+   *  shadow/dry-run match never appears here — see `dryRunMatchedPolicyIds`). */
+  matchedPolicyIds: string[];
   winningPolicyId: string | null; // policy that decided `action`; null when unmatched
   strategy: EvaluationStrategy;
-  usedDefault: boolean; // true when no policy matched and default_action was used
+  usedDefault: boolean; // true when no ACTIONABLE policy matched and default_action was used
+  /** SPEC-POL-04 §3.2 규칙4: shadow group's own severity-max verdict; `null` if none matched. */
+  virtualVerdict: VirtualVerdict | null;
+  /** SPEC-POL-04 §4.1: shadow (dry_run: true, or forced by `mode: "shadow-all"`) matches, priority-ascending. */
+  dryRunMatchedPolicyIds: string[];
+  /** SPEC-POL-04 §3.2 규칙5: `virtualVerdict.action` outranks `action` on {@link ACTION_RANK}. */
+  wouldEscalate: boolean;
 }
 
 /**
@@ -221,11 +267,19 @@ export interface DecisionInput {
   strategy?: EvaluationStrategy; // default: severity-max
   defaultAction?: Action; // policy-pack default_action; when set, wins over strictMode
   strictMode?: boolean; // true: unmatched events resolve to warn, but only when defaultAction is unset
+  /** SPEC-POL-04 §7.1: Benchmark Runner-only escape hatch; never set from a live Tool Call. */
+  mode?: EvaluationMode;
 }
 
 export interface DecisionResult {
   verdict: Action;
-  matchedPolicyIds: string[]; // all matched policies, in priority-ascending order
+  matchedPolicyIds: string[]; // all ACTIONABLE matches, in priority-ascending order
   decidingPolicyId: string | null; // policy that decided verdict; null when unmatched
   reason: string;
+  /** SPEC-POL-04 §4.1 `GuardEvent.dryRunVerdict`: shadow group's action, or `null`/absent when nothing shadow-matched. */
+  dryRunVerdict: Action | null;
+  /** SPEC-POL-04 §4.1 `GuardEvent.dryRunMatchedPolicyIds`. */
+  dryRunMatchedPolicyIds: string[];
+  /** SPEC-POL-04 §4.1 `GuardEvent.wouldEscalate`. */
+  wouldEscalate: boolean;
 }

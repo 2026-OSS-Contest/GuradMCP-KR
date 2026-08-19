@@ -1,0 +1,9 @@
+id: opted_out_block
+pack: dry-run-pack
+priority: 90
+dry_run: false
+match:
+  tool: opted_out_tool
+action: block
+severity: high
+message: Explicit dry_run false overrides the pack's default_dry_run.

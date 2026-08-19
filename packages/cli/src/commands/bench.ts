@@ -10,11 +10,23 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { runBenchmark, type BenchmarkReport } from "../../../../attack-lab/benchmark/benchmark.js";
-import { readValue, UsageError } from "../lib/argv.js";
+import { runDryRunBenchmark, type DryRunBenchmarkReport } from "../../../../attack-lab/benchmark/dryRunBenchmark.js";
+import { loadPolicyPacks } from "../../../policy-engine/src/index.js";
+import { readFlag, readValue, UsageError } from "../lib/argv.js";
 
 const SUPPORTED_FORMATS = new Set(["json", "md", "html"]);
 
+/** §7.1's own example names `attack-lab/datasets/normal-kr-v1`, a dataset this repo hasn't
+ *  shipped; the closest existing one with real (`label: false`) Korean-context negatives is
+ *  this file — see attack-lab/benchmark/benchmark.ts's own use of it. `--dataset` overrides. */
+const DEFAULT_DRY_RUN_DATASET = "attack-lab/datasets/pii-benchmark.json";
+
 export async function benchRun(argv: string[]): Promise<void> {
+  if (readFlag(argv, "--dry-run-only")) {
+    await benchDryRunOnly(argv);
+    return;
+  }
+
   const format = readValue(argv, "--format") ?? "json";
   if (!SUPPORTED_FORMATS.has(format)) {
     throw new UsageError(`--format must be json, md, or html, got ${format}`);
@@ -52,6 +64,81 @@ export async function benchRun(argv: string[]): Promise<void> {
 async function writeReportFile(path: string, content: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, content);
+}
+
+/**
+ * SPEC-POL-04 §7.1/§7.2: replay a labeled-normal dataset in shadow mode and report each
+ * matched policy's FPR. `--fail-on-fpr <threshold>` is the CI gate §7.2 asks for (policy-pack
+ * PRs fail the build past it); posting to the Control Plane (§6.2/§6.1 `benchmark` block) is
+ * best-effort — a CI run has no Control Plane reachable, and this must report what it measured
+ * either way, not fail the run over who's listening (same posture as ./dryRunStats.ts's own
+ * "consulted, not required").
+ */
+async function benchDryRunOnly(argv: string[]): Promise<void> {
+  const datasetPath = readValue(argv, "--dataset") ?? DEFAULT_DRY_RUN_DATASET;
+  const failOnFprArg = readValue(argv, "--fail-on-fpr");
+  const failOnFpr = failOnFprArg !== undefined ? Number(failOnFprArg) : undefined;
+  if (failOnFprArg !== undefined && (!Number.isFinite(failOnFpr) || (failOnFpr as number) < 0 || (failOnFpr as number) > 1)) {
+    throw new UsageError(`--fail-on-fpr must be a number between 0 and 1, got ${failOnFprArg}`);
+  }
+
+  const registry = await loadPolicyPacks("policy-packs");
+  const policies = registry.getActivePolicies();
+  const report = await runDryRunBenchmark({ datasetPath, policies, mode: "shadow-all" });
+
+  process.stdout.write(`${renderDryRunReport(report)}\n`);
+
+  if (process.env.CONTROL_PLANE_URL) await postBenchmarkResults(report);
+
+  if (failOnFpr !== undefined) {
+    const failures = report.perPolicy.filter(({ fpr }) => fpr > failOnFpr);
+    if (failures.length > 0) {
+      process.stderr.write(
+        `FPR gate failed (> ${failOnFpr}): ${failures.map(({ policyId, fpr }) => `${policyId}=${fpr.toFixed(4)}`).join(", ")}\n`
+      );
+      process.exitCode = 1;
+    }
+  }
+}
+
+function renderDryRunReport(report: DryRunBenchmarkReport): string {
+  const lines = [
+    `guardmcp bench run --dry-run-only  (dataset: ${report.datasetVersion}, ${report.normalSampleCount} normal samples, mode: ${report.mode})`,
+    "",
+    "policyId".padEnd(40) + "fpCount".padStart(10) + "fpr".padStart(10)
+  ];
+  for (const { policyId, falsePositiveCount, fpr } of report.perPolicy) {
+    lines.push(policyId.padEnd(40) + String(falsePositiveCount).padStart(10) + `${(fpr * 100).toFixed(2)}%`.padStart(10));
+  }
+  if (report.perPolicy.length === 0) lines.push("(no policy matched any normal sample)");
+  return lines.join("\n");
+}
+
+/** Fire-and-forget-ish: logged on failure, never thrown — a report this CLI already printed
+ *  to stdout must not be lost because the Control Plane happened to be unreachable. */
+async function postBenchmarkResults(report: DryRunBenchmarkReport): Promise<void> {
+  const baseUrl = process.env.CONTROL_PLANE_URL as string;
+  for (const { policyId, falsePositiveCount } of report.perPolicy) {
+    const url = `${baseUrl.replace(/\/$/, "")}/api/v1/policies/${encodeURIComponent(policyId)}/benchmark-results`;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          datasetVersion: report.datasetVersion,
+          normalSampleCount: report.normalSampleCount,
+          falsePositiveCount
+        })
+      });
+      if (!response.ok) {
+        process.stderr.write(`warning: control plane rejected benchmark result for ${policyId} (${response.status})\n`);
+      }
+    } catch (error) {
+      process.stderr.write(
+        `warning: could not post benchmark result for ${policyId}: ${error instanceof Error ? error.message : String(error)}\n`
+      );
+    }
+  }
 }
 
 export async function benchCompare(argv: string[]): Promise<void> {

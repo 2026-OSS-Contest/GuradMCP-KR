@@ -1,0 +1,18 @@
+id: block_large_address_dump_positive
+description: >-
+  A single Korean street address at risk_score 65 matches the dry-run policy's shadow
+  condition, but the real verdict stays mask_then_allow — SPEC-POL-04's zero-side-effect
+  guarantee means the shadow match rides alongside the masking policy's own match, never
+  replacing it.
+coverage:
+  policy_id: block_large_address_dump
+  expectation: match
+event:
+  direction: response
+  tool: customer_lookup
+  server_trust: untrusted
+  detections: [PII.ADDRESS]
+  risk_score: 65
+expected:
+  action: mask_then_allow
+  matched_policy_ids: [mask_korean_pii_response, block_large_address_dump]

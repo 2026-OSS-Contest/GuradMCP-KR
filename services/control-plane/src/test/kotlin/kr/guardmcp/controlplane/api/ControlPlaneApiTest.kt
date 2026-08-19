@@ -299,7 +299,8 @@ class ControlPlaneApiTest : ApiTestSupport() {
         val packs = get("/api/v1/policy-packs")
 
         assertEquals(200, policies.statusCode())
-        assertEquals(3, parseList(policies.body()).size)
+        // GMCP-77 added a fourth seeded policy (`block_large_address_dump`, dry_run: true).
+        assertEquals(4, parseList(policies.body()).size)
         assertEquals(200, packs.statusCode())
         assertEquals(2, parseList(packs.body()).size)
     }
