@@ -1,0 +1,16 @@
+id: block_large_address_dump_negative
+description: >-
+  Same single address, but risk_score 40 falls below this policy's gte:60 threshold, so
+  the shadow condition never matches — only the masking policy does.
+coverage:
+  policy_id: block_large_address_dump
+  expectation: not_match
+event:
+  direction: response
+  tool: customer_lookup
+  server_trust: trusted
+  detections: [PII.ADDRESS]
+  risk_score: 40
+expected:
+  action: mask_then_allow
+  matched_policy_ids: [mask_korean_pii_response]

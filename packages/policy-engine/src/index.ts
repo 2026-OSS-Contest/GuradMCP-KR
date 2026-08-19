@@ -10,6 +10,7 @@ export type {
   Direction,
   ServerTrust,
   EvaluationStrategy,
+  EvaluationMode,
   DetectionType,
   Detection,
   PolicyContext,
@@ -17,6 +18,7 @@ export type {
   MatchDefinition,
   PolicyMatch,
   Policy,
+  VirtualVerdict,
   MatchEvaluation,
   PolicyPackConfig,
   EvaluationResult,
@@ -26,6 +28,7 @@ export type {
   ReasonCode,
 } from "./types.js";
 export { actions, severities, reasonCodes } from "./types.js";
+export { splitShadow, severityMaxVirtualVerdict, computeWouldEscalate } from "./shadow.js";
 
 export {
   matchesPolicy,
@@ -81,42 +84,55 @@ export {
 
 import type {
   Action,
+  EvaluationMode,
   MatchEvaluation,
   EvaluationStrategy,
   Policy,
   PolicyContext,
 } from "./types.js";
 import { matchesPolicy } from "./matcher.js";
+import { computeWouldEscalate, severityMaxVirtualVerdict, splitShadow } from "./shadow.js";
+import { ACTION_RANK } from "./action-rank.js";
 
+/**
+ * SPEC-POL-04 §3.2/§5.1 (GMCP-77): this is the function `packages/gateway/src/server.ts`'s
+ * `evaluatePayloadOrThrow` actually calls for every live Tool Call — not `evaluatePolicies()`
+ * (evaluate.ts), which only the GMCP-12 `decide()` adapter (attack-lab runner/benchmark) uses.
+ * The shadow/actionable split has to live here too, or dry-run policies would only be inert on
+ * the benchmark's evaluation path and would actually fire in production.
+ *
+ * `matched`/`policies`/`matchedPolicyIds` stay ACTIONABLE-only (§2.1's zero-side-effect
+ * guarantee, §4.1's `GuardEvent.matchedPolicyIds` contract): `server.ts`'s `toPolicyDecision`
+ * picks its "deciding policy" — the source of the block error's severity/message/reasonCode —
+ * by reducing over `result.policies`, so a shadow policy leaking into that list would let a
+ * dry-run `block` policy's message reach a real block response even while `action` itself
+ * stayed correct. `dryRunAction`/`dryRunMatchedPolicyIds`/`wouldEscalate` carry the shadow
+ * group's own verdict alongside, never blended into the fields above.
+ */
 export function evaluate(
   policies: Policy[],
   context: PolicyContext,
   defaultAction: Action = "allow",
-
   strategy: EvaluationStrategy = "severity-max",
+  mode: EvaluationMode = "normal",
 ): MatchEvaluation {
-  const matched = [...policies]
+  const sorted = [...policies]
     .filter((policy) => policy.enabled !== false)
     .sort(
       (left, right) =>
         left.priority - right.priority || left.id.localeCompare(right.id),
-    )
-    .filter((policy) => matchesPolicy(policy, context));
+    );
+  const matched = sorted.filter((policy) => matchesPolicy(policy, context));
 
-  const actionWeight: Record<Action, number> = {
-    allow: 0,
-    mask_then_allow: 1,
-    warn: 2,
-    require_approval: 3,
-    block: 4,
-  };
+  const { actionable, shadow } = splitShadow(matched, mode);
+  const virtualVerdict = severityMaxVirtualVerdict(shadow);
 
   const action =
     strategy === "first-match"
-      ? (matched[0]?.action ?? defaultAction)
-      : matched.reduce<Action>(
+      ? (actionable[0]?.action ?? defaultAction)
+      : actionable.reduce<Action>(
           (strongest, policy) =>
-            actionWeight[policy.action] > actionWeight[strongest]
+            ACTION_RANK[policy.action] > ACTION_RANK[strongest]
               ? policy.action
               : strongest,
           defaultAction,
@@ -124,7 +140,11 @@ export function evaluate(
 
   return {
     action,
-    matchedPolicyIds: matched.map(({ id }) => id),
-    policies: matched,
+    matchedPolicyIds: actionable.map(({ id }) => id),
+    policies: actionable,
+    dryRunAction: virtualVerdict?.action ?? null,
+    dryRunMatchedPolicyIds: shadow.map(({ id }) => id),
+    dryRunPolicies: shadow,
+    wouldEscalate: computeWouldEscalate(action, virtualVerdict),
   };
 }

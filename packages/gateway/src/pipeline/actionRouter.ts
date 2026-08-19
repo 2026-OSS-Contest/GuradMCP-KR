@@ -334,6 +334,15 @@ function buildGuardEvent(
     ...(decision.llmAdjudication !== undefined
       ? { llmAdjudication: decision.llmAdjudication }
       : {}),
+    // SPEC-POL-04 §4.1 (GMCP-77): only present when a shadow (dry_run) policy matched this
+    // event — never blended into `verdict`/`matchedPolicyIds` above (§2.1 zero-side-effect).
+    ...(decision.dryRunVerdict !== undefined
+      ? {
+          dryRunVerdict: decision.dryRunVerdict,
+          dryRunMatchedPolicyIds: decision.dryRunMatchedPolicyIds ?? [],
+          wouldEscalate: decision.wouldEscalate ?? false,
+        }
+      : {}),
     ...(storeRawPayload ? { rawPayload: ctx.payload } : {}),
     ...extras,
   };

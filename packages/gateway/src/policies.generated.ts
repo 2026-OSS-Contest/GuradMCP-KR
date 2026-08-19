@@ -305,6 +305,28 @@ export const runtimePolicyPacks: Record<string, RuntimePolicyPack> = {
           "allow_masked_approval": true
         },
         "message": "Sending personal data outside the organization requires approval."
+      },
+      {
+        "id": "block_large_address_dump",
+        "pack": "korean-pii",
+        "version": 1,
+        "description": "응답 내 주소 노출 시 차단 여부를 검증 중 (dry-run)",
+        "priority": 150,
+        "dry_run": true,
+        "match": {
+          "direction": "response",
+          "detections": {
+            "any_of": [
+              "PII.ADDRESS"
+            ]
+          },
+          "risk_score": {
+            "gte": 60
+          }
+        },
+        "action": "block",
+        "severity": "high",
+        "message": "A response disclosing a Korean street address would have been blocked by this policy."
       }
     ]
   }

@@ -46,6 +46,15 @@ data class GuardEventRecord(
     val seq: Long? = null,
     val prevHash: String? = null,
     val hash: String? = null,
+    /**
+     * SPEC-POL-04 §4.1 (GMCP-77): the shadow (dry_run) policy group's own verdict for this
+     * event, or null when no dry-run policy matched — never a synthesized 'allow'. Defaulted
+     * to null/empty/false so every pre-GMCP-77 fixture/test that builds a [GuardEventRecord]
+     * without these (the same reasoning as `seq`/`prevHash`/`hash` above) keeps compiling.
+     */
+    val dryRunVerdict: String? = null,
+    val dryRunMatchedPolicyIds: List<String> = emptyList(),
+    val wouldEscalate: Boolean = false,
 )
 
 /**
@@ -66,6 +75,10 @@ data class GuardEventDraft(
     val detections: List<Map<String, Any?>>,
     val maskDiffRef: String?,
     val rawPayload: String?,
+    /** SPEC-POL-04 §4.1 (GMCP-77): see [GuardEventRecord]'s doc comment for the same fields. */
+    val dryRunVerdict: String? = null,
+    val dryRunMatchedPolicyIds: List<String> = emptyList(),
+    val wouldEscalate: Boolean = false,
 )
 
 /**
@@ -85,6 +98,22 @@ interface AuditEventQueries {
 
 /** `GET /policies/{id}/stats` (GMCP-80 §3.5): a policy's trigger count and most recent hit within a window. */
 data class PolicyTriggerStats(val triggeredCount: Int, val lastTriggeredAt: Instant?)
+
+/** SPEC-POL-04 §4.3/§6.1 `production.dailySeries` one point, bucketed by KST calendar date. */
+data class PolicyDryRunDailyPoint(val date: java.time.LocalDate, val matchCount: Int, val wouldBlockCount: Int)
+
+/** SPEC-POL-04 §6.1 `production` block. */
+data class PolicyDryRunProductionStats(
+    val matchCount: Int,
+    /** Keyed by the wire verdict string (`block`, `require_approval`, `warn`, `mask_then_allow`). */
+    val verdictBreakdown: Map<String, Int>,
+    val wouldEscalateCount: Int,
+    val dailySeries: List<PolicyDryRunDailyPoint>,
+    /** Not part of the `production` JSON block (§6.1's example has no such field there) — read
+     *  by [kr.guardmcp.controlplane.api.PolicyController] only for the back-compat top-level
+     *  `lastTriggeredAt` (GMCP-80 §3.5) when the policy itself is dry-run. */
+    val lastMatchedAt: Instant?,
+)
 
 @Component
 class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQueries {
@@ -141,6 +170,9 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
                 seq = seq,
                 prevHash = prevHash,
                 hash = null,
+                dryRunVerdict = draft.dryRunVerdict,
+                dryRunMatchedPolicyIds = draft.dryRunMatchedPolicyIds,
+                wouldEscalate = draft.wouldEscalate,
             )
             val hash = GuardEventHasher.computeHash(prevHash, GuardEventHasher.payload(record))
 
@@ -161,6 +193,9 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
                 statement.setLong(13, seq)
                 statement.setString(14, prevHash)
                 statement.setString(15, hash)
+                statement.setString(16, record.dryRunVerdict)
+                statement.setArray(17, connection.createArrayOf("text", record.dryRunMatchedPolicyIds.toTypedArray()))
+                statement.setBoolean(18, record.wouldEscalate)
                 statement
             })
             rowsAffected > 0
@@ -237,9 +272,137 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
             Timestamp.from(since),
         ).first()
 
+    /**
+     * SPEC-POL-04 §6.1 `production` block: how often a policy matched as part of the shadow
+     * group on real traffic, and what the shadow verdict would have been. Queried directly
+     * against `guard_event` rather than a `PolicyDryRunStat` rollup table (§4.3/§6.2) — this
+     * scope skips the Redis-counter/nightly-batch optimization the spec allows for and answers
+     * straight from the source, which is simpler and, for this system's event volume, no less
+     * accurate; revisit if `guard_event` grows large enough for this scan to matter.
+     *
+     * The daily bucket is KST (§4.3's "NFR-07 고려해 KST 고정 권장"), not the row's own `ts`
+     * timezone.
+     */
+    fun dryRunStats(policyId: String, since: Instant): PolicyDryRunProductionStats {
+        val totals = jdbcTemplate.query(
+            """
+            SELECT COUNT(*) AS match_count,
+                   COUNT(*) FILTER (WHERE would_escalate) AS would_escalate_count,
+                   MAX(ts) AS last_ts
+            FROM guard_event
+            WHERE ? = ANY(dry_run_matched_policy_ids) AND ts >= ?
+            """.trimIndent(),
+            { rs, _ -> Triple(rs.getInt("match_count"), rs.getInt("would_escalate_count"), rs.getTimestamp("last_ts")?.toInstant()) },
+            policyId,
+            Timestamp.from(since),
+        ).first()
+
+        val breakdown = jdbcTemplate.query(
+            """
+            SELECT dry_run_verdict, COUNT(*) AS verdict_count
+            FROM guard_event
+            WHERE ? = ANY(dry_run_matched_policy_ids) AND ts >= ? AND dry_run_verdict IS NOT NULL
+            GROUP BY dry_run_verdict
+            """.trimIndent(),
+            { rs, _ -> rs.getString("dry_run_verdict") to rs.getInt("verdict_count") },
+            policyId,
+            Timestamp.from(since),
+        ).toMap()
+
+        val dailySeries = jdbcTemplate.query(
+            """
+            SELECT (ts AT TIME ZONE 'Asia/Seoul')::date AS day,
+                   COUNT(*) AS match_count,
+                   COUNT(*) FILTER (WHERE dry_run_verdict = 'block') AS would_block_count
+            FROM guard_event
+            WHERE ? = ANY(dry_run_matched_policy_ids) AND ts >= ?
+            GROUP BY day
+            ORDER BY day
+            """.trimIndent(),
+            { rs, _ ->
+                PolicyDryRunDailyPoint(
+                    date = rs.getDate("day").toLocalDate(),
+                    matchCount = rs.getInt("match_count"),
+                    wouldBlockCount = rs.getInt("would_block_count"),
+                )
+            },
+            policyId,
+            Timestamp.from(since),
+        )
+
+        return PolicyDryRunProductionStats(
+            matchCount = totals.first,
+            verdictBreakdown = breakdown,
+            wouldEscalateCount = totals.second,
+            dailySeries = dailySeries,
+            lastMatchedAt = totals.third,
+        )
+    }
+
+    /**
+     * SPEC-POL-04 §6.1's closing note: for a policy that is `dryRun: false` (already active,
+     * possibly after having been dry-run earlier), `production.verdictBreakdown` shows its
+     * *real* activation history — `matched_policy_ids`/`verdict`, the same columns
+     * [policyStats] reads — never the shadow (`dry_run_*`) columns, which for an
+     * already-actionable policy only ever hold its pre-activation dry-run past, a separate
+     * story from "how this policy is behaving now that it's live". `wouldEscalateCount` is
+     * always 0 here: an active policy being compared to itself has nothing to escalate past.
+     */
+    fun activationStats(policyId: String, since: Instant): PolicyDryRunProductionStats {
+        val totals = jdbcTemplate.query(
+            "SELECT COUNT(*) AS match_count, MAX(ts) AS last_ts FROM guard_event WHERE ? = ANY(matched_policy_ids) AND ts >= ?",
+            { rs, _ -> rs.getInt("match_count") to rs.getTimestamp("last_ts")?.toInstant() },
+            policyId,
+            Timestamp.from(since),
+        ).first()
+
+        val breakdown = jdbcTemplate.query(
+            """
+            SELECT verdict, COUNT(*) AS verdict_count
+            FROM guard_event
+            WHERE ? = ANY(matched_policy_ids) AND ts >= ?
+            GROUP BY verdict
+            """.trimIndent(),
+            { rs, _ -> rs.getString("verdict") to rs.getInt("verdict_count") },
+            policyId,
+            Timestamp.from(since),
+        ).toMap()
+
+        val dailySeries = jdbcTemplate.query(
+            """
+            SELECT (ts AT TIME ZONE 'Asia/Seoul')::date AS day,
+                   COUNT(*) AS match_count,
+                   COUNT(*) FILTER (WHERE verdict = 'block') AS would_block_count
+            FROM guard_event
+            WHERE ? = ANY(matched_policy_ids) AND ts >= ?
+            GROUP BY day
+            ORDER BY day
+            """.trimIndent(),
+            { rs, _ ->
+                PolicyDryRunDailyPoint(
+                    date = rs.getDate("day").toLocalDate(),
+                    matchCount = rs.getInt("match_count"),
+                    wouldBlockCount = rs.getInt("would_block_count"),
+                )
+            },
+            policyId,
+            Timestamp.from(since),
+        )
+
+        return PolicyDryRunProductionStats(
+            matchCount = totals.first,
+            verdictBreakdown = breakdown,
+            wouldEscalateCount = 0,
+            dailySeries = dailySeries,
+            lastMatchedAt = totals.second,
+        )
+    }
+
     private val rowMapper = RowMapper { rs, _ ->
         @Suppress("UNCHECKED_CAST")
         val policyIds = (rs.getArray("matched_policy_ids").array as Array<Any?>).map { it as String }
+        @Suppress("UNCHECKED_CAST")
+        val dryRunPolicyIds = (rs.getArray("dry_run_matched_policy_ids").array as Array<Any?>).map { it as String }
         val detections: List<Map<String, Any?>> = objectMapper.readValue(
             rs.getString("detections"),
             object : TypeReference<List<Map<String, Any?>>>() {},
@@ -263,6 +426,9 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
             seq = seq,
             prevHash = rs.getString("prev_hash"),
             hash = rs.getString("hash"),
+            dryRunVerdict = rs.getString("dry_run_verdict"),
+            dryRunMatchedPolicyIds = dryRunPolicyIds,
+            wouldEscalate = rs.getBoolean("would_escalate"),
         )
     }
 
@@ -275,14 +441,16 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
         private const val INSERT_SQL = """
             INSERT INTO guard_event
                 (event_id, session_id, ts, direction, tool_name, args_digest, verdict, risk_score,
-                 matched_policy_ids, detections, mask_diff_ref, raw_payload, seq, prev_hash, hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 matched_policy_ids, detections, mask_diff_ref, raw_payload, seq, prev_hash, hash,
+                 dry_run_verdict, dry_run_matched_policy_ids, would_escalate)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (event_id) DO NOTHING
         """
 
         private const val SELECT_COLUMNS_FROM = """
             SELECT event_id, session_id, ts, direction, tool_name, args_digest, verdict, risk_score,
-                   matched_policy_ids, detections, mask_diff_ref, raw_payload, seq, prev_hash, hash
+                   matched_policy_ids, detections, mask_diff_ref, raw_payload, seq, prev_hash, hash,
+                   dry_run_verdict, dry_run_matched_policy_ids, would_escalate
             FROM guard_event
         """
 

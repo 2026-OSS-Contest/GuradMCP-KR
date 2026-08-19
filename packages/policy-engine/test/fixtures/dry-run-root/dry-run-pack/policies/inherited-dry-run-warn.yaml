@@ -1,0 +1,8 @@
+id: inherited_dry_run_warn
+pack: dry-run-pack
+priority: 110
+match:
+  tool: inherited_tool
+action: warn
+severity: medium
+message: "No dry_run key of its own; inherits the pack's default_dry_run."

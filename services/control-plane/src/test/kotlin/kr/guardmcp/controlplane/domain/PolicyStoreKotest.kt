@@ -37,6 +37,13 @@ class PolicyStoreKotest : StringSpec({
 
     "policies list in priority order" {
         store().listPolicies().map(Policy::id) shouldBe
-            listOf("block_env_file_read", "mask_korean_phone", "approve_external_email")
+            listOf("block_env_file_read", "block_large_address_dump", "mask_korean_phone", "approve_external_email")
+    }
+
+    "dry-run policies are read-only and reported honestly (GMCP-77)" {
+        val policy = store().policy("block_large_address_dump")
+        checkNotNull(policy)
+        policy.dryRun shouldBe true
+        store().policy("block_env_file_read")?.dryRun shouldBe false
     }
 })
