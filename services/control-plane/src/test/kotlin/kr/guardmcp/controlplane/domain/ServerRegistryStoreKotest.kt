@@ -36,8 +36,24 @@ class ServerRegistryStoreKotest : StringSpec({
 
         exception.server.trustLevel shouldBe TrustLevel.UNTRUSTED
         exception.toTrust shouldBe TrustLevel.LIMITED
-        exception.affectedPolicyCount shouldBe 2 // seeded default pack: block_env_file_read (BLOCK) + approve_external_email (REQUIRE_APPROVAL)
+        // block_env_file_read (BLOCK) + approve_external_email (REQUIRE_APPROVAL). The seeded
+        // block_large_address_dump is BLOCK too but dryRun: true, so it must not inflate this
+        // count (GMCP-77) — see the next test for that exclusion made explicit.
+        exception.affectedPolicyCount shouldBe 2
         store.get(DemoSeed.SERVER_DB_ID)?.trustLevel shouldBe TrustLevel.UNTRUSTED
+    }
+
+    "a dry-run policy never inflates the upgrade-confirmation impact estimate (GMCP-77)" {
+        val store = storeAt(now)
+        checkNotNull(PolicyStore(Clock.fixed(now, ZoneOffset.UTC)).policy("block_large_address_dump")).dryRun shouldBe true
+
+        val exception = shouldThrow<TrustUpgradeRequiresConfirmationException> {
+            store.changeTrust(DemoSeed.SERVER_DB_ID, TrustLevel.LIMITED, confirmed = false)
+        }
+        // Same count as the un-dry-run seed would have produced: the dry-run BLOCK policy is
+        // evaluated and scored like any other but never actually blocks anything, so it must
+        // not appear as "impact" in a prompt asking an operator to confirm a trust upgrade.
+        exception.affectedPolicyCount shouldBe 2
     }
 
     "a confirmed upgrade applies and records who confirmed it" {
