@@ -182,6 +182,12 @@ was confirmed by a deploy that failed on it.
    check that they have not come back — running `pnpm install` inside `apps/console` recreates
    them.
 
+- **`NEXT_PUBLIC_ENABLE_MOCK_API` belongs to demo deploys only.** It must never appear in
+  `containers.yml`, `apps/console/Dockerfile`, or any release pipeline — a build carrying it
+  serves fabricated data and is otherwise indistinguishable from a real one. Two things make that
+  hard to do by accident: the build log prints a `MOCK API ENABLED` banner, and the status bar
+  carries a 목 데이터 marker on every screen for as long as the flag is set. If you see either in
+  something meant to be real, the flag leaked.
 - Setting `NEXT_PUBLIC_API_BASE_URL` switches the mocks off no matter what else is set; leave it
   unset for a mock-backed deploy.
 - Verify a deploy by loading it and checking that `/api/v1/overview` answers **200**. The app

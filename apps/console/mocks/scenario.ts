@@ -11,6 +11,17 @@ const MOCKS_WANTED =
 export const MOCK_API = MOCKS_WANTED && !process.env.NEXT_PUBLIC_API_BASE_URL;
 
 /**
+ * A production build that is serving fabricated data.
+ *
+ * The mock gate is opt-in and documented, but a flag can still be copied into a pipeline it does
+ * not belong in — and a mock-backed build is indistinguishable from a real one by looking at it.
+ * So it is not left to a checklist: the status bar carries a marker whenever this is true, on
+ * every screen, and the only way to remove it is to stop passing the flag. Development is
+ * excluded because the flask button already says the same thing there.
+ */
+export const MOCK_API_IN_PRODUCTION = MOCK_API && process.env.NODE_ENV === "production";
+
+/**
  * Whether the scenario switcher may draw itself.
  *
  * Deliberately not `MOCK_API`. AGENTS.md documents widening that gate to serve a mock-backed

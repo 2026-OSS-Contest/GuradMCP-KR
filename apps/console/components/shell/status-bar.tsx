@@ -10,6 +10,7 @@ import { VerdictBadge } from "@/components/verdict-badge";
 import { Tag } from "@/components/ui/tag";
 import { SessionPicker } from "./session-picker";
 import { usePendingApprovals } from "./use-pending-approvals";
+import { MOCK_API_IN_PRODUCTION } from "@/mocks/scenario";
 import { cn } from "@/lib/utils";
 
 /**
@@ -61,6 +62,18 @@ export function StatusBar() {
           <Icon className="size-5 flex-none" aria-hidden />
           {t(label)}
         </span>
+
+        {/* A build serving mock data says so, in the one place every screen shows. See
+            `MOCK_API_IN_PRODUCTION` — this is the guard against the flag reaching a pipeline it
+            does not belong in, rather than a line in a checklist nobody re-reads. */}
+        {MOCK_API_IN_PRODUCTION && (
+          <>
+            <Divider />
+            <span className="flex flex-none items-center gap-2 text-body-text-b3-md text-verdict-warn">
+              {t("mockData")}
+            </span>
+          </>
+        )}
 
         {packs.length > 0 && (
           <>

@@ -22,7 +22,8 @@
     "lastFetched": "마지막 조회 시각",
     "sessionEvents": "이벤트 {count}건",
     "sessionEmpty": "기록된 세션이 없습니다. 데모를 실행하면 세션이 만들어집니다.",
-    "sessionError": "세션 목록을 불러오지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 열어 주세요."
+    "sessionError": "세션 목록을 불러오지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 열어 주세요.",
+    "mockData": "목 데이터"
   },
   "verdict": {
     "allow": "허용",

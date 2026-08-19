@@ -22,7 +22,8 @@
     "lastFetched": "Last checked",
     "sessionEvents": "{count, plural, one {# event} other {# events}}",
     "sessionEmpty": "No recorded sessions yet. Run the demo to create one.",
-    "sessionError": "Could not load the session list. Check the gateway connection, then reopen this menu."
+    "sessionError": "Could not load the session list. Check the gateway connection, then reopen this menu.",
+    "mockData": "Mock data"
   },
   "verdict": {
     "allow": "Allowed",
