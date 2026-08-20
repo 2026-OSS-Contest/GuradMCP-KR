@@ -75,11 +75,14 @@ function hhmmss(iso: string): string {
 function NodeRow({
   event,
   selected,
+  chainBroken,
   onSelect,
   register
 }: {
   event: TimelineEvent;
   selected: boolean;
+  /** This node is where the hash chain stops verifying — the frame tints the whole row. */
+  chainBroken: boolean;
   onSelect: () => void;
   register: (el: HTMLButtonElement | null) => void;
 }) {
@@ -101,7 +104,14 @@ function NodeRow({
         // Selection is the fill, and only the fill — across every frame exactly one row carries
         // one, the one whose detail the panel is showing, and no row carries a stroke. Each
         // verdict tints in its own colour and every other node type in white.
-        selected && (event.verdict ? ACTIVE_GROUND[event.verdict] : "bg-(--primitive-opacity-white-alpha-6)")
+        selected && (event.verdict ? ACTIVE_GROUND[event.verdict] : "bg-(--primitive-opacity-white-alpha-6)"),
+        // The chain's own state outranks selection: a row the hash chain cannot vouch for is
+        // amber whether or not it is the one being read (화면설계서 §5.3 "불일치 구간 하이라이트").
+        // Ground plus an 8px bar down the left edge — the `체인 검증 실패 시` frame states the
+        // sides explicitly (`strokeSides {left: 8}`, `Primitive/Verdict/Warn`), so the stroke is
+        // one edge rather than a box.
+        chainBroken &&
+          "border-l-8 border-verdict-warn bg-(--primitive-opacity-warn-alpha-10) pl-1"
       )}
     >
       <Marker className="size-10 flex-none" aria-hidden />
@@ -295,6 +305,7 @@ export function TimelineColumn() {
                 <NodeRow
                   event={event}
                   selected={event.id === selectedEventId}
+                  chainBroken={event.id === timeline.data?.brokenAt}
                   onSelect={() => selectEvent(event.id)}
                   register={(el) => {
                     if (el) rowRefs.current.set(event.id, el);
