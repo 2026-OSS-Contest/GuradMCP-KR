@@ -91,7 +91,10 @@ function ChainPill({ status, hash }: NonNullable<EventDetail["chain"]>) {
   return (
     <span
       className={cn(
-        "inline-flex flex-none items-center gap-2 rounded-full px-2 py-1",
+        // `self-start`, not `inline-flex` — the pill is a flex item in the panel's column, so it
+        // stretches to the full width unless it opts out on the cross axis. `flex-none` governs
+        // the main axis and left it 315px wide, which read as a banner rather than a badge.
+        "inline-flex flex-none self-start items-center gap-2 rounded-full px-2 py-1",
         verified
           ? "bg-(--primitive-opacity-allow-alpha-10) text-green-500 shadow-[inset_0_0_0_1px_var(--primitive-opacity-allow-alpha-10)]"
           : "bg-(--primitive-opacity-warn-alpha-10) text-yellow-400 shadow-[inset_0_0_0_1px_var(--primitive-opacity-warn-alpha-10)]"
@@ -99,7 +102,10 @@ function ChainPill({ status, hash }: NonNullable<EventDetail["chain"]>) {
     >
       <Icon className="h-5 w-4 flex-none" aria-hidden />
       <span className="text-body-text-b3-md">{verified ? t("chainVerified") : t("chainFailed")}</span>
-      {verified && <span className="font-mono text-caption-mono-c-rg text-(--primitive-opacity-white-alpha-75)">#{hash}</span>}
+      {/* The hash rides along either way. Both frames give this badge exactly two text runs —
+          the label and one hash (`…/event detail/Tag/{텍스트,데이터}`) — and a failure without
+          it names no evidence, which is the one thing a chain badge is for. */}
+      <span className="font-mono text-caption-mono-c-rg text-(--primitive-opacity-white-alpha-75)">#{hash}</span>
     </span>
   );
 }
