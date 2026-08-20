@@ -340,11 +340,9 @@
   },
   "benchmark": {
     "title": "탐지 벤치마크",
-    "subtitle": "샘플 {count}건 — 데이터셋 · 공격 시나리오 · 정책 픽스처",
     "run": "벤치마크 실행",
     "runAgain": "다시 실행",
-    "measuring": "측정 중…",
-    "idle": "벤치마크를 실행하면 결과가 여기에 표시됩니다.",
+    "idle": "벤치마크를 실행하면\n결과가 이곳에 표시됩니다.",
     "error": "벤치마크 결과를 불러오지 못했습니다.",
     "section": {
       "pii": "PII 데이터셋",
@@ -371,7 +369,6 @@
     "validationBody": "형식 검증을 끄면 오탐률이 {without}, 켜면 {with}입니다. 오탐 {prevented}건을 걸러냈습니다.",
     "reproduce": "재현 커맨드",
     "copyCommand": "커맨드 복사",
-    "generatedAt": "측정 시각 {at}",
     "close": "닫기",
     "yes": "예",
     "no": "아니오",
@@ -396,7 +393,14 @@
       "policy": "정책",
       "expectation": "기대 동작",
       "matched": "매칭된 정책"
-    }
+    },
+    "subtitleCount": "샘플 {count}건",
+    "legend": {
+      "datasets": "데이터셋",
+      "scenarios": "공격 시나리오",
+      "fixtures": "정책 픽스처"
+    },
+    "loadingList": "리스트를 불러오는 중입니다."
   },
   "settings": {
     "servers": {
