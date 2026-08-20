@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
  *
  * The point of showing every sample rather than a count is that the numbers on the right are
  * otherwise unfalsifiable: 176 texts, 40 attack probes and 29 policy fixtures scroll past with
- * their verdicts, and the reader can stop on any one of them — and open it.
+ * their verdicts, and the reader can stop on any one of them — and open it. A long case text
+ * ellipsizes rather than scrolling the list sideways; the dialog carries it whole.
  */
 export function RunList({
   rows,
@@ -52,21 +53,19 @@ export function RunList({
     // The frame pads the list 12px on every side; the top 12 are a spacer that scrolls away
     // rather than padding, so the sticky heading can sit flush at `top-0` instead of letting
     // rows slide past above it.
-    <div data-testid="run-list" className="flex min-h-0 flex-1 flex-col overflow-auto px-3 pb-3">
+    <div data-testid="run-list" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3">
       <div className="h-3 w-full flex-none" aria-hidden />
-      <ul className="flex w-max min-w-full flex-col gap-1">
+      <ul className="flex w-full flex-col gap-1">
         {groups.map((group) => (
           <li key={group.section} className="flex flex-col gap-1">
             {/* Section band (`Run List` header instance): 6% white on the card's 900, which is
                 translucent — fine in the frame, but rows would show through it while it is
                 stuck, so the ground is composited onto the card colour it would blend with
-                anyway. The label stays pinned left for horizontal scrolling. */}
-            <h3 className="sticky top-0 z-10 h-10 w-full rounded-(--primitive-radius-rounded-xl) px-3 py-2 [background:linear-gradient(var(--primitive-opacity-white-alpha-6),var(--primitive-opacity-white-alpha-6)),var(--primitive-color-grayscale-900)]">
-              <span className="sticky left-3 inline-flex items-center gap-2">
-                <span className="text-body-text-b2-md text-grayscale-white">{t(`section.${group.section}`)}</span>
-                <span className="text-body-text-b2-md text-(--primitive-opacity-white-alpha-75)">
-                  {group.items.length}
-                </span>
+                anyway. */}
+            <h3 className="sticky top-0 z-10 flex h-10 w-full items-center gap-2 rounded-(--primitive-radius-rounded-xl) px-3 py-2 [background:linear-gradient(var(--primitive-opacity-white-alpha-6),var(--primitive-opacity-white-alpha-6)),var(--primitive-color-grayscale-900)]">
+              <span className="text-body-text-b2-md text-grayscale-white">{t(`section.${group.section}`)}</span>
+              <span className="text-body-text-b2-md text-(--primitive-opacity-white-alpha-75)">
+                {group.items.length}
               </span>
             </h3>
             <ul className="flex flex-col">
@@ -85,7 +84,7 @@ export function RunList({
                       type="button"
                       onClick={() => onSelect(row)}
                       className={cn(
-                        "flex w-full items-center gap-3 rounded-(--primitive-radius-rounded-lg) px-3 py-2 text-left whitespace-nowrap hover:bg-(--primitive-opacity-white-alpha-6)",
+                        "flex w-full items-center gap-3 rounded-(--primitive-radius-rounded-lg) px-3 py-2 text-left hover:bg-(--primitive-opacity-white-alpha-6)",
                         current && state === "running" && "bg-(--primitive-opacity-white-alpha-6)"
                       )}
                     >
@@ -112,7 +111,10 @@ export function RunList({
                           {row.kind}
                         </span>
                       )}
-                      <span className="flex-none pr-2 text-caption-text-c-md text-(--primitive-opacity-white-alpha-75)">
+                      <span
+                        title={row.text}
+                        className="min-w-0 flex-1 truncate text-caption-text-c-md text-(--primitive-opacity-white-alpha-75)"
+                      >
                         {row.text}
                       </span>
                     </button>

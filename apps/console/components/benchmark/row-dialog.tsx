@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { DialogPassIcon, RowFailIcon } from "./icons";
+import { GatePassIcon, RowFailIcon } from "./icons";
 import type { RunRow } from "./use-benchmark-run";
 import { cn } from "@/lib/utils";
 
@@ -83,10 +83,12 @@ export function RowDialog({ row, onClose }: { row: RunRow; onClose: () => void }
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-center gap-3 border-b border-(--primitive-opacity-white-alpha-10) pb-2">
-          {/* The frame titles a passed case with the check drawn white — the dialog's ground
-              carries no verdict tint for it to sit on. A failure keeps the red block disc. */}
+          {/* The modal titles a passed case with the same green-600 check the gate card uses —
+              read from the frame's `.html`, whose base64 icon is `#1AD164`. (The `.json` lists
+              a white fill on the instance node, which is override noise, and trusting it put a
+              white check here first.) A failure keeps the red block disc. */}
           {row.passed ? (
-            <DialogPassIcon className="size-6 flex-none" aria-hidden />
+            <GatePassIcon className="size-6 flex-none" aria-hidden />
           ) : (
             <RowFailIcon className="size-6 flex-none" aria-hidden />
           )}
