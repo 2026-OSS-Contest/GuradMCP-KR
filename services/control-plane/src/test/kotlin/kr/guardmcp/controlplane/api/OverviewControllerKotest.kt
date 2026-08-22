@@ -3,6 +3,7 @@ package kr.guardmcp.controlplane.api
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.shouldBe
+import kr.guardmcp.controlplane.domain.EventBroadcaster
 import kr.guardmcp.controlplane.domain.GuardEventRepository
 import kr.guardmcp.controlplane.domain.PolicyFixtures
 import kr.guardmcp.controlplane.domain.PolicyStore
@@ -13,7 +14,7 @@ class OverviewControllerKotest : StringSpec({
     // This test never calls policyStats(), the only method touching the repository, so an
     // unconnected JdbcTemplate (no DataSource) is safe to wire in here.
     fun policyController(clock: Clock) =
-        PolicyController(PolicyStore(clock).also(PolicyFixtures::syncInto), GuardEventRepository(JdbcTemplate()), clock)
+        PolicyController(PolicyStore(clock).also(PolicyFixtures::syncInto), GuardEventRepository(JdbcTemplate()), clock, EventBroadcaster())
 
     "policy response keeps the synced packs" {
         val packs = policyController(Clock.systemUTC()).policyPacks().map { it.id }

@@ -1,5 +1,6 @@
 package kr.guardmcp.controlplane.api
 
+import kr.guardmcp.controlplane.domain.EventBroadcaster
 import kr.guardmcp.controlplane.domain.GuardAction
 import kr.guardmcp.controlplane.domain.GuardEventRepository
 import kr.guardmcp.controlplane.domain.Policy
@@ -76,6 +77,7 @@ class PolicyController(
     private val policyStore: PolicyStore,
     private val guardEventRepository: GuardEventRepository,
     private val clock: Clock,
+    private val eventBroadcaster: EventBroadcaster,
 ) {
     @GetMapping("/policy-packs")
     fun policyPacks(): List<PolicyPack> = policyStore.listPacks()
@@ -120,6 +122,11 @@ class PolicyController(
                 )
             },
         )
+        // fix-api.md §5: `policy.reloaded` — the SCR-302 hot-reload banner. Fires on the boot
+        // sync too, same as [kr.guardmcp.controlplane.domain.ServerRegistryStore]'s own snapshot
+        // push does on first connect; harmless (once per gateway start) and simpler than
+        // distinguishing "first sync" from "hot-reload" here.
+        eventBroadcaster.publish("policy.reloaded", result)
         return PolicySyncResponse(result.packsStored, result.policiesStored, result.syncedAt)
     }
 

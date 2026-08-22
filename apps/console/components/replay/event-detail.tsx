@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { revealEvent } from "@/lib/api/client";
+import { toRevealContent } from "@/lib/api/reveal-adapter";
 import type { DirectionVerdict, EventDetail, RevealContent, TimelineNodeType } from "@/lib/api/types";
 import { VerdictBadge } from "@/components/verdict-badge";
 import { RevealLockIcon, VerdictAllowIcon, VerdictWarnIcon } from "@/components/icons";
@@ -170,8 +171,20 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
   const confirmReveal = async () => {
     setPending(true);
     try {
-      // The real endpoint records the access; here MSW returns the raw content.
-      setRevealed(await revealEvent(detail.id));
+      // MSW answers `RevealContent` directly; the real endpoint answers `ApiRevealResponse`
+      // (fix-api.md §6) and this adapts it using the VERDICT node's own detection spans, which
+      // only this component has (`revealEvent` alone can't build the two-column view).
+      const response = await revealEvent(detail.id);
+      setRevealed(
+        "raw" in response && "masked" in response
+          ? (response as unknown as RevealContent)
+          : toRevealContent(
+              response,
+              detail.detections ?? [],
+              `${detail.id.slice(0, 8)}  ${detail.tool}`,
+              `#${detail.sessionId}`
+            )
+      );
       setConfirmOpen(false);
     } finally {
       setPending(false);

@@ -597,6 +597,57 @@ class ControlPlaneApiTest : ApiTestSupport() {
         send("PUT", "/api/v1/servers/${DemoSeed.SERVER_FILE_ID}/trust", mapOf("trustLevel" to "limited", "confirmed" to true))
     }
 
+    // fix-api.md §5: one connection carries all four event types the console subscribes to
+    // (apps/console/lib/sse.ts's GUARD_EVENT_TYPES), each published by a different domain —
+    // this is the one place that exercises all three publishers end to end.
+    @Test
+    fun `the events stream pushes guard, approval and policy events as they happen`() {
+        openStream("/api/v1/events/stream").use { stream ->
+            val eventId = UUID.randomUUID()
+            val ingested = send(
+                "POST", "/api/v1/events",
+                mapOf(
+                    "eventId" to eventId.toString(),
+                    "sessionId" to UUID.randomUUID().toString(),
+                    "ts" to Instant.parse("2026-05-02T00:00:00Z").toString(),
+                    "direction" to "response",
+                    "toolName" to "read_file",
+                    "argsDigest" to "sha256:def456",
+                    "verdict" to "block",
+                    "riskScore" to 95,
+                ),
+            )
+            assertEquals(201, ingested.statusCode(), ingested.body())
+            val guardEvent = nextEventData(stream.reader)
+            assertTrue(guardEvent.contains(eventId.toString()))
+            assertTrue(guardEvent.contains("\"verdict\":\"block\""))
+
+            val created = send(
+                "POST", "/api/v1/approvals",
+                mapOf(
+                    "sessionId" to UUID.randomUUID().toString(),
+                    "toolName" to "send_email",
+                    "arguments" to mapOf("to" to "partner@external.example"),
+                    "riskReason" to "External email delivery requires human approval",
+                    "policyId" to "approve_external_email_with_secret",
+                ),
+            )
+            val approvalId = parseMap(created.body())["id"] as String
+            val approvalCreated = nextEventData(stream.reader)
+            assertTrue(approvalCreated.contains(approvalId))
+            assertTrue(approvalCreated.contains("\"status\":\"pending\""))
+
+            send("POST", "/api/v1/approvals/$approvalId/decision", mapOf("decision" to "approve"))
+            val approvalResolved = nextEventData(stream.reader)
+            assertTrue(approvalResolved.contains(approvalId))
+            assertTrue(approvalResolved.contains("\"status\":\"approved\""))
+
+            send("POST", "/api/v1/policies/sync", PolicyFixtures.syncRequestBody())
+            val policyReloaded = nextEventData(stream.reader)
+            assertTrue(policyReloaded.contains("\"policiesStored\":${PolicyFixtures.policies.size}"))
+        }
+    }
+
     @Test
     fun `attack lab run accepts known scenarios and rejects unknown ones`() {
         val accepted = send("POST", "/api/v1/attacklab/run/T-01", null)

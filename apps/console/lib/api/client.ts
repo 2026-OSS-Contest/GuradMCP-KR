@@ -20,7 +20,7 @@ import type {
   PolicyRow,
   PolicyStats,
   RecentEventsResponse,
-  RevealContent,
+  ApiRevealResponse,
   ServerTrustChangeRequest,
   ServerTrustChangeResult,
   ServersResponse,
@@ -201,9 +201,14 @@ export const reapproveTool = (
  *  priority override), so a GET there would be asymmetric with what the PUT means. */
 export const getPolicy = (id: string, signal?: AbortSignal) =>
   get<PolicyDetail>(`/policies/${encodeURIComponent(id)}/source`, signal);
-/** Reveal-original (spec §5.3 no.5): records the access in the audit log. */
+/**
+ * Reveal-original (spec §5.3 no.5): records the access in the audit log. Answers the control
+ * plane's own `ApiRevealResponse` shape, not `RevealContent` — see `reveal-adapter.ts`'s
+ * `toRevealContent`, which the caller runs this through (it needs the VERDICT node's own
+ * `detections` too, which this function has no access to).
+ */
 export const revealEvent = (id: string, signal?: AbortSignal) =>
-  post<RevealContent>(`/events/${encodeURIComponent(id)}/reveal`, signal);
+  post<ApiRevealResponse>(`/events/${encodeURIComponent(id)}/reveal`, signal);
 
 // SCR-201 Attack Lab (spec §5.2).
 export const getAttackScenarios = (signal?: AbortSignal) =>

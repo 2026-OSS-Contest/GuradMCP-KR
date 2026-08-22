@@ -32,7 +32,12 @@ const nextConfig: NextConfig = {
   async rewrites() {
     const controlPlaneUrl = process.env.CONTROL_PLANE_URL;
     if (!controlPlaneUrl) return [];
-    return [{ source: "/api/v1/:path*", destination: `${controlPlaneUrl}/api/v1/:path*` }];
+    return [
+      {
+        source: "/api/v1/:path((?!events/.+/reveal$).*)",
+        destination: `${controlPlaneUrl}/api/v1/:path`,
+      },
+    ];
   },
 };
 

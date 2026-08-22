@@ -177,6 +177,10 @@ export interface Detection {
   subtype: string;
   /** 0–100. */
   confidence: number;
+  /** `rawPayload`-relative offset (fix-api.md §6) — undefined until adapted from `ApiDetection`. */
+  span?: ApiSpan;
+  /** The masked replacement token, e.g. "[PHONE]" — reveal-adapter.ts's mask chip label. */
+  maskedAs?: string;
 }
 
 /** Mask Diff View (spec §5.3 no.4④): the text before and after masking. */
@@ -224,6 +228,23 @@ export interface RevealContent {
   /** Numbered like `masked`, so the two columns are read line against line. */
   raw: ContentLine[];
   masked: ContentLine[];
+}
+
+/**
+ * `POST /events/{id}/reveal`'s actual response shape (`kr.guardmcp.controlplane.api
+ * .AuditEventController.RevealResponse`) — deliberately not `RevealContent`'s shape (see that
+ * interface's own doc comment / fix-api.md §6: "이건 콘솔에서 흡수하겠습니다"). `reveal-adapter.ts`'s
+ * `toRevealContent` builds the modal's two-column view from this plus the VERDICT node's own
+ * `detections[].span`, which are offsets into `originalPayload` (fix-api.md §6, confirmed against
+ * `packages/gateway/src/pipeline/actionRouter.ts`: `rawPayload`/`mask()`/mask-diff all run over
+ * the same `ctx.payload` string).
+ */
+export interface ApiRevealResponse {
+  eventId: string;
+  originalPayload: string;
+  revealedBy: string;
+  revealedAt: string;
+  auditLogId: string;
 }
 
 /**

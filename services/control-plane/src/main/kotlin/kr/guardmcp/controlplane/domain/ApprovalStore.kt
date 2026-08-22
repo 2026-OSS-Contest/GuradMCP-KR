@@ -62,7 +62,7 @@ class ApprovalAlreadyDecidedException(val approval: Approval) :
     RuntimeException("approval ${approval.id} is already ${approval.status.wire}")
 
 @Component
-class ApprovalStore(private val clock: Clock) {
+class ApprovalStore(private val clock: Clock, private val eventBroadcaster: EventBroadcaster) {
     private val lock = Any()
     private val approvals = linkedMapOf<UUID, Approval>()
 
@@ -83,14 +83,23 @@ class ApprovalStore(private val clock: Clock) {
         )
     }
 
-    fun list(status: ApprovalStatus?): List<Approval> = synchronized(lock) {
-        sweepExpiredLocked()
-        approvals.values.filter { status == null || it.status == status }.sortedBy(Approval::requestedAt)
+    fun list(status: ApprovalStatus?): List<Approval> {
+        val (result, expired) = synchronized(lock) {
+            val newlyExpired = sweepExpiredLocked()
+            val filtered = approvals.values.filter { status == null || it.status == status }.sortedBy(Approval::requestedAt)
+            filtered to newlyExpired
+        }
+        publishExpired(expired)
+        return result
     }
 
-    fun get(id: UUID): Approval? = synchronized(lock) {
-        sweepExpiredLocked()
-        approvals[id]
+    fun get(id: UUID): Approval? {
+        val (result, expired) = synchronized(lock) {
+            val newlyExpired = sweepExpiredLocked()
+            approvals[id] to newlyExpired
+        }
+        publishExpired(expired)
+        return result
     }
 
     fun create(
@@ -103,71 +112,103 @@ class ApprovalStore(private val clock: Clock) {
         riskTags: List<Any?>? = null,
         threatScore: Int? = null,
         maskPreview: Any? = null,
-    ): Approval = synchronized(lock) {
-        val now = clock.instant()
-        val approval = Approval(
-            id = UUID.randomUUID(),
-            sessionId = sessionId,
-            status = ApprovalStatus.PENDING,
-            toolName = toolName,
-            arguments = arguments,
-            riskReason = riskReason,
-            policyId = policyId,
-            requestedAt = now,
-            expiresAt = now.plus(ttl),
-            decision = null,
-            decidedBy = null,
-            decidedAt = null,
-            riskTags = riskTags,
-            threatScore = threatScore,
-            maskPreview = maskPreview,
-        )
-        approvals[approval.id] = approval
-        approval
+    ): Approval {
+        val approval = synchronized(lock) {
+            val now = clock.instant()
+            val created = Approval(
+                id = UUID.randomUUID(),
+                sessionId = sessionId,
+                status = ApprovalStatus.PENDING,
+                toolName = toolName,
+                arguments = arguments,
+                riskReason = riskReason,
+                policyId = policyId,
+                requestedAt = now,
+                expiresAt = now.plus(ttl),
+                decision = null,
+                decidedBy = null,
+                decidedAt = null,
+                riskTags = riskTags,
+                threatScore = threatScore,
+                maskPreview = maskPreview,
+            )
+            approvals[created.id] = created
+            created
+        }
+        // fix-api.md §5: `approval.created` — outside the lock (see EventBroadcaster's doc), so
+        // a stalled SSE subscriber never holds up the approval that triggered it.
+        eventBroadcaster.publish("approval.created", approval)
+        return approval
     }
 
-    fun decide(id: UUID, decision: ApprovalDecision, decidedBy: String): Approval = synchronized(lock) {
-        sweepExpiredLocked()
-        val current = approvals[id] ?: throw ApprovalNotFoundException(id)
-        if (current.status != ApprovalStatus.PENDING) throw ApprovalAlreadyDecidedException(current)
-        val decided = current.copy(
-            status = when (decision) {
-                ApprovalDecision.APPROVE -> ApprovalStatus.APPROVED
-                ApprovalDecision.APPROVE_MASKED -> ApprovalStatus.APPROVED_MASKED
-                ApprovalDecision.BLOCK -> ApprovalStatus.BLOCKED
-            },
-            decision = decision,
-            decidedBy = decidedBy,
-            decidedAt = clock.instant(),
-            // NFR-04: raw preview text has no further legitimate use once a decision — human or
-            // fail-closed — has landed.
-            maskPreview = null,
-        )
-        approvals[id] = decided
-        decided
+    fun decide(id: UUID, decision: ApprovalDecision, decidedBy: String): Approval {
+        val (decided, expired) = synchronized(lock) {
+            val newlyExpired = sweepExpiredLocked()
+            val current = approvals[id] ?: throw ApprovalNotFoundException(id)
+            if (current.status != ApprovalStatus.PENDING) throw ApprovalAlreadyDecidedException(current)
+            val updated = current.copy(
+                status = when (decision) {
+                    ApprovalDecision.APPROVE -> ApprovalStatus.APPROVED
+                    ApprovalDecision.APPROVE_MASKED -> ApprovalStatus.APPROVED_MASKED
+                    ApprovalDecision.BLOCK -> ApprovalStatus.BLOCKED
+                },
+                decision = decision,
+                decidedBy = decidedBy,
+                decidedAt = clock.instant(),
+                // NFR-04: raw preview text has no further legitimate use once a decision — human
+                // or fail-closed — has landed.
+                maskPreview = null,
+            )
+            approvals[id] = updated
+            updated to newlyExpired
+        }
+        publishExpired(expired)
+        eventBroadcaster.publish("approval.resolved", decided)
+        return decided
     }
 
-    fun countPending(): Int = synchronized(lock) {
-        sweepExpiredLocked()
-        approvals.values.count { it.status == ApprovalStatus.PENDING }
+    fun countPending(): Int {
+        val (count, expired) = synchronized(lock) {
+            val newlyExpired = sweepExpiredLocked()
+            approvals.values.count { it.status == ApprovalStatus.PENDING } to newlyExpired
+        }
+        publishExpired(expired)
+        return count
     }
 
     /** §5.1 Control Plane: 120s unresolved fails closed. Called by [ApprovalTimeoutScheduler]'s
      *  1s tick, and opportunistically by every read/decide above, so staleness is bounded by
-     *  whichever comes first rather than only the scheduler's own cadence. */
-    fun sweepExpired(): Unit = synchronized(lock) { sweepExpiredLocked() }
+     *  whichever comes first rather than only the scheduler's own cadence. Every caller — the
+     *  scheduler and [list]/[get]/[decide]/[countPending] alike — publishes `approval.resolved`
+     *  (fix-api.md §5) for whatever it newly expires: [sweepExpiredLocked] mutates the record to
+     *  EXPIRED before any other caller can observe it PENDING, so exactly one caller ever wins
+     *  the race for a given approval and therefore ever publishes it — never zero, never twice.
+     */
+    fun sweepExpired() {
+        val expired = synchronized(lock) { sweepExpiredLocked() }
+        publishExpired(expired)
+    }
 
-    private fun sweepExpiredLocked() {
+    private fun publishExpired(expired: List<Approval>) {
+        for (approval in expired) eventBroadcaster.publish("approval.resolved", approval)
+    }
+
+    /** Returns the approvals this call newly flipped to EXPIRED, for the caller to publish. */
+    private fun sweepExpiredLocked(): List<Approval> {
         val now = clock.instant()
+        val justExpired = mutableListOf<Approval>()
         for ((id, approval) in approvals) {
             if (approval.status != ApprovalStatus.PENDING) continue
             if (approval.expiresAt.isAfter(now)) continue
-            approvals[id] = approval.copy(
+            val expired = approval.copy(
                 status = ApprovalStatus.EXPIRED,
                 decidedBy = "system:timeout",
                 decidedAt = now,
                 maskPreview = null,
             )
+            approvals[id] = expired
+            justExpired += expired
         }
+        return justExpired
     }
 }

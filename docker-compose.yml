@@ -235,6 +235,11 @@ services:
       NODE_ENV: production
       GATEWAY_URL: http://gateway:3001
       CONTROL_PLANE_URL: http://control-plane:8080
+      # fix-api.md §6 (option 2): same shared secret the control-plane service reads below as
+      # REVEAL_OPERATOR_TOKEN — the console's server-side reveal proxy
+      # (app/api/v1/events/[eventId]/reveal/route.ts) attaches it as X-Operator-Token. Never
+      # NEXT_PUBLIC_*, so it stays out of the client bundle and the browser never sees it.
+      OPERATOR_TOKEN: ${REVEAL_OPERATOR_TOKEN:-}
       DEPENDENCY_URLS: http://gateway:3001/health,http://control-plane:8080/actuator/health
     ports:
       - "127.0.0.1:${CONSOLE_PORT:-3000}:3000"
