@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 // SCR-301 Replay. The dev server mocks /api/v1/sessions, /sessions/{id}/timeline and
-// /policies/{id}, so these exercise the same contracts the control plane will serve.
+// /policies/{id}/source, so these exercise the same contracts the control plane will serve.
 // The timeline and the detail panel share text (a tool name, a policy id), so detail
 // assertions are scoped to the `event-detail` region and timeline ones to the `log`.
 

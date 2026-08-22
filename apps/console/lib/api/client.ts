@@ -20,7 +20,7 @@ import type {
   PolicyRow,
   PolicyStats,
   RecentEventsResponse,
-  RevealContent,
+  ApiRevealResponse,
   ServerTrustChangeRequest,
   ServerTrustChangeResult,
   ServersResponse,
@@ -196,11 +196,19 @@ export const reapproveTool = (
     signal,
   );
 
+/** fix-api.md §4: the raw YAML behind a policy id, at `/source` rather than `/policies/{id}`
+ *  itself — that path is already spoken for by `PUT /policies/{id}` (the action/severity/
+ *  priority override), so a GET there would be asymmetric with what the PUT means. */
 export const getPolicy = (id: string, signal?: AbortSignal) =>
-  get<PolicyDetail>(`/policies/${encodeURIComponent(id)}`, signal);
-/** Reveal-original (spec §5.3 no.5): records the access in the audit log. */
+  get<PolicyDetail>(`/policies/${encodeURIComponent(id)}/source`, signal);
+/**
+ * Reveal-original (spec §5.3 no.5): records the access in the audit log. Answers the control
+ * plane's own `ApiRevealResponse` shape, not `RevealContent` — see `reveal-adapter.ts`'s
+ * `toRevealContent`, which the caller runs this through (it needs the VERDICT node's own
+ * `detections` too, which this function has no access to).
+ */
 export const revealEvent = (id: string, signal?: AbortSignal) =>
-  post<RevealContent>(`/events/${encodeURIComponent(id)}/reveal`, signal);
+  post<ApiRevealResponse>(`/events/${encodeURIComponent(id)}/reveal`, signal);
 
 // SCR-201 Attack Lab (spec §5.2).
 export const getAttackScenarios = (signal?: AbortSignal) =>
@@ -217,9 +225,10 @@ export const runAttackScenario = (
   );
 
 /**
- * SCR-401 Detector (spec §5.4). The control plane serves this one for real. `direction` rides
- * as a query parameter rather than in the body: the endpoint does not read it yet and an unknown
- * body field would be rejected, whereas an unbound query parameter is simply ignored.
+ * SCR-401 Detector (spec §5.4). The control plane serves this one for real, and now reads
+ * `direction` too (fix-api.md §3) — narrowing which policies are eligible candidates instead of
+ * ignoring it. It still rides as a query parameter rather than in the body, matching the
+ * endpoint's own contract (`DetectController.preview`).
  */
 export const previewDetection = (
   text: string,

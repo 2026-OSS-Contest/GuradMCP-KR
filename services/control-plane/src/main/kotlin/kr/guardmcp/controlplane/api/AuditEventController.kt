@@ -2,6 +2,7 @@ package kr.guardmcp.controlplane.api
 
 import com.fasterxml.jackson.annotation.JsonInclude
 import kr.guardmcp.controlplane.domain.AuditStructuredLogger
+import kr.guardmcp.controlplane.domain.EventBroadcaster
 import kr.guardmcp.controlplane.domain.GuardAction
 import kr.guardmcp.controlplane.domain.GuardEventDraft
 import kr.guardmcp.controlplane.domain.GuardEventRecord
@@ -93,6 +94,7 @@ class AuditEventController(
     private val auditLog: AuditStructuredLogger,
     private val revealAuditLog: RevealAuditLog,
     private val settingsStore: GuardSettingsStore,
+    private val eventBroadcaster: EventBroadcaster,
     // NFR-04: deny-by-default. X-Actor-Role alone is a forgeable header with no session/auth
     // system backing it anywhere in this codebase (see Actor's doc comment); an unconfigured
     // (blank) token means reveal is disabled entirely rather than falling back to that header
@@ -136,6 +138,10 @@ class AuditEventController(
         // GuardEventRepository.insert assigns seq/prevHash/hash under the session lock (GMCP-83).
         val stored = repository.insert(draft)
         auditLog.logIngested(draft)
+        // fix-api.md §5: `guard.event` — only on a genuine first insert, not a gateway retry of
+        // an eventId already stored, so a reconnect-and-retry never double-tints the console list
+        // (its own merge already dedupes by id, but there is no reason to send the duplicate).
+        if (stored) eventBroadcaster.publish("guard.event", toSecurityEvent(draft, verdict))
         return GuardEventIngestResponse(draft.eventId, stored)
     }
 
@@ -238,6 +244,17 @@ class AuditEventController(
             verdict = if (record.verdict == "mask_then_allow") "warn" else record.verdict,
             tool = record.toolName,
             at = record.ts,
+        )
+
+    /** Same shape as [toSecurityEvent], from the just-ingested draft rather than a re-fetched
+     *  row — the `guard.event` SSE push (fix-api.md §5) fires before any read of the insert. */
+    private fun toSecurityEvent(draft: GuardEventDraft, verdict: GuardAction): SecurityEvent =
+        SecurityEvent(
+            id = draft.eventId,
+            sessionId = draft.sessionId,
+            verdict = if (verdict == GuardAction.MASK_THEN_ALLOW) "warn" else verdict.wire,
+            tool = draft.toolName,
+            at = draft.ts,
         )
 
     companion object {

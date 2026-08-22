@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Policy Chip (spec §3): a policy id that opens a YAML popover on click, with a link that jumps
- * to the policy on SCR-302. The YAML is loaded on first open from `GET /policies/{id}`.
+ * to the policy on SCR-302. The YAML is loaded on first open from `GET /policies/{id}/source`.
  */
 export function PolicyChip({ id }: { id: string }) {
   const t = useTranslations("replay.policy");

@@ -9,16 +9,17 @@ import { useEventStream } from "@/lib/use-event-stream";
 import { CtaChevronIcon } from "@/components/icons";
 import { RelativeTime } from "@/components/relative-time";
 import { VerdictBadge } from "@/components/verdict-badge";
-import { MOCK_API } from "@/mocks/scenario";
 import { cn } from "@/lib/utils";
 
 /** Spec §5.1 no.5 — the panel holds the 20 most recent events. */
 const MAX_EVENTS = 20;
 
-// The stream is same-origin under the mock (MSW's sse() handler serves it) and points at the
-// real gateway when one is configured. With neither, there is nothing to connect to.
+// Relative by default: same-origin under the mock (MSW's sse() handler serves it) and through
+// next.config.ts's `/api/v1/*` rewrite to the real control plane otherwise (fix-api.md §2) — the
+// console's shipped deployment (docker-compose.yml) sets CONTROL_PLANE_URL, not
+// NEXT_PUBLIC_API_BASE_URL, so gating this on MOCK_API left it permanently disconnected there.
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
-const STREAM_URL = API_BASE ? `${API_BASE}/api/v1/events/stream` : MOCK_API ? "/api/v1/events/stream" : null;
+const STREAM_URL = `${API_BASE ?? ""}/api/v1/events/stream`;
 
 /** The design widens this column only at its largest breakpoint: 315 up to 1920, then 664. */
 export const EVENTS_COLUMN = "w-[315px] min-[1920px]:w-[664px]";

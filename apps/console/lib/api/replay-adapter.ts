@@ -116,7 +116,13 @@ export function toEventDetail(
     policies: detail?.matchedPolicyIds,
     threatScore: node.riskScore,
     detections: detail?.detections.map(
-      (d): Detection => ({ type: d.type, subtype: d.subtype, confidence: Math.round(d.confidence * 100) })
+      (d): Detection => ({
+        type: d.type,
+        subtype: d.subtype,
+        confidence: Math.round(d.confidence * 100),
+        span: d.span,
+        maskedAs: d.maskedAs
+      })
     ),
     maskDiff: detail?.maskDiff,
     chain: detail && chainStatus ? { status: chainStatus, hash: detail.hash } : undefined,
