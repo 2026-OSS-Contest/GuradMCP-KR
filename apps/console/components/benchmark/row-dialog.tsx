@@ -102,7 +102,9 @@ export function RowDialog({ row, onClose }: { row: RunRow; onClose: () => void }
           <>
             <Field label={t("field.text")} value={source.sample.text} mono={false} />
             <div className="grid grid-cols-2 gap-4">
-              <Field label={t("field.kind")} value={source.sample.kind ?? "—"} />
+              {/* `row.kind`, not `sample.kind`: the chip the list drew, so the modal cannot
+                  disagree with the row that opened it. */}
+              <Field label={t("field.kind")} value={row.kind ?? "—"} />
               <Field
                 label={t("field.label")}
                 value={t(source.sample.label ? "label.positive" : "label.negative")}

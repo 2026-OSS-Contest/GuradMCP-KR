@@ -27,13 +27,27 @@ export interface RunRow {
  * then the attack scenarios, then the policy fixtures — the same order `npm run bench` works in,
  * so the screen tells the same story the command does.
  */
+/**
+ * The chip a row wears — the sample's own subdivision, which every labelled positive has except
+ * the high-entropy set: `high-entropy-secrets.json` is the one dataset that files its rows under
+ * a prose note rather than a type, so its positives arrive with `kind: null` and would be the
+ * only positives on the screen with nothing to show. They are named from their group rather than
+ * from anything invented — the group *is* the category, and the run detects them as secrets.
+ *
+ * Negatives keep their empty chip on purpose. A chip here says "this row is a PHONE", and a
+ * negative is not an instance of anything; it is a text the detector must leave alone. None of
+ * the four datasets types them either.
+ */
+const chipFor = (sample: BenchmarkSample) =>
+  sample.kind ?? (sample.label && sample.group === "entropy" ? "SECRET" : null);
+
 export function toRows(samples: BenchmarkSample[], report: BenchmarkReport): RunRow[] {
   return [
     ...samples.map(
       (sample): RunRow => ({
         id: sample.id,
         section: sample.group,
-        kind: sample.kind,
+        kind: chipFor(sample),
         text: sample.text,
         // A negative passes by not being detected; a positive passes by being detected.
         passed: sample.label ? sample.detected : !sample.detected,
