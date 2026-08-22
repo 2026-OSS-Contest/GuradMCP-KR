@@ -340,11 +340,9 @@
   },
   "benchmark": {
     "title": "Detection Benchmark",
-    "subtitle": "{count} checks — datasets · attack scenarios · policy fixtures",
     "run": "Run benchmark",
     "runAgain": "Run again",
-    "measuring": "Measuring…",
-    "idle": "Run the benchmark to see its results here.",
+    "idle": "Run the benchmark and\nits results will appear here.",
     "error": "Could not load the benchmark results.",
     "section": {
       "pii": "PII dataset",
@@ -371,7 +369,6 @@
     "validationBody": "With format validation off the false-positive rate is {without}; with it on, {with}. It prevented {prevented} false positives.",
     "reproduce": "Reproduce",
     "copyCommand": "Copy command",
-    "generatedAt": "Measured at {at}",
     "close": "Close",
     "yes": "Yes",
     "no": "No",
@@ -396,7 +393,14 @@
       "policy": "Policy",
       "expectation": "Expectation",
       "matched": "Matched policies"
-    }
+    },
+    "subtitleCount": "{count} checks",
+    "legend": {
+      "datasets": "Datasets",
+      "scenarios": "Attack scenarios",
+      "fixtures": "Policy fixtures"
+    },
+    "loadingList": "Loading the list…"
   },
   "settings": {
     "servers": {

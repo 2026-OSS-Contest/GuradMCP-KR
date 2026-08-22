@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getSessions, getSessionTimeline } from "@/lib/api/client";
-import type { EventDetail, SessionSummary, TimelineEvent } from "@/lib/api/types";
+import type { EventDetail, SessionSummary, TimelineEvent, TimelineResponse } from "@/lib/api/types";
 import { useResource, type Resource } from "@/lib/api/use-resource";
 
 /**
@@ -14,7 +14,7 @@ interface ReplayContextValue {
   sessions: Resource<{ sessions: SessionSummary[] }>;
   selectedSession: SessionSummary | undefined;
   selectSession: (id: string) => void;
-  timeline: Resource<{ events: TimelineEvent[]; details: Record<string, EventDetail> }>;
+  timeline: Resource<TimelineResponse>;
   events: TimelineEvent[];
   selectedEventId: string | undefined;
   selectEvent: (id: string) => void;

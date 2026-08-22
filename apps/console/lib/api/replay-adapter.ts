@@ -154,7 +154,7 @@ export function toTimelineResponse(api: ApiSessionTimelineResponse): TimelineRes
           : "verified";
     details[node.eventId] = toEventDetail(node, api.sessionId, lastToolName, chainStatus);
   }
-  return { events, details };
+  return { events, details, brokenAt: api.chainStatus === "broken" ? api.brokenAt : undefined };
 }
 
 /**

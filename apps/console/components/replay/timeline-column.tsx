@@ -38,11 +38,26 @@ const MARKER: Record<TimelineNodeType, ComponentType<SVGProps<SVGSVGElement>>> =
  * A verdict node's disc says which verdict, in the same glyph-and-colour pair as its badge
  * (§4.3: never colour alone). The other node types have one marker each.
  */
-const VERDICT_MARKER: Record<Verdict, { Icon: ComponentType<SVGProps<SVGSVGElement>>; tone: string }> = {
-  allow: { Icon: NodeVerdictAllowIcon, tone: "text-verdict-allow" },
-  warn: { Icon: NodeVerdictWarnIcon, tone: "text-verdict-warn" },
-  require_approval: { Icon: NodeVerdictApprovalIcon, tone: "text-verdict-require-approval" },
-  block: { Icon: NodeVerdictIcon, tone: "text-verdict-block" }
+const VERDICT_MARKER: Record<Verdict, ComponentType<SVGProps<SVGSVGElement>>> = {
+  allow: NodeVerdictAllowIcon,
+  warn: NodeVerdictWarnIcon,
+  require_approval: NodeVerdictApprovalIcon,
+  block: NodeVerdictIcon
+};
+
+/**
+ * The ground a row takes while it is the selected one (`Timeline_Rail` frame, `active=True`).
+ *
+ * A verdict tints in its own colour and everything else in white — the frame gives each variant
+ * its own token, and only `block` is a 6% step rather than 10%. Read from the exported `.html`,
+ * which is the authority for styling: the frame's `.png` renders every alpha fill at full
+ * opacity, so trusting the picture here would paint the whole row solid green or amber.
+ */
+const ACTIVE_GROUND: Record<Verdict, string> = {
+  allow: "bg-(--primitive-opacity-allow-alpha-10)",
+  warn: "bg-(--primitive-opacity-warn-alpha-10)",
+  require_approval: "bg-(--primitive-opacity-require-approval-alpha-10)",
+  block: "bg-(--primitive-opacity-block-alpha-6)"
 };
 
 const LABEL_TONE: Partial<Record<TimelineNodeType, string>> = {
@@ -60,17 +75,20 @@ function hhmmss(iso: string): string {
 function NodeRow({
   event,
   selected,
+  chainBroken,
   onSelect,
   register
 }: {
   event: TimelineEvent;
   selected: boolean;
+  /** This node is where the hash chain stops verifying — the frame tints the whole row. */
+  chainBroken: boolean;
   onSelect: () => void;
   register: (el: HTMLButtonElement | null) => void;
 }) {
   const t = useTranslations("replay.timeline");
-  const verdictMarker = event.type === "verdict" ? VERDICT_MARKER[event.verdict ?? "allow"] : undefined;
-  const Marker = verdictMarker?.Icon ?? MARKER[event.type];
+  // Each marker carries its own colours from the frame, so nothing tints it from outside.
+  const Marker = (event.type === "verdict" ? VERDICT_MARKER[event.verdict ?? "allow"] : undefined) ?? MARKER[event.type];
   const mono = event.type === "tool_call" || event.type === "result";
 
   return (
@@ -80,19 +98,23 @@ function NodeRow({
       onClick={onSelect}
       aria-current={selected ? "true" : undefined}
       className={cn(
-        "flex w-full items-start gap-4 rounded-lg px-3 py-2 text-left transition-colors",
+        // `rounded-lg` in the frame is the design's 8px step, which Tailwind's own `rounded-lg`
+        // overshoots by one (AGENTS.md) — so the primitive, not the utility.
+        "flex w-full items-start gap-4 rounded-(--primitive-radius-rounded-lg) px-3 py-2 text-left transition-colors",
         // Selection is the fill, and only the fill — across every frame exactly one row carries
-        // one, the one whose detail the panel is showing, and no row carries a stroke. A blocked
-        // verdict tints in its own colour; every other kind tints white. The block tint had been
-        // painted on that row permanently, which read as a property of the verdict rather than as
-        // the selection it is, and the selection itself was drawn as an inset border instead.
-        selected &&
-          (event.verdict === "block"
-            ? "bg-(--primitive-opacity-block-alpha-6)"
-            : "bg-(--primitive-opacity-white-alpha-6)")
+        // one, the one whose detail the panel is showing, and no row carries a stroke. Each
+        // verdict tints in its own colour and every other node type in white.
+        selected && (event.verdict ? ACTIVE_GROUND[event.verdict] : "bg-(--primitive-opacity-white-alpha-6)"),
+        // The chain's own state outranks selection: a row the hash chain cannot vouch for is
+        // amber whether or not it is the one being read (화면설계서 §5.3 "불일치 구간 하이라이트").
+        // Ground plus an 8px bar down the left edge — the `체인 검증 실패 시` frame states the
+        // sides explicitly (`strokeSides {left: 8}`, `Primitive/Verdict/Warn`), so the stroke is
+        // one edge rather than a box.
+        chainBroken &&
+          "border-l-8 border-verdict-warn bg-(--primitive-opacity-warn-alpha-10) pl-1"
       )}
     >
-      <Marker className={cn("size-10 flex-none", verdictMarker?.tone)} aria-hidden />
+      <Marker className="size-10 flex-none" aria-hidden />
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         {event.type === "verdict" ? (
           <span className="flex flex-wrap items-center gap-2">
@@ -113,8 +135,10 @@ function NodeRow({
             <span className={cn("min-w-0 break-words text-grayscale-white", mono ? "font-mono text-body-mono-b1-rg" : "text-body-text-b1-md")}>
               {event.title}
             </span>
-            {/* Agent nodes point from their reasoning to the resulting decision (spec §5.3 rail). */}
-            {event.type === "agent" && event.subtitle && (
+            {/* Two runs, and an arrow from one to the other. The frame carries `Arrow_Icon` on
+                the User Input variant as well as the Agent one — it separates the two text runs,
+                so it belongs wherever there are two, not to one node type. */}
+            {event.subtitle && (
               <ChevronRight className="size-6 flex-none text-(--primitive-opacity-white-alpha-50)" aria-hidden />
             )}
             {event.subtitle && <span className="break-words text-body-text-b1-md text-grayscale-white">{event.subtitle}</span>}
@@ -281,6 +305,7 @@ export function TimelineColumn() {
                 <NodeRow
                   event={event}
                   selected={event.id === selectedEventId}
+                  chainBroken={event.id === timeline.data?.brokenAt}
                   onSelect={() => selectEvent(event.id)}
                   register={(el) => {
                     if (el) rowRefs.current.set(event.id, el);

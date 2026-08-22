@@ -19,7 +19,7 @@ test("SCR-601 lists every sample before the run and judges none of them", async 
   await expect(list.getByText("연락처는 010-1234-5678 입니다")).toBeVisible();
   await expect(page.getByRole("heading", { name: "PII 데이터셋" })).toBeVisible();
   // …but nothing carries a verdict yet, and the panel says so rather than showing a stale one.
-  await expect(page.getByText("벤치마크를 실행하면 결과가 여기에 표시됩니다.")).toBeVisible();
+  await expect(page.getByText("벤치마크를 실행하면 결과가 이곳에 표시됩니다.")).toBeVisible();
 });
 
 test("SCR-601 running the benchmark fills the result panel with the gate report", async ({ page }) => {
