@@ -80,7 +80,10 @@ export function ResultPanel({
     // black, with the frame's 24/16 inset, and a 1px rule down its left edge separating it from
     // the list (`benchmark detail`, `strokeSides {left: 1}` in grayscale-800). Without it the
     // list card's own edge was the only boundary, which read as the two columns drifting apart.
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto border-l border-grayscale-800 px-4 py-6">
+    // A container, not a breakpoint: what decides the metric layout below is how wide this
+    // column is, and it is a percentage of whatever the rail leaves — the same viewport gives
+    // it a different width with the rail collapsed.
+    <div className="@container flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto border-l border-grayscale-800 px-4 py-6">
       <div
         // The one announcement the run makes: the 245 checks themselves are not a live region.
         role="status"
@@ -107,7 +110,16 @@ export function ResultPanel({
       </div>
 
       <Section title={t("quality")}>
-        <div className="grid grid-cols-2 gap-2">
+        {/* Two across while there is room, four stacked when there is not. The frames measure
+            the switch for us: at 1280 and 1920 the column measures 332 and 528 inside its
+            padding and holds two 162/260 panels per row, while at 1024 it measures 242 and the
+            four panels each take the full width.
+
+            The threshold is 320 rather than the pair's own 332, because the column is a
+            percentage and lands a whisker under the frame: 36% of the 1280 content box is
+            362.9, not 364, so an exact 332 would stack the very width the frame draws two
+            across. 320 sits clear of both measurements — 242 below it, 330 above. */}
+        <div className="grid grid-cols-1 gap-2 @min-[320px]:grid-cols-2">
           <Metric
             label={t("metric.recall")}
             value={percent(m.recall)}
