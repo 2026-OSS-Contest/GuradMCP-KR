@@ -69,6 +69,7 @@ export {
   loadPolicyPacks,
   type PackState,
   type PackSummary,
+  type PolicySource,
   type LoadPolicyPacksOptions,
 } from "./loader/packRegistry.js";
 export type { PathNormalizationResult } from "./pathNormalize.js";

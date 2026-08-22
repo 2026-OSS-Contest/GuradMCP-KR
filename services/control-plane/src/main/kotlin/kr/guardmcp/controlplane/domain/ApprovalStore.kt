@@ -74,7 +74,7 @@ class ApprovalStore(private val clock: Clock) {
             toolName = "send_email",
             arguments = mapOf("to" to "partner@external.example", "subject" to "고객 명단 공유"),
             riskReason = "External email delivery requires human approval",
-            policyId = "approve_external_email",
+            policyId = "approve_external_email_with_secret",
             requestedAt = DemoSeed.SEEDED_AT.plusSeconds(61),
             expiresAt = DemoSeed.APPROVAL_PENDING_EXPIRES_AT,
             decision = null,

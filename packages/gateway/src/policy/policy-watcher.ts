@@ -5,6 +5,7 @@
 // burst of edits within `debounceMs` collapses into a single reload (§4.1/§7 "디바운스" scenario).
 import { watch, type FSWatcher } from "chokidar";
 import type { PolicyLoadError } from "@guardmcp/policy-engine";
+import { syncPolicyRegistry } from "../controlPlane/policySync.js";
 import { emitPolicyReloadFailed, emitPolicyReloaded } from "../pipeline/events.js";
 import { logJson } from "../pipeline/logger.js";
 import { loadPolicySnapshot } from "./policy-loader.js";
@@ -97,6 +98,8 @@ export interface PolicyWatcherOptions {
   debounceMs?: number;
   /** Forwarded to `loadPolicySnapshot` — a test fixture rarely has the production required packs. */
   requiredPacks?: string[];
+  /** Set to push the freshly reloaded registry to the Control Plane (fix-api.md §1); omitted in tests. */
+  controlPlaneUrl?: string | undefined;
 }
 
 export interface PolicyWatcherHandle {
@@ -157,6 +160,7 @@ export function startPolicyWatcher(
     store.swap(result.snapshot);
     const policyCount = result.registry.getActivePolicyCount();
     logJson("info", "policy reloaded", { version: result.snapshot.version, policyCount });
+    syncPolicyRegistry(options.controlPlaneUrl, result.registry);
     emitPolicyReloaded({
       packId: options.activePackId,
       version: result.snapshot.version,
