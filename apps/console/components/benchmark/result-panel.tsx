@@ -29,7 +29,7 @@ function Metric({
   fill: number;
 }) {
   return (
-    <div className="flex flex-col gap-2 rounded-(--primitive-radius-rounded-lg) bg-grayscale-900 p-3">
+    <div className="flex flex-col gap-2 rounded-(--primitive-radius-rounded-lg) border border-grayscale-800 bg-grayscale-900 p-3">
       <span className="flex items-baseline justify-between gap-2">
         <span className="text-body-text-b3-md text-grayscale-200">{label}</span>
         <span className={cn("text-body-text-b3-bd", passed ? "text-grayscale-white" : "text-red-400")}>{value}</span>
@@ -77,14 +77,18 @@ export function ResultPanel({
 
   return (
     // The detail column carries no card of its own — sections sit straight on the screen's
-    // black, with the frame's 24/16 inset.
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-6">
+    // black, with the frame's 24/16 inset, and a 1px rule down its left edge separating it from
+    // the list (`benchmark detail`, `strokeSides {left: 1}` in grayscale-800). Without it the
+    // list card's own edge was the only boundary, which read as the two columns drifting apart.
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto border-l border-grayscale-800 px-4 py-6">
       <div
         // The one announcement the run makes: the 245 checks themselves are not a live region.
         role="status"
         className={cn(
-          "flex items-center gap-4 rounded-(--primitive-radius-rounded-xl) p-3",
-          report.passed ? "bg-(--primitive-opacity-allow-alpha-10)" : "bg-(--primitive-opacity-block-alpha-10)"
+          "flex items-center gap-4 rounded-(--primitive-radius-rounded-xl) border p-3",
+          report.passed
+            ? "border-(--primitive-opacity-allow-alpha-10) bg-(--primitive-opacity-allow-alpha-10)"
+            : "border-(--primitive-opacity-block-alpha-10) bg-(--primitive-opacity-block-alpha-10)"
         )}
       >
         {report.passed ? (

@@ -53,9 +53,9 @@ export function RunList({
           <li key={group.section} className="flex flex-col gap-1">
             {/* Section band (`Run List` header instance): a 6% pill that scrolls with its
                 rows — it marks where a section starts rather than following the reader down. */}
-            <h3 className="flex h-10 w-full items-center gap-2 rounded-(--primitive-radius-rounded-xl) bg-(--primitive-opacity-white-alpha-6) px-3 py-2">
-              <span className="text-body-text-b2-md text-grayscale-white">{t(`section.${group.section}`)}</span>
-              <span className="text-body-text-b2-md text-(--primitive-opacity-white-alpha-75)">
+            <h3 className="flex w-full items-center gap-2 rounded-(--primitive-radius-rounded-xl) bg-(--primitive-opacity-white-alpha-6) px-3 py-2">
+              <span className="flex-none text-body-text-b2-md text-grayscale-white">{t(`section.${group.section}`)}</span>
+              <span className="min-w-0 flex-1 text-body-text-b2-md text-(--primitive-opacity-white-alpha-75)">
                 {group.items.length}
               </span>
             </h3>
@@ -71,7 +71,10 @@ export function RunList({
                       type="button"
                       onClick={() => onSelect(row)}
                       className={cn(
-                        "flex w-full items-center gap-3 rounded-(--primitive-radius-rounded-lg) px-3 py-2 text-left hover:bg-(--primitive-opacity-white-alpha-6)",
+                        // The frame rules each row along its bottom edge — and draws it as an
+                        // inset shadow, not a border, so the line costs the row no height and
+                        // 245 of them do not push the list a quarter-screen longer.
+                        "flex w-full items-center gap-3 px-3 py-2 text-left shadow-[inset_0_-1px_0_0_var(--primitive-opacity-white-alpha-10)] hover:bg-(--primitive-opacity-white-alpha-6)",
                         current && state === "running" && "bg-(--primitive-opacity-white-alpha-6)"
                       )}
                     >
@@ -89,7 +92,7 @@ export function RunList({
                             <RowPendingIcon className="size-4" aria-hidden />
                           )}
                         </span>
-                        <span title={row.id} className="truncate font-mono text-body-mono-b3-rg text-grayscale-white">
+                        <span title={row.id} className="min-w-0 flex-1 truncate font-mono text-body-mono-b3-rg text-grayscale-white">
                           {row.id}
                         </span>
                       </span>
