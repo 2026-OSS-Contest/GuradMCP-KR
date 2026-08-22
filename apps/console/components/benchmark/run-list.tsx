@@ -35,9 +35,7 @@ export function RunList({
     cursor.current?.scrollIntoView({ block: "nearest" });
   }, [checked, state]);
 
-  // A sticky heading can only travel inside its own containing block, so the rows are grouped
-  // into their sections — each heading's block is the section it names, and it stays put until
-  // the next one pushes it off.
+  // Rows grouped into their sections, so each section renders as a band followed by its rows.
   const groups: { section: RunRow["section"]; items: { row: RunRow; index: number }[] }[] = [];
   for (const [index, row] of rows.entries()) {
     const open = groups.at(-1);
@@ -49,20 +47,13 @@ export function RunList({
     // Deliberately not a live region. 245 rows land in about three seconds, and `role="log"`
     // (implicit `aria-live="polite"`) would queue every one of them for reading. The result
     // panel announces the outcome once instead.
-    //
-    // The frame pads the list 12px on every side; the top 12 are a spacer that scrolls away
-    // rather than padding, so the sticky heading can sit flush at `top-0` instead of letting
-    // rows slide past above it.
-    <div data-testid="run-list" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3">
-      <div className="h-3 w-full flex-none" aria-hidden />
+    <div data-testid="run-list" className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
       <ul className="flex w-full flex-col gap-1">
         {groups.map((group) => (
           <li key={group.section} className="flex flex-col gap-1">
-            {/* Section band (`Run List` header instance): 6% white on the card's 900, which is
-                translucent — fine in the frame, but rows would show through it while it is
-                stuck, so the ground is composited onto the card colour it would blend with
-                anyway. */}
-            <h3 className="sticky top-0 z-10 flex h-10 w-full items-center gap-2 rounded-(--primitive-radius-rounded-xl) px-3 py-2 [background:linear-gradient(var(--primitive-opacity-white-alpha-6),var(--primitive-opacity-white-alpha-6)),var(--primitive-color-grayscale-900)]">
+            {/* Section band (`Run List` header instance): a 6% pill that scrolls with its
+                rows — it marks where a section starts rather than following the reader down. */}
+            <h3 className="flex h-10 w-full items-center gap-2 rounded-(--primitive-radius-rounded-xl) bg-(--primitive-opacity-white-alpha-6) px-3 py-2">
               <span className="text-body-text-b2-md text-grayscale-white">{t(`section.${group.section}`)}</span>
               <span className="text-body-text-b2-md text-(--primitive-opacity-white-alpha-75)">
                 {group.items.length}
