@@ -172,7 +172,10 @@
       "notice": "This access is recorded, and the panel re-masks automatically when you leave.",
       "raw": "Original (Raw)",
       "masked": "Masked",
-      "stop": "Stop revealing"
+      "stop": "Stop revealing",
+      "forbidden": "You don't have permission to reveal the original.",
+      "notStored": "The original payload was not stored for this event.",
+      "failed": "Couldn't reveal the original. Try again."
     }
   },
   "attackLab": {

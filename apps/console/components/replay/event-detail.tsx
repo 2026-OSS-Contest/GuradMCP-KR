@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { revealEvent } from "@/lib/api/client";
+import { ApiError, revealEvent } from "@/lib/api/client";
 import { toRevealContent } from "@/lib/api/reveal-adapter";
 import type { DirectionVerdict, EventDetail, RevealContent, TimelineNodeType } from "@/lib/api/types";
 import { VerdictBadge } from "@/components/verdict-badge";
@@ -105,8 +105,23 @@ function ChainPill({ status, hash }: NonNullable<EventDetail["chain"]>) {
   );
 }
 
+/** fix-api.md §6: the control plane can 403 (no/wrong operator token), 409 (raw payload was
+ *  never stored — `storeRawOptIn` defaults off) or fail to reach at all. The doc's own
+ *  resolution is to say so rather than leave the confirm silently doing nothing. */
+type RevealError = "forbidden" | "notStored" | "failed";
+
 /** Step 1 of reveal-original: the audit-log confirmation (spec §5.3 no.5). */
-function ConfirmRevealModal({ onCancel, onConfirm, pending }: { onCancel: () => void; onConfirm: () => void; pending: boolean }) {
+function ConfirmRevealModal({
+  onCancel,
+  onConfirm,
+  pending,
+  error
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+  pending: boolean;
+  error: RevealError | null;
+}) {
   const t = useTranslations("replay.reveal");
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && onCancel();
@@ -129,6 +144,11 @@ function ConfirmRevealModal({ onCancel, onConfirm, pending }: { onCancel: () => 
         <p id="confirm-reveal-body" className="mt-2 text-body-text-b3-md text-grayscale-300">
           {t("body")}
         </p>
+        {error && (
+          <p role="alert" className="mt-3 text-body-text-b3-md text-red-400">
+            {t(error)}
+          </p>
+        )}
         <div className="mt-6 flex justify-end gap-2">
           <button
             type="button"
@@ -161,15 +181,18 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [revealed, setRevealed] = useState<RevealContent | null>(null);
+  const [revealError, setRevealError] = useState<RevealError | null>(null);
 
   // Reset any open reveal when the selected event changes.
   useEffect(() => {
     setConfirmOpen(false);
     setRevealed(null);
+    setRevealError(null);
   }, [detail.id]);
 
   const confirmReveal = async () => {
     setPending(true);
+    setRevealError(null);
     try {
       // MSW answers `RevealContent` directly; the real endpoint answers `ApiRevealResponse`
       // (fix-api.md §6) and this adapts it using the VERDICT node's own detection spans, which
@@ -186,6 +209,19 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
             )
       );
       setConfirmOpen(false);
+    } catch (error) {
+      // fix-api.md §6's own resolution: 403 (no/wrong operator token — `AuditEventController
+      // .reveal`) reads as "no permission", 409 (`raw_payload_not_stored`, the default with
+      // `storeRawOptIn` off) as "nothing to reveal", anything else (network, 503 from the
+      // reveal route when CONTROL_PLANE_URL is unreachable) as a generic failure. Left uncaught
+      // before, this silently did nothing after the operator confirmed.
+      setRevealError(
+        error instanceof ApiError && error.status === 403
+          ? "forbidden"
+          : error instanceof ApiError && error.status === 409
+            ? "notStored"
+            : "failed"
+      );
     } finally {
       setPending(false);
     }
@@ -334,7 +370,10 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
       {detail.canReveal && (
         <button
           type="button"
-          onClick={() => setConfirmOpen(true)}
+          onClick={() => {
+            setRevealError(null);
+            setConfirmOpen(true);
+          }}
           className="flex h-12 flex-none items-center justify-center gap-2 rounded-xl bg-blue-800 text-body-text-b2-md transition-colors hover:bg-blue-700"
         >
           <RevealLockIcon className="h-6 w-5 flex-none" aria-hidden />
@@ -342,7 +381,14 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
         </button>
       )}
 
-      {confirmOpen && <ConfirmRevealModal onCancel={() => setConfirmOpen(false)} onConfirm={confirmReveal} pending={pending} />}
+      {confirmOpen && (
+        <ConfirmRevealModal
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={confirmReveal}
+          pending={pending}
+          error={revealError}
+        />
+      )}
       {revealed && <RevealModal content={revealed} onClose={() => setRevealed(null)} />}
     </div>
   );
