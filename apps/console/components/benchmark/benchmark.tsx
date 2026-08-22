@@ -2,13 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2 } from "lucide-react";
 import { getBenchmarkReport, getBenchmarkSamples } from "@/lib/api/client";
 import { useResource } from "@/lib/api/use-resource";
 import { RunList } from "./run-list";
 import { ResultPanel } from "./result-panel";
 import { RowDialog } from "./row-dialog";
-import { EmptyTargetIcon } from "./icons";
+import { EmptyTargetIcon, LoadFailedIcon } from "./icons";
 import { toRows, useBenchmarkRun, type RunRow } from "./use-benchmark-run";
 import { cn } from "@/lib/utils";
 
@@ -86,21 +85,18 @@ export function Benchmark() {
         <button
           type="button"
           onClick={start}
-          // While it spins the button has no text of its own, so the name is carried here.
-          aria-label={t(state === "done" ? "runAgain" : "run")}
           disabled={loading || rows.length === 0 || state === "running"}
           className={cn(
             // Hover darkens rather than lightens: white on blue-700 is 4.18:1, under the 4.5:1
             // the project holds itself to (기획서 NFR-08). blue-800 is 6.5:1, blue-900 11:1.
-            "flex h-10 flex-none items-center justify-center rounded-(--primitive-radius-rounded-xl) bg-blue-800 px-4 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-blue-900",
-            (loading || rows.length === 0 || state === "running") && "cursor-not-allowed opacity-50"
+            "flex h-10 flex-none items-center justify-center gap-2 rounded-(--primitive-radius-rounded-xl) bg-blue-800 px-4 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-blue-900",
+            // The three frames that disable it — 두 응답 도착 전, 응답 실패, 실행 중 — all fade
+            // it to 25%, and all three keep its label rather than swapping in a spinner. The
+            // cascade running down the list is what says the run is under way.
+            (loading || rows.length === 0 || state === "running") && "cursor-not-allowed opacity-25"
           )}
         >
-          {state === "running" ? (
-            <Loader2 className="size-5 animate-spin motion-reduce:animate-none" aria-hidden />
-          ) : (
-            t(state === "done" ? "runAgain" : "run")
-          )}
+          {t(state === "done" || state === "running" ? "runAgain" : "run")}
         </button>
       </div>
 
@@ -110,12 +106,21 @@ export function Benchmark() {
       <div className="flex min-h-0 flex-1 gap-4">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-(--primitive-radius-rounded-xl) bg-grayscale-900">
           {loading || failed ? (
-            // The 두-응답-도착-전 / 응답-실패 frames put the message inside the list card, with
-            // the shimmer sweeping the card only while it is genuinely waiting.
-            <div className="flex flex-1 flex-col items-center justify-center gap-1 p-6 text-center">
-              <p role={failed ? "status" : undefined} className="text-body-text-b2-md text-grayscale-white">
-                {t(failed ? "error" : "loadingList")}
-              </p>
+            // The 두-응답-도착-전 / 응답-실패 frames put the message inside the list card. They
+            // are not the same message: waiting is one quiet white line and the shimmer, while
+            // a failure gets the 40px warn disc and the larger yellow-200 heading — a state the
+            // reader has to act on should not look like a state that resolves itself.
+            <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+              {failed ? (
+                <>
+                  <LoadFailedIcon className="size-10 flex-none" />
+                  <p role="status" className="text-title-text-t2-bd text-yellow-200">
+                    {t("error")}
+                  </p>
+                </>
+              ) : (
+                <p className="text-body-text-b2-md text-grayscale-white">{t("loadingList")}</p>
+              )}
               {loading && (
                 <span className="pane-shimmer motion-reduce:animate-none pointer-events-none absolute inset-0" aria-hidden />
               )}

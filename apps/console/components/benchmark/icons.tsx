@@ -72,3 +72,16 @@ export function DonutGauge({ value, missed }: { value: number; missed: boolean }
     </svg>
   );
 }
+
+/**
+ * The 응답 실패 frame's own 40px mark: a warn-tinted disc behind a warning triangle, both
+ * `#F7B938` — the disc at 10%, which is `warn-alpha-10`. Decoded from the frame's `.html`.
+ */
+export function LoadFailedIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 40 40" fill="none" className={className} aria-hidden>
+      <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="#F7B938" fillOpacity="0.1" />
+      <path d="M12.4701 28.9997H27.5301C29.0701 28.9997 30.0301 27.3297 29.2601 25.9997L21.7301 12.9897C20.9601 11.6597 19.0401 11.6597 18.2701 12.9897L10.7401 25.9997C9.97012 27.3297 10.9301 28.9997 12.4701 28.9997ZM20.0001 21.9997C19.4501 21.9997 19.0001 21.5497 19.0001 20.9997V18.9997C19.0001 18.4497 19.4501 17.9997 20.0001 17.9997C20.5501 17.9997 21.0001 18.4497 21.0001 18.9997V20.9997C21.0001 21.5497 20.5501 21.9997 20.0001 21.9997ZM21.0001 25.9997H19.0001V23.9997H21.0001V25.9997Z" fill="#F7B938" />
+    </svg>
+  );
+}
