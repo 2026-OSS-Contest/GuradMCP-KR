@@ -426,11 +426,13 @@ export const handlers = [
   // Neither path exists on the control plane; these two are what the console needs built. The
   // bodies are a real `npm run bench` run, not invented numbers — see mocks/benchmark.ts.
   http.get("*/api/v1/benchmark/report", async () => {
+    if (readScenario() === "offline") return HttpResponse.error();
     await delay(LATENCY_MS);
     return HttpResponse.json(benchmarkReport);
   }),
 
   http.get("*/api/v1/benchmark/samples", async () => {
+    if (readScenario() === "offline") return HttpResponse.error();
     await delay(LATENCY_MS);
     return HttpResponse.json({ samples: benchmarkSamples });
   }),
