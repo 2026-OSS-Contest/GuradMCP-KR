@@ -60,15 +60,11 @@ export function RunList({
               </span>
             </h3>
             <ul className="flex flex-col">
-              {group.items.map(({ row, index }, at) => {
+              {group.items.map(({ row, index }) => {
                 const done = index < checked;
                 // The row the run is on — the pointer moving down the list, and the row the
                 // list keeps scrolled into view, so the two agree.
                 const current = index === checked - 1;
-                // The kind chip marks where a kind starts, not every row of it — the frame
-                // chips p01/PHONE and leaves p02–p07 bare (base and 실행완료 exports alike).
-                const kindStarts =
-                  row.kind !== null && (at === 0 || group.items[at - 1].row.kind !== row.kind);
                 return (
                   <li key={row.id} ref={current ? cursor : undefined}>
                     <button
@@ -97,7 +93,7 @@ export function RunList({
                           {row.id}
                         </span>
                       </span>
-                      {kindStarts && (
+                      {row.kind !== null && (
                         <span className="flex-none rounded-(--primitive-radius-rounded-sm) bg-(--primitive-opacity-white-alpha-10) px-2 py-px font-mono text-caption-mono-c-rg text-green-200 shadow-[inset_0_0_0_1px_var(--primitive-opacity-white-alpha-10)]">
                           {row.kind}
                         </span>
