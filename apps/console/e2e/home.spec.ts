@@ -8,7 +8,9 @@ test("GMCP-88 SCR-101 renders KPI cards, the inventory and recent events", async
 
   // KPI cards (spec §5.1 no.1)
   await expect(page.getByRole("link", { name: /MCP 서버/ })).toBeVisible();
-  await expect(page.getByRole("link", { name: /24h 차단/ })).toBeVisible();
+  // 「오늘 차단」, not 24h: the control plane counts since local midnight, so the label was
+  // changed to match the window rather than the number to match the label.
+  await expect(page.getByRole("link", { name: /오늘 차단/ })).toBeVisible();
 
   // Server inventory with connection state and trust tier (no.2)
   await expect(page.getByRole("heading", { name: "MCP 서버 인벤토리" })).toBeVisible();

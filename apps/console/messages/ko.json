@@ -50,7 +50,7 @@
       "tools": "보호 Tool",
       "policies": "활성 정책",
       "packCount": "{count}개 팩",
-      "blocked": "24h 차단"
+      "blocked": "오늘 차단"
     },
     "inventory": {
       "title": "MCP 서버 인벤토리",

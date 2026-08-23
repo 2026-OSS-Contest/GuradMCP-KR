@@ -50,7 +50,7 @@
       "tools": "Protected tools",
       "policies": "Active policies",
       "packCount": "{count} packs",
-      "blocked": "Blocked 24h"
+      "blocked": "Blocked today"
     },
     "inventory": {
       "title": "MCP server inventory",
