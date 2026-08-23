@@ -15,12 +15,53 @@ export type RiskLevel = "high" | "medium" | "low";
 /** Status bar indicator (spec §4.1 no.3). `degraded` = gateway up, some upstreams down. */
 export type GatewayStatus = "protected" | "degraded" | "disconnected";
 
+/**
+ * What `GET /overview` **actually** answers today — `OverviewController.kt`'s `Overview`.
+ *
+ * It shares exactly one field name with the console's `Overview` below (`pendingApprovals`).
+ * Everything else is named differently, scoped differently, or simply absent, which is why
+ * `toOverview()` in `overview-adapter.ts` exists and is the only thing that should read this.
+ */
+export interface ApiOverview {
+  /** True when any policy pack is enabled — `activePacks.isNotEmpty()`, nothing more. */
+  protected: boolean;
+  /**
+   * Gateways, hardcoded to 1. **Not** the MCP inventory: the console's own `servers` count comes
+   * from `GET /servers`, and the two are different numbers.
+   */
+  gatewayCount: number;
+  activePolicyPacks: string[];
+  /** Since local midnight (`clock.instant().truncatedTo(DAYS)`), not a rolling 24 hours. */
+  blockedToday: number;
+  maskedToday: number;
+  pendingApprovals: number;
+  generatedAt: string;
+}
+
+/**
+ * What the screens read. `toOverview()` builds the first half from `ApiOverview`; the rest is
+ * derived from `GET /servers` and `GET /policies`, because `/overview` reports neither the MCP
+ * inventory nor a policy count. Those three stay **optional** so a screen that has not fetched
+ * (or could not fetch) the inventory renders a dash rather than a wrong zero.
+ */
 export interface Overview {
   status: GatewayStatus;
-  servers: { total: number; disconnected: number };
-  protectedTools: number;
-  policies: { active: number; packs: string[] };
+  /** Derived from `GET /servers`. Absent until that call lands. */
+  servers?: { total: number; disconnected: number };
+  /** Derived from `GET /servers` — every tool the registered servers expose. */
+  protectedTools?: number;
+  policies: {
+    /** Derived from `GET /policies`, counting only policies whose pack is enabled. */
+    active?: number;
+    packs: string[];
+  };
+  /**
+   * Named for the design's card, but the control plane counts **since local midnight**, not a
+   * rolling 24 hours. The label reads 오늘 for that reason — see `messages/*.json`.
+   */
   blocked24h: number;
+  /** Reported beside `blockedToday`; no card shows it yet, but dropping it would lose it. */
+  maskedToday: number;
   pendingApprovals: number;
 }
 

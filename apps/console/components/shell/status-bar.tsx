@@ -41,8 +41,10 @@ export function StatusBar() {
   // is asking for its first server. Only there: the other screens' empty frames keep the bar as
   // it is, and only once the poll has answered, since while it is loading there is no such claim
   // to make either way.
-  const nothingRegistered =
-    pathname === "/" && overview.data !== undefined && overview.data.servers.total === 0;
+  // `servers` is derived from `GET /servers`, so it is undefined until that call lands — and an
+  // undefined count is not zero. Testing for an explicit 0 keeps the bar drawn while the
+  // inventory is still unknown, which is the same "only once the poll has answered" rule.
+  const nothingRegistered = pathname === "/" && overview.data?.servers?.total === 0;
   // Seeded by the /overview poll, kept live by approval.created/resolved SSE events (spec §4.1).
   const pending = usePendingApprovals(overview.data?.pendingApprovals ?? 0, overview.requestedAt);
 

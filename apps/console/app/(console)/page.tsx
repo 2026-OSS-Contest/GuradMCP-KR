@@ -1,8 +1,7 @@
 "use client";
 
-import { getServers } from "@/lib/api/client";
-import { useDelayed, useResource } from "@/lib/api/use-resource";
-import { isOffline, useOverview } from "@/components/providers/overview-provider";
+import { useDelayed } from "@/lib/api/use-resource";
+import { isOffline, useOverview, useServerInventory } from "@/components/providers/overview-provider";
 import { KpiCards } from "@/components/gateway/kpi-cards";
 import { QuickStart } from "@/components/gateway/quick-start";
 import { RecentEvents } from "@/components/gateway/recent-events";
@@ -11,7 +10,9 @@ import { ServerInventory } from "@/components/gateway/server-inventory";
 /** SCR-101 Gateway Home — FR-UI-01, UI specification §5.1. */
 export default function GatewayPage() {
   const overview = useOverview();
-  const servers = useResource((signal) => getServers(signal));
+  // The same `/servers` poll the KPI cards were counted from — fetching it again here would let
+  // the table and the card above it disagree about how many servers there are.
+  const servers = useServerInventory();
 
   // Spec §4.2: a response under 500ms must not flash a skeleton.
   const serversPending = useDelayed(!servers.data);

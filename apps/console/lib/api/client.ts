@@ -1,4 +1,5 @@
 import type {
+  ApiOverview,
   ApiErrorBody,
   ApiEventLookupResponse,
   ApiSessionTimelineResponse,
@@ -30,6 +31,7 @@ import type {
   ToolDefinitionDiff,
   ToolDiffsResponse
 } from "./types";
+import { toOverview } from "./overview-adapter";
 import {
   toEventDetailFromLookup,
   toSessionsResponse,
@@ -97,8 +99,9 @@ async function postJson<T>(
   return (await response.json()) as T;
 }
 
-export const getOverview = (signal?: AbortSignal) =>
-  get<Overview>("/overview", signal);
+/** `/overview` answers a different shape than the screens read — see `overview-adapter.ts`. */
+export const getOverview = (signal?: AbortSignal): Promise<Overview> =>
+  get<ApiOverview>("/overview", signal).then(toOverview);
 export const getServers = (signal?: AbortSignal) =>
   get<ServersResponse>("/servers", signal);
 export const getRecentEvents = (signal?: AbortSignal) =>
