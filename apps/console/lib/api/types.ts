@@ -84,8 +84,16 @@ export interface SnapshotStatus {
 
 export interface ToolEntry {
   name: string;
+  /**
+   * **A seed, not a measurement — on the real backend too.** `ServerController.kt` keeps a
+   * hardcoded `TOOL_RISK_SEED` keyed by the demo servers' UUIDs, and any tool it does not name
+   * falls through to `ToolRisk.LOW` with no policies. So pointing the console at a live control
+   * plane does *not* turn this into real scoring: a genuinely registered server's tools will all
+   * read 낮음 with an empty policy list. No tool-level risk scoring exists anywhere yet.
+   */
   risk: RiskLevel;
-  /** Policy ids applied to this tool. The first is shown as a chip, the rest as "외 N". */
+  /** Policy ids applied to this tool. The first is shown as a chip, the rest as "외 N".
+   *  Same seed, same caveat: empty for anything outside `TOOL_RISK_SEED`. */
   policies: string[];
   snapshotStatus: SnapshotStatus;
 }
