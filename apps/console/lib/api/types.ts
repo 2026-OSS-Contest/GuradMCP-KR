@@ -548,6 +548,31 @@ export interface AttackRun {
   /** Recorded session, for the Replay deep link on the summary strip. */
   sessionId: string;
 }
+/**
+ * What `POST /attacklab/run/{id}` **actually** answers today: a 202 and a receipt.
+ *
+ * `AttackLabRunStore.enqueue` records `{runId, scenarioId, status, requestedAt}` and nothing
+ * else — no calls, no summary, no stream, no session, and no `mode`, which the console sends as
+ * a query parameter that `AttackLabController.run` does not declare and therefore ignores. The
+ * runner that would fill any of this in is GMCP-55, unbuilt; there is no `GET /attacklab/runs/
+ * {runId}` to poll either.
+ *
+ * It is a separate type rather than optional fields on `AttackRun` so that reading `calls`
+ * without checking is a compile error. It used to be neither: the client claimed `AttackRun`
+ * unconditionally, and against a real control plane `run.calls.length` threw during render.
+ */
+export interface AttackRunQueued {
+  runId: string;
+  scenarioId: string;
+  status: string;
+  requestedAt: string;
+}
+
+export type AttackRunResponse = AttackRun | AttackRunQueued;
+
+/** Whether a run came back with the evidence the panes draw, or only a receipt. */
+export const hasRunResults = (run: AttackRunResponse): run is AttackRun =>
+  Array.isArray((run as AttackRun).calls);
 
 // ── SCR-401 Detector (spec §5.4) ────────────────────────────────────────────
 // `POST /detect/preview`, which the control plane already serves. Its own vocabulary is the

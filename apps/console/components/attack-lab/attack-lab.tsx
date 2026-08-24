@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import { getAttackScenarios, runAttackScenario } from "@/lib/api/client";
-import type { AttackRun, AttackRunMode } from "@/lib/api/types";
+import { hasRunResults, type AttackRun, type AttackRunMode } from "@/lib/api/types";
 import { useResource } from "@/lib/api/use-resource";
 import { BannerInfoIcon } from "@/components/icons";
 import { ScenarioPicker } from "./scenario-picker";
@@ -23,6 +23,7 @@ type PerMode<T> = Record<AttackRunMode, T>;
 
 const ZEROED: PerMode<number> = { unguarded: 0, guarded: 0 };
 const NOT_FAILED: PerMode<boolean> = { unguarded: false, guarded: false };
+const NOT_QUEUED: PerMode<boolean> = { unguarded: false, guarded: false };
 
 /**
  * SCR-201 Attack Lab (FR-UI-02, spec §5.2): pick a scenario, run it with the guard off and on,
@@ -38,6 +39,8 @@ export function AttackLab() {
   const [runs, setRuns] = useState<Runs>({});
   const [visible, setVisible] = useState<PerMode<number>>(ZEROED);
   const [failed, setFailed] = useState<PerMode<boolean>>(NOT_FAILED);
+  /** The run was accepted but came back as a receipt: no runner deployed to fill it in. */
+  const [queued, setQueued] = useState<PerMode<boolean>>(NOT_QUEUED);
   const [running, setRunning] = useState<AttackRunMode | null>(null);
   /** Which run the summary strip and the stream table are reporting. */
   const [latest, setLatest] = useState<AttackRunMode | null>(null);
@@ -51,6 +54,7 @@ export function AttackLab() {
     setRuns({});
     setVisible(ZEROED);
     setFailed(NOT_FAILED);
+    setQueued(NOT_QUEUED);
     setLatest(null);
   }, []);
 
@@ -58,10 +62,18 @@ export function AttackLab() {
     async (mode: AttackRunMode, scenarioId: string) => {
       setRunning(mode);
       setFailed((previous) => ({ ...previous, [mode]: false }));
+      setQueued((previous) => ({ ...previous, [mode]: false }));
       setRuns((previous) => ({ ...previous, [mode]: undefined }));
       setVisible((previous) => ({ ...previous, [mode]: 0 }));
       try {
         const run = await runAttackScenario(scenarioId, mode);
+        // A control plane without the GMCP-55 runner accepts the run and returns a receipt. That
+        // is not a failure — the request worked — so it gets its own pane state rather than the
+        // retry prompt, which would invite the operator to retry something that cannot succeed.
+        if (!hasRunResults(run)) {
+          setQueued((previous) => ({ ...previous, [mode]: true }));
+          return;
+        }
         setRuns((previous) => ({ ...previous, [mode]: run }));
         setLatest(mode);
       } catch {
@@ -148,6 +160,7 @@ export function AttackLab() {
             visible={visible[mode]}
             running={running === mode}
             failed={failed[mode]}
+            queued={queued[mode]}
             onRetry={() => selected && void start(mode, selected.id)}
           />
         ))}

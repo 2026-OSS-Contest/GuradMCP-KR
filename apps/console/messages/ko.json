@@ -190,6 +190,8 @@
     "paneIdle": "시나리오를 선택하고 실행하세요",
     "runFailedTitle": "Run 요청 실패",
     "runFailedBody": "Run 요청 처리에 실패하였습니다.\nattack-lab 컨테이너 상태를 확인하세요.",
+    "runQueuedTitle": "실행은 접수됐지만 결과가 없습니다",
+    "runQueuedBody": "게이트웨이 러너가 아직 배포되지 않아\n이 환경에서는 호출 기록을 받을 수 없습니다. (GMCP-55)",
     "retry": "재시도",
     "riskScore": "위험 점수",
     "resultSummary": "결과 요약",

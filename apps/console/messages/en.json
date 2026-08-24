@@ -190,6 +190,8 @@
     "paneIdle": "Select a scenario and run it",
     "runFailedTitle": "Run request failed",
     "runFailedBody": "The run request could not be processed.\nCheck the attack-lab container.",
+    "runQueuedTitle": "Accepted, but nothing to show",
+    "runQueuedBody": "The gateway runner is not deployed yet, so this\nenvironment cannot return the call log. (GMCP-55)",
     "retry": "Retry",
     "riskScore": "Risk score",
     "resultSummary": "Result summary",

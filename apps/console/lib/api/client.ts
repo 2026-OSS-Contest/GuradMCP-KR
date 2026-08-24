@@ -6,7 +6,7 @@ import type {
   ApiSessionsResponse,
   Approval,
   ApprovalDecision,
-  AttackRun,
+  AttackRunResponse,
   AttackRunMode,
   AttackScenariosResponse,
   BenchmarkReport,
@@ -217,13 +217,20 @@ export const revealEvent = (id: string, signal?: AbortSignal) =>
 // SCR-201 Attack Lab (spec §5.2).
 export const getAttackScenarios = (signal?: AbortSignal) =>
   get<AttackScenariosResponse>("/attacklab/scenarios", signal);
-/** Runs one scenario with the guard off or on; resolves once the run has finished. */
+/**
+ * Runs one scenario with the guard off or on.
+ *
+ * Under the mocks this resolves with the finished run. A real control plane answers 202 with a
+ * receipt instead — see `AttackRunQueued` — so the caller has to narrow before reading any of
+ * the evidence. `?mode=` is sent for the mock's benefit; `AttackLabController.run` declares no
+ * such parameter and drops it.
+ */
 export const runAttackScenario = (
   id: string,
   mode: AttackRunMode,
   signal?: AbortSignal,
-) =>
-  post<AttackRun>(
+): Promise<AttackRunResponse> =>
+  post<AttackRunResponse>(
     `/attacklab/run/${encodeURIComponent(id)}?mode=${mode}`,
     signal,
   );

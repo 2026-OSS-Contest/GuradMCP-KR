@@ -18,6 +18,7 @@ export function RunPane({
   visible,
   running,
   failed,
+  queued,
   onRetry
 }: {
   mode: AttackRunMode;
@@ -26,12 +27,14 @@ export function RunPane({
   visible: number;
   running: boolean;
   failed: boolean;
+  /** Accepted by the control plane, but it has no runner to produce the calls. */
+  queued: boolean;
   onRetry: () => void;
 }) {
   const t = useTranslations("attackLab");
   const guarded = mode === "guarded";
-  const calls = run?.calls.slice(0, visible) ?? [];
-  const started = running || Boolean(run) || failed;
+  const calls = run?.calls?.slice(0, visible) ?? [];
+  const started = running || Boolean(run) || failed || queued;
 
   return (
     <section aria-label={t(guarded ? "paneGuarded" : "paneUnguarded")} className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
@@ -54,7 +57,17 @@ export function RunPane({
         {running && (
           <span className="pane-shimmer motion-reduce:animate-none pointer-events-none absolute inset-0" aria-hidden />
         )}
-        {failed ? (
+        {queued ? (
+          // Deliberately not the failure state: the request succeeded, and there is nothing to
+          // retry. Naming the ticket keeps the reason findable instead of reading as a bug.
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+            <span className="flex size-10 items-center justify-center rounded-full bg-(--primitive-opacity-white-alpha-10)">
+              <Info className="size-5 text-grayscale-300" aria-hidden />
+            </span>
+            <p className="text-body-text-b1-md text-grayscale-white">{t("runQueuedTitle")}</p>
+            <p className="text-body-text-b3-md whitespace-pre-line text-grayscale-400">{t("runQueuedBody")}</p>
+          </div>
+        ) : failed ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
             <span className="flex size-10 items-center justify-center rounded-full bg-(--primitive-opacity-white-alpha-10)">
               <Info className="size-5 text-grayscale-300" aria-hidden />
