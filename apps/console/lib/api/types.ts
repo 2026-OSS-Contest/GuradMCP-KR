@@ -548,6 +548,7 @@ export interface AttackRun {
   /** Recorded session, for the Replay deep link on the summary strip. */
   sessionId: string;
 }
+
 /**
  * What `POST /attacklab/run/{id}` **actually** answers today: a 202 and a receipt.
  *
@@ -664,6 +665,20 @@ export interface Approval {
   /** The 마스킹 미리보기 panes: the values that would go out, beside what would replace them. */
   maskPreview?: { raw: RawLine[]; masked: ContentLine[] };
 }
+
+/**
+ * `GET /approvals` as the control plane actually sends it.
+ *
+ * The three evidence fields are held as Jackson's generic tree (`ApprovalStore.kt`: `riskTags:
+ * List<Any?>?`, `maskPreview: Any?`) and are never validated on the way through, so they arrive
+ * as whatever the gateway put in. `toApproval()` in `approval-adapter.ts` is what turns them
+ * into the shape above — or drops them.
+ */
+export type ApiApproval = Omit<Approval, "riskTags" | "threatScore" | "maskPreview"> & {
+  riskTags?: unknown;
+  threatScore?: unknown;
+  maskPreview?: unknown;
+};
 
 export interface TimelineResponse {
   events: TimelineEvent[];

@@ -1,4 +1,5 @@
 import type {
+  ApiApproval,
   ApiOverview,
   ApiErrorBody,
   ApiEventLookupResponse,
@@ -31,6 +32,7 @@ import type {
   ToolDefinitionDiff,
   ToolDiffsResponse
 } from "./types";
+import { toApproval, toApprovals } from "./approval-adapter";
 import { toOverview } from "./overview-adapter";
 import {
   toEventDetailFromLookup,
@@ -258,8 +260,9 @@ export const previewDetection = (
  * accepts one `ApprovalStatus` at a time — there is no `resolved` bucket covering the four
  * terminal ones. So the screen asks once, unfiltered, and splits the list itself.
  */
-export const getApprovals = (signal?: AbortSignal) =>
-  get<Approval[]>("/approvals", signal);
+/** The card's evidence fields arrive opaque — see `approval-adapter.ts`. */
+export const getApprovals = (signal?: AbortSignal): Promise<Approval[]> =>
+  get<ApiApproval[]>("/approvals", signal).then(toApprovals);
 
 /**
  * SCR-501 Settings (spec §5.7). Served for real by GMCP-68's `SettingsController`; MSW still
@@ -292,7 +295,9 @@ export const updateSettings = (update: SettingsUpdate, signal?: AbortSignal) =>
  * timeout — got there first, which the screen reports rather than retrying.
  */
 export const decideApproval = (id: string, decision: ApprovalDecision, signal?: AbortSignal) =>
-  postJson<Approval>(`/approvals/${encodeURIComponent(id)}/decision`, { decision }, signal);
+  postJson<ApiApproval>(`/approvals/${encodeURIComponent(id)}/decision`, { decision }, signal).then(
+    toApproval,
+  );
 
 /**
  * SCR-302 Policy Builder (spec §5.5), served by the control plane today.
