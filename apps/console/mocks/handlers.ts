@@ -350,10 +350,12 @@ export const handlers = [
     return pack ? HttpResponse.json(pack) : new HttpResponse(null, { status: 404 });
   }),
 
-  // Policy Chip popover (spec §3), and the SCR-302 YAML pane. Not gated by scenario — a chip
-  // resolves even offline-ish. The policy catalogue answers first; the replay fixtures keep
-  // serving the older synthetic ids their timelines still reference.
-  http.get("*/api/v1/policies/:id", async ({ params }) => {
+  // Policy Chip popover (spec §3), and the SCR-302 YAML pane. `/source`, not `/policies/:id`
+  // itself (fix-api.md §4) — that path is `PUT /policies/:id`'s (action/severity/priority).
+  // Not gated by scenario — a chip resolves even offline-ish. The policy catalogue answers
+  // first; the replay fixtures keep serving the older synthetic ids their timelines still
+  // reference.
+  http.get("*/api/v1/policies/:id/source", async ({ params }) => {
     const id = String(params.id);
     await delay(LATENCY_MS);
     if (id in POLICY_YAML) return HttpResponse.json({ id, yaml: policyYaml(id) });

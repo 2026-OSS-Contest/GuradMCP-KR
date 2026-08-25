@@ -400,6 +400,63 @@ export async function runBenchmark(): Promise<BenchmarkReport> {
   };
 }
 
+/** Which dataset a sample came from — the four under `attack-lab/datasets/`, spelled the way
+ *  the console's own `BenchmarkSampleGroup` (`apps/console/lib/api/types.ts`) spells them. */
+export type BenchmarkSampleGroup = "pii" | "injection" | "serviceToken" | "entropy";
+
+export interface BenchmarkSample {
+  id: string;
+  group: BenchmarkSampleGroup;
+  /** True when the sample is a labelled positive: something the detector is meant to catch. */
+  label: boolean;
+  /** The label's own subdivision — a PII type, an injection subtype, a credential name. */
+  kind: string | null;
+  text: string;
+  /** Whether this run caught it. Always false for a negative, which is nothing to catch. */
+  detected: boolean;
+}
+
+/**
+ * fix-api.md §7 (SCR-601's row-level view): the same four datasets `runBenchmark()` judges,
+ * kept as a separate pass — mirroring the same `detect()` calls rather than threading a new
+ * field through `BenchmarkReport` — so nothing already depending on that interface's exact
+ * shape (`packages/cli/src/commands/bench.ts`, `guardmcp bench compare`) has to change to get
+ * per-sample rows. The judging logic for each dataset is a straight copy of the corresponding
+ * block in `runBenchmark()` (same `detect()` call, same subtype/credential matching) — only the
+ * output shape differs, so a change to one call site's matching logic must be mirrored here too.
+ */
+export async function collectBenchmarkSamples(): Promise<BenchmarkSample[]> {
+  const samples = JSON.parse(await readFile(new URL("../datasets/pii-benchmark.json", import.meta.url), "utf8")) as Sample[];
+  const koreanServiceTokenSamples = JSON.parse(await readFile(new URL("../datasets/korean-service-tokens.json", import.meta.url), "utf8")) as KoreanServiceTokenSample[];
+  const entropySamples = JSON.parse(await readFile(new URL("../datasets/high-entropy-secrets.json", import.meta.url), "utf8")) as EntropySample[];
+  const koreanInjectionSamples = JSON.parse(await readFile(new URL("../datasets/korean-injection.json", import.meta.url), "utf8")) as KoreanInjectionSample[];
+
+  const pii: BenchmarkSample[] = samples.map((sample) => {
+    const subtypes = new Set(detect(sample.text).filter(({ type }) => type === "PII").map(({ subtype }) => subtype));
+    const detected = subtypes.size > 0;
+    return { id: sample.id, group: "pii", label: sample.label, kind: sample.type ?? null, text: sample.text, detected };
+  });
+
+  const serviceToken: BenchmarkSample[] = koreanServiceTokenSamples.map((sample) => {
+    const subtypes = new Set(detect(sample.text).map(({ subtype }) => subtype));
+    const detected = sample.credential ? subtypes.has(sample.credential) : subtypes.size > 0;
+    return { id: sample.id, group: "serviceToken", label: sample.label, kind: sample.credential ?? null, text: sample.text, detected };
+  });
+
+  const entropy: BenchmarkSample[] = entropySamples.map((sample) => {
+    const detected = detect(sample.text).some(({ subtype }) => subtype === "HIGH_ENTROPY");
+    return { id: sample.id, group: "entropy", label: sample.label, kind: null, text: sample.text, detected };
+  });
+
+  const injection: BenchmarkSample[] = koreanInjectionSamples.map((sample) => {
+    const subtypes = new Set(detect(sample.text).filter(({ type }) => type === "INJECTION").map(({ subtype }) => subtype));
+    const detected = sample.subtype ? subtypes.has(sample.subtype) : subtypes.size > 0;
+    return { id: sample.id, group: "injection", label: sample.label, kind: sample.subtype ?? null, text: sample.text, detected };
+  });
+
+  return [...pii, ...serviceToken, ...entropy, ...injection];
+}
+
 /**
  * The bulk-disclosure threshold, read from the policy that enforces it rather than
  * repeated here (GMCP-119). The two numbers deciding the same thing from two files is

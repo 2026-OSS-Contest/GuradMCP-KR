@@ -2,15 +2,24 @@ package kr.guardmcp.controlplane.domain
 
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 
+/** Spies on [publish] so a test can assert an SSE event fired without a real HTTP layer. */
+private class RecordingBroadcaster : EventBroadcaster() {
+    val published = mutableListOf<Pair<String, Any>>()
+    override fun publish(eventName: String, data: Any) {
+        published += eventName to data
+    }
+}
+
 class ApprovalStoreKotest : StringSpec({
     val now = Instant.parse("2026-01-02T00:00:00Z")
-    fun storeAt(instant: Instant) = ApprovalStore(Clock.fixed(instant, ZoneOffset.UTC))
+    fun storeAt(instant: Instant) = ApprovalStore(Clock.fixed(instant, ZoneOffset.UTC), EventBroadcaster())
 
     "created approvals expire 120 seconds after request" {
         val store = storeAt(now)
@@ -59,6 +68,29 @@ class ApprovalStoreKotest : StringSpec({
         expired.status shouldBe ApprovalStatus.EXPIRED
         expired.decidedBy shouldBe "system:timeout"
         expired.maskPreview shouldBe null
+    }
+
+    // fix-api.md §5: sweepExpired() (the 1s scheduler tick) isn't the only path that can
+    // discover a fail-closed expiry first — a GET /approvals poll can win the race just as
+    // easily, and must still announce it rather than silently consuming the transition.
+    "list() and get() also publish approval.resolved when they're the one that discovers the expiry" {
+        val recorder = RecordingBroadcaster()
+        val store = ApprovalStore(Clock.fixed(now, ZoneOffset.UTC), recorder)
+        val pending = store.create(
+            sessionId = "req-1", toolName = "send_email", arguments = emptyMap(),
+            riskReason = "x", policyId = null, ttl = Duration.ofSeconds(-1),
+        )
+        recorder.published.clear() // drop the approval.created noise from create() above
+
+        val viaList = store.list(null).first { it.id == pending.id }
+        viaList.status shouldBe ApprovalStatus.EXPIRED
+        recorder.published shouldContain ("approval.resolved" to viaList)
+
+        // A second read must not re-publish: sweepExpiredLocked only returns what it *newly*
+        // flips, and this approval is already EXPIRED by the time list() runs again.
+        recorder.published.clear()
+        store.get(pending.id)
+        recorder.published shouldBe emptyList()
     }
 
     "decide() clears the mask preview once a human decision lands (NFR-04)" {

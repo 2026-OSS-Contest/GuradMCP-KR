@@ -19,24 +19,95 @@ data class Policy(
     val action: GuardAction,
     val severity: Severity,
     val description: String,
+    /** `match.direction` from the policy's YAML: "request" | "response" | "any" | null when unknown (fix-api.md §3). */
+    val direction: String? = null,
+    /** The policy's own `enabled:` (defaults true) — distinct from its pack's [PolicyPack.enabled]; `PolicyRow.enabled` on the console. */
+    val enabled: Boolean = true,
+    /** Repo-relative source path, same value as [PolicySource.path] — `PolicyRow.path`'s caption (fix-api.md §4), without a second round-trip to `/source`. */
+    val path: String? = null,
 )
 
+/** The raw YAML a policy was parsed from, and where — served by `GET /policies/{id}/source` (fix-api.md §4). */
+data class PolicySource(val policyId: String, val path: String, val yaml: String)
+
+data class PolicySyncPackInput(val packId: String, val name: String, val description: String? = null, val enabled: Boolean = true)
+
+data class PolicySyncPolicyInput(
+    val id: String,
+    val packId: String,
+    val priority: Int,
+    val action: String,
+    val severity: String,
+    val description: String? = null,
+    val direction: String? = null,
+    val enabled: Boolean = true,
+    val sourcePath: String? = null,
+    val sourceYaml: String? = null,
+)
+
+data class PolicySyncResult(val packsStored: Int, val policiesStored: Int, val syncedAt: Instant)
+
+/**
+ * Gateway-fed registry of the policy packs/policies actually enforced (fix-api.md §1, option B).
+ * The Gateway is the only process that parses `policy-packs/` (`packages/policy-engine`'s loader);
+ * this store just mirrors whatever it last reported via `POST /policies/sync`, called once at
+ * Gateway boot and again after every hot-reload. There is deliberately no hardcoded seed here
+ * anymore — before the first sync arrives (Gateway not yet reachable, or `CONTROL_PLANE_URL`
+ * unset in a dev/test deployment) this store is honestly empty rather than fabricating packs
+ * that may not match what is actually enforced.
+ *
+ * `updatePolicy` remains a local, console-only override (action/severity/priority) for display
+ * purposes; it is not pushed to the Gateway and is wiped by the next sync, same as before.
+ * There is no `updatePack` anymore — see [PolicyController]'s `PUT /policy-packs/{id}`, which
+ * now answers 409 rather than silently accepting a toggle the Gateway will never honor.
+ */
 @Component
 class PolicyStore(private val clock: Clock) {
     private val lock = Any()
-    private val packs = linkedMapOf<String, PolicyPack>()
-    private val policies = linkedMapOf<String, Policy>()
+    private var packs = linkedMapOf<String, PolicyPack>()
+    private var policies = linkedMapOf<String, Policy>()
+    private var sources = linkedMapOf<String, PolicySource>()
 
-    init {
-        listOf(
-            PolicyPack("default", 1, true, "Deterministic default protection policy pack", DemoSeed.SEEDED_AT),
-            PolicyPack("korean-pii", 1, true, "Deterministic Korean PII masking policy pack", DemoSeed.SEEDED_AT),
-        ).forEach { packs[it.id] = it }
-        listOf(
-            Policy("block_env_file_read", "default", 100, GuardAction.BLOCK, Severity.CRITICAL, "Block reads of credential files"),
-            Policy("mask_korean_phone", "korean-pii", 200, GuardAction.MASK_THEN_ALLOW, Severity.HIGH, "Mask Korean mobile phone numbers"),
-            Policy("approve_external_email", "default", 300, GuardAction.REQUIRE_APPROVAL, Severity.HIGH, "Require approval for external email"),
-        ).forEach { policies[it.id] = it }
+    fun sync(packInputs: List<PolicySyncPackInput>, policyInputs: List<PolicySyncPolicyInput>): PolicySyncResult = synchronized(lock) {
+        val now = clock.instant()
+        val nextPacks = linkedMapOf<String, PolicyPack>()
+        for (input in packInputs) {
+            val previous = packs[input.packId]
+            val changed = previous == null || previous.enabled != input.enabled || previous.description != (input.description ?: "")
+            nextPacks[input.packId] = PolicyPack(
+                id = input.packId,
+                version = if (changed) (previous?.version ?: 0) + 1 else previous!!.version,
+                enabled = input.enabled,
+                description = input.description ?: "",
+                updatedAt = if (changed) now else previous!!.updatedAt,
+            )
+        }
+
+        val nextPolicies = linkedMapOf<String, Policy>()
+        val nextSources = linkedMapOf<String, PolicySource>()
+        for (input in policyInputs) {
+            val action = GuardAction.fromWire(input.action) ?: continue
+            val severity = Severity.fromWire(input.severity) ?: continue
+            nextPolicies[input.id] = Policy(
+                id = input.id,
+                packId = input.packId,
+                priority = input.priority,
+                action = action,
+                severity = severity,
+                description = input.description ?: "",
+                direction = input.direction,
+                enabled = input.enabled,
+                path = input.sourcePath?.takeIf(String::isNotBlank),
+            )
+            if (!input.sourcePath.isNullOrBlank() && input.sourceYaml != null) {
+                nextSources[input.id] = PolicySource(input.id, input.sourcePath, input.sourceYaml)
+            }
+        }
+
+        packs = nextPacks
+        policies = nextPolicies
+        sources = nextSources
+        PolicySyncResult(packsStored = nextPacks.size, policiesStored = nextPolicies.size, syncedAt = now)
     }
 
     fun listPacks(): List<PolicyPack> = synchronized(lock) { packs.values.toList() }
@@ -45,12 +116,7 @@ class PolicyStore(private val clock: Clock) {
 
     fun enabledPackIds(): List<String> = synchronized(lock) { packs.values.filter(PolicyPack::enabled).map(PolicyPack::id) }
 
-    fun updatePack(id: String, enabled: Boolean): PolicyPack? = synchronized(lock) {
-        val current = packs[id] ?: return null
-        val updated = current.copy(enabled = enabled, version = current.version + 1, updatedAt = clock.instant())
-        packs[id] = updated
-        updated
-    }
+    fun packExists(id: String): Boolean = synchronized(lock) { packs.containsKey(id) }
 
     fun updatePolicy(id: String, action: GuardAction?, severity: Severity?, priority: Int?): Policy? = synchronized(lock) {
         val current = policies[id] ?: return null
@@ -60,10 +126,12 @@ class PolicyStore(private val clock: Clock) {
             priority = priority ?: current.priority,
         )
         policies[id] = updated
-        val pack = packs.getValue(updated.packId)
-        packs[updated.packId] = pack.copy(version = pack.version + 1, updatedAt = clock.instant())
+        val pack = packs[updated.packId]
+        if (pack != null) packs[updated.packId] = pack.copy(version = pack.version + 1, updatedAt = clock.instant())
         updated
     }
 
     fun policy(id: String): Policy? = synchronized(lock) { policies[id] }
+
+    fun source(id: String): PolicySource? = synchronized(lock) { sources[id] }
 }

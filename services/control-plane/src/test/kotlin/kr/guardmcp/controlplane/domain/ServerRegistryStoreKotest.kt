@@ -9,7 +9,10 @@ import java.time.ZoneOffset
 
 class ServerRegistryStoreKotest : StringSpec({
     val now = Instant.parse("2026-01-02T00:00:00Z")
-    fun storeAt(instant: Instant) = ServerRegistryStore(Clock.fixed(instant, ZoneOffset.UTC), PolicyStore(Clock.fixed(instant, ZoneOffset.UTC)))
+    fun storeAt(instant: Instant) = ServerRegistryStore(
+        Clock.fixed(instant, ZoneOffset.UTC),
+        PolicyStore(Clock.fixed(instant, ZoneOffset.UTC)).also(PolicyFixtures::syncInto),
+    )
 
     "seeds start every server at a manually assigned grade, unreviewed servers untrusted" {
         val store = storeAt(now)
@@ -36,7 +39,11 @@ class ServerRegistryStoreKotest : StringSpec({
 
         exception.server.trustLevel shouldBe TrustLevel.UNTRUSTED
         exception.toTrust shouldBe TrustLevel.LIMITED
-        exception.affectedPolicyCount shouldBe 2 // seeded default pack: block_env_file_read (BLOCK) + approve_external_email (REQUIRE_APPROVAL)
+        // PolicyFixtures (mirrors policy-packs/default + korean-pii): 2 BLOCK
+        // (block_env_file_read, block_untrusted_injection_response) + 4 REQUIRE_APPROVAL
+        // (approve_external_email_with_secret, require_approval_untrusted_high_risk_tool,
+        // approve_external_email_with_korean_pii, require_approval_bulk_pii_response).
+        exception.affectedPolicyCount shouldBe 6
         store.get(DemoSeed.SERVER_DB_ID)?.trustLevel shouldBe TrustLevel.UNTRUSTED
     }
 

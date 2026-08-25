@@ -3,7 +3,9 @@ package kr.guardmcp.controlplane.api
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.shouldBe
+import kr.guardmcp.controlplane.domain.EventBroadcaster
 import kr.guardmcp.controlplane.domain.GuardEventRepository
+import kr.guardmcp.controlplane.domain.PolicyFixtures
 import kr.guardmcp.controlplane.domain.PolicyStore
 import kr.guardmcp.controlplane.domain.RawPayloadCrypto
 import kr.guardmcp.controlplane.domain.RawPayloadStore
@@ -24,16 +26,18 @@ class OverviewControllerKotest : StringSpec({
 
     fun policyController(clock: Clock) =
         PolicyController(
-            PolicyStore(clock),
+            PolicyStore(clock).also(PolicyFixtures::syncInto),
             GuardEventRepository(
                 JdbcTemplate(),
                 RawPayloadStore(JdbcTemplate(), RawPayloadCrypto("", "v1")),
                 neverInvokedTransactionManager,
             ),
             clock,
+            EventBroadcaster(),
+            "",
         )
 
-    "policy response keeps the two seeded packs" {
+    "policy response keeps the synced packs" {
         val packs = policyController(Clock.systemUTC()).policyPacks().map { it.id }
         packs.shouldContainAll("default", "korean-pii")
         packs.size shouldBe 2

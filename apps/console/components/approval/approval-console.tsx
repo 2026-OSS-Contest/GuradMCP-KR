@@ -8,7 +8,6 @@ import { ApiError } from "@/lib/api/client";
 import type { Approval, ApprovalDecision } from "@/lib/api/types";
 import { useResource } from "@/lib/api/use-resource";
 import { createSseClient } from "@/lib/sse";
-import { MOCK_API } from "@/mocks/scenario";
 import { VerdictBadge } from "@/components/verdict-badge";
 import { ApprovalCard } from "./approval-card";
 import { ApprovalHistory } from "./approval-history";
@@ -19,8 +18,12 @@ const POLL_MS = 5_000;
 /** How long a timed-out card explains itself before the refetch drops it. */
 const TIMEOUT_NOTICE_MS = 2_000;
 
+// Relative by default so this reaches the control plane through next.config.ts's `/api/v1/*`
+// rewrite (fix-api.md §2) — the console's shipped deployment (docker-compose.yml) sets
+// CONTROL_PLANE_URL, not NEXT_PUBLIC_API_BASE_URL, so gating this on MOCK_API left it
+// permanently disconnected there.
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
-const STREAM_URL = API_BASE ? `${API_BASE}/api/v1/events/stream` : MOCK_API ? "/api/v1/events/stream" : null;
+const STREAM_URL = `${API_BASE ?? ""}/api/v1/events/stream`;
 
 type Tab = "queue" | "history";
 

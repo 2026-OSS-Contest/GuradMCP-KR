@@ -18,6 +18,13 @@ import {
   type PackDirectoryEntry
 } from "./scanPackDirectory.js";
 
+/** Where one policy's definition came from — the raw YAML the control plane's `/policies/{id}/source` serves. */
+export interface PolicySource {
+  policyId: string;
+  filePath: string;
+  sourceText: string;
+}
+
 export interface PackState {
   packId: string;
   name: string;
@@ -28,6 +35,8 @@ export interface PackState {
   extends: string[];
   enabled: boolean;
   policies: Policy[];
+  /** One entry per policy in [policies], same order — the file it was parsed from and its raw text. */
+  policySources: PolicySource[];
   loadedAt: string;
   errors: PolicyLoadError[];
 }
@@ -165,7 +174,7 @@ export async function loadPolicyPacks(rootDir: string, options: LoadPolicyPacksO
   }
 
   const packMeta = new Map<string, PackMeta>();
-  const loadedPolicies: { packId: string; policy: Policy; filePath: string }[] = [];
+  const loadedPolicies: { packId: string; policy: Policy; filePath: string; sourceText: string }[] = [];
 
   for (const entry of entries) {
     // `loadPack` collects errors as data rather than throwing, but it's not
@@ -173,7 +182,7 @@ export async function loadPolicyPacks(rootDir: string, options: LoadPolicyPacksO
     // (e.g. one with an adversarial manifest) must never be able to take
     // down the whole scan, so any escaped throw is caught here too.
     let meta: PackMeta;
-    let policies: { policy: Policy; filePath: string }[];
+    let policies: { policy: Policy; filePath: string; sourceText: string }[];
     try {
       ({ meta, policies } = await loadPack(entry, baseDir));
     } catch (error) {
@@ -198,7 +207,11 @@ export async function loadPolicyPacks(rootDir: string, options: LoadPolicyPacksO
   }
 
   const finalPolicies = new Map<string, Policy[]>();
-  for (const packId of packMeta.keys()) finalPolicies.set(packId, []);
+  const finalSources = new Map<string, PolicySource[]>();
+  for (const packId of packMeta.keys()) {
+    finalPolicies.set(packId, []);
+    finalSources.set(packId, []);
+  }
 
   // Required packs must win any id collision regardless of directory scan
   // order — an optional pack that happens to sort before a required one
@@ -211,7 +224,7 @@ export async function loadPolicyPacks(rootDir: string, options: LoadPolicyPacksO
   ];
 
   const idFirstSeenAt = new Map<string, { filePath: string; packId: string }>();
-  for (const { packId, policy, filePath } of orderedPolicies) {
+  for (const { packId, policy, filePath, sourceText } of orderedPolicies) {
     const firstSeen = idFirstSeenAt.get(policy.id);
     if (firstSeen) {
       // A pack (required or not) trying to squat an id a required pack
@@ -230,6 +243,7 @@ export async function loadPolicyPacks(rootDir: string, options: LoadPolicyPacksO
     }
     idFirstSeenAt.set(policy.id, { filePath, packId });
     finalPolicies.get(packId)?.push(policy);
+    finalSources.get(packId)?.push({ policyId: policy.id, filePath, sourceText });
   }
 
   const loadedAt = new Date().toISOString();
@@ -242,6 +256,7 @@ export async function loadPolicyPacks(rootDir: string, options: LoadPolicyPacksO
     extends: meta.extends,
     enabled: meta.enabled,
     policies: finalPolicies.get(packId) ?? [],
+    policySources: finalSources.get(packId) ?? [],
     loadedAt,
     errors: meta.errors
   }));
@@ -279,7 +294,7 @@ async function loadPack(
     enabled: boolean;
     errors: PolicyLoadError[];
   };
-  policies: { policy: Policy; filePath: string }[];
+  policies: { policy: Policy; filePath: string; sourceText: string }[];
 }> {
   const errors: PolicyLoadError[] = [];
   const manifestPath = await findManifestPath(entry.packDir);
@@ -350,7 +365,7 @@ async function loadPack(
     }
   }
 
-  const policies: { policy: Policy; filePath: string }[] = [];
+  const policies: { policy: Policy; filePath: string; sourceText: string }[] = [];
   for (const filePath of policyFilePaths) {
     const displayPath = toDisplayPath(baseDir, filePath);
     let text: string;
@@ -378,7 +393,7 @@ async function loadPack(
       continue;
     }
 
-    policies.push({ policy, filePath: displayPath });
+    policies.push({ policy, filePath: displayPath, sourceText: text });
   }
 
   return {

@@ -283,6 +283,8 @@ export interface EventDetail {
 export interface PolicyDetail {
   id: string;
   yaml: string;
+  /** Repo-relative source path (e.g. `policy-packs/default/policies/block-env-file-read.yaml`); the YAML panel's caption when present. */
+  path?: string;
 }
 
 export interface SessionsResponse {
@@ -685,10 +687,11 @@ export interface PolicyRow {
   description: string;
 
   /**
-   * Whether the policy is live. **The control plane has no per-policy enable/disable**:
-   * `PolicyUpdateRequest` takes `action`, `severity` and `priority` and nothing else, and only
-   * a *pack* can be switched off. The design draws a per-row toggle regardless, so the field is
-   * optional and the screen treats a missing value as enabled.
+   * Whether the policy itself is live (distinct from its pack's toggle — see `PolicyPack`).
+   * Reflects the policy's own YAML `enabled:` as synced from the gateway (fix-api.md §1); still
+   * read-only from the console — `PolicyUpdateRequest` takes `action`, `severity` and `priority`
+   * only, not `enabled`. Optional because a policy fetched before the first sync has no value
+   * to report; the screen treats a missing value as enabled.
    */
   enabled?: boolean;
   /** Evaluated but acting on nothing (GMCP-77). No DSL field and no endpoint reports it yet. */

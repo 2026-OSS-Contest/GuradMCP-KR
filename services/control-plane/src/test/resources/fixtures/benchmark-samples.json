@@ -1,0 +1,5 @@
+{
+  "samples": [
+    { "id": "p01", "group": "pii", "label": true, "kind": "PHONE", "text": "연락처는 010-1234-5678 입니다", "detected": true }
+  ]
+}
