@@ -6,6 +6,8 @@ import org.postgresql.util.PGobject
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.RowMapper
 import org.springframework.stereotype.Component
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.math.BigDecimal
 import java.sql.PreparedStatement
 import java.sql.Timestamp
@@ -32,9 +34,13 @@ data class GuardEventRecord(
     val matchedPolicyIds: List<String>,
     val detections: List<Map<String, Any?>>,
     val maskDiffRef: String?,
-    /** NFR-04 opt-in only; null unless [kr.guardmcp.controlplane.domain.GuardSettingsStore]'s
-     *  `storeRawOptIn` was true (`PUT /api/v1/settings`) at ingest time. */
-    val rawPayload: String?,
+    /**
+     * GMCP-84 §5.1: nullable reference into `raw_payload`. Null unless
+     * [kr.guardmcp.controlplane.domain.GuardSettingsStore]'s `rawPayloadStorageEnabled` was true
+     * (`PUT /api/v1/settings`) *and* [RawPayloadStore] had an encryption key configured at
+     * ingest time -- the only writer of this column is [GuardEventRepository.insert].
+     */
+    val rawPayloadRef: UUID?,
     /**
      * GMCP-83 hash chain fields (docs/task-docs/GMCP-83/audit-hash-chain-spec.md §2). Nullable,
      * not because a freshly-ingested row can have one unset ([GuardEventRepository.insert]
@@ -65,6 +71,9 @@ data class GuardEventDraft(
     val matchedPolicyIds: List<String>,
     val detections: List<Map<String, Any?>>,
     val maskDiffRef: String?,
+    /** Plaintext, gated by the caller ([kr.guardmcp.controlplane.api.AuditEventController.ingest])
+     *  on `rawPayloadStorageEnabled`. [GuardEventRepository.insert] is the only place this is
+     *  ever encrypted and written -- see [GuardEventRecord.rawPayloadRef]. */
     val rawPayload: String?,
 )
 
@@ -87,10 +96,20 @@ interface AuditEventQueries {
 data class PolicyTriggerStats(val triggeredCount: Int, val lastTriggeredAt: Instant?)
 
 @Component
-class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQueries {
+class GuardEventRepository(
+    private val jdbcTemplate: JdbcTemplate,
+    private val rawPayloadStore: RawPayloadStore,
+    transactionManager: PlatformTransactionManager,
+) : AuditEventQueries {
     // Spring Boot doesn't publish a `com.fasterxml.jackson.databind.ObjectMapper` bean here
     // (see ApiTestSupport's note), so this reads/writes the jsonb column with its own instance.
     private val objectMapper = ObjectMapper()
+
+    // Programmatic, same reasoning as GuardSettingsStore's own TransactionTemplate: this wraps
+    // the guard_event insert and the follow-up raw_payload insert + raw_payload_ref update in one
+    // commit, without the declarative-@Transactional-commits-after-return trap that would let a
+    // second thread see a torn write.
+    private val transactionTemplate = TransactionTemplate(transactionManager)
 
     // One lock object per session id, not one global lock: sessions are independent chains
     // (spec §1), so serializing unrelated sessions' inserts against each other would only add
@@ -105,12 +124,16 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
      * Assigns `seq`/`prev_hash`/`hash` and persists the row (spec §3.3, pipeline stage ⑧).
      *
      * The per-session lock is the outermost scope around both the "read the last event" and
-     * the "write this one" steps — not wrapped in `@Transactional`, deliberately: a declarative
-     * transaction only commits *after* this method returns (see `GuardSettingsStore`'s doc
-     * comment for the same reasoning), so a lock released *inside* the transactional method
+     * the "write this one" steps, with the `transactionTemplate.execute` block (guard_event
+     * insert + raw_payload insert + raw_payload_ref update, see the field above) nested inside
+     * it — not the other way around. Not wrapped in a method-level `@Transactional`, deliberately:
+     * a declarative transaction only commits *after* the method returns (see `GuardSettingsStore`'s
+     * doc comment for the same reasoning), so a lock released *inside* the transactional method
      * would let a second thread read a stale "last event" and mint a duplicate `seq` before the
-     * first thread's insert is even durable. `synchronized` here, wrapping a plain autocommit
-     * insert, is what actually makes the read-then-write atomic.
+     * first thread's insert is even durable. `findById`/`lastBySessionId` below run under the lock
+     * but outside any transaction (each is its own autocommit read); the lock alone is what makes
+     * the read-then-write atomic, and the inner `TransactionTemplate` only makes the two-table
+     * write itself commit-or-rollback together.
      *
      * Idempotent: a re-delivered event (gateway's bounded publish queue never retries, but a
      * future retry policy might) is detected under the same lock — before a `seq` is minted for
@@ -137,33 +160,46 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
                 matchedPolicyIds = draft.matchedPolicyIds,
                 detections = draft.detections,
                 maskDiffRef = draft.maskDiffRef,
-                rawPayload = draft.rawPayload,
+                rawPayloadRef = null,
                 seq = seq,
                 prevHash = prevHash,
                 hash = null,
             )
+            // NFR-04's own hash never covers the raw payload (GuardEventHasher.payload doesn't
+            // read rawPayload{,Ref}), so moving it off this row into raw_payload can never change
+            // a hash computed here or previously stored.
             val hash = GuardEventHasher.computeHash(prevHash, GuardEventHasher.payload(record))
 
-            val rowsAffected = jdbcTemplate.update({ connection ->
-                val statement: PreparedStatement = connection.prepareStatement(INSERT_SQL)
-                statement.setObject(1, record.eventId)
-                statement.setString(2, record.sessionId)
-                statement.setTimestamp(3, Timestamp.from(record.ts))
-                statement.setString(4, record.direction)
-                statement.setString(5, record.toolName)
-                statement.setString(6, record.argsDigest)
-                statement.setString(7, record.verdict)
-                statement.setBigDecimal(8, record.riskScore)
-                statement.setArray(9, connection.createArrayOf("text", record.matchedPolicyIds.toTypedArray()))
-                statement.setObject(10, jsonb(objectMapper.writeValueAsString(record.detections)))
-                statement.setString(11, record.maskDiffRef)
-                statement.setString(12, record.rawPayload)
-                statement.setLong(13, seq)
-                statement.setString(14, prevHash)
-                statement.setString(15, hash)
-                statement
-            })
-            rowsAffected > 0
+            transactionTemplate.execute {
+                val rowsAffected = jdbcTemplate.update({ connection ->
+                    val statement: PreparedStatement = connection.prepareStatement(INSERT_SQL)
+                    statement.setObject(1, record.eventId)
+                    statement.setString(2, record.sessionId)
+                    statement.setTimestamp(3, Timestamp.from(record.ts))
+                    statement.setString(4, record.direction)
+                    statement.setString(5, record.toolName)
+                    statement.setString(6, record.argsDigest)
+                    statement.setString(7, record.verdict)
+                    statement.setBigDecimal(8, record.riskScore)
+                    statement.setArray(9, connection.createArrayOf("text", record.matchedPolicyIds.toTypedArray()))
+                    statement.setObject(10, jsonb(objectMapper.writeValueAsString(record.detections)))
+                    statement.setString(11, record.maskDiffRef)
+                    statement.setLong(12, seq)
+                    statement.setString(13, prevHash)
+                    statement.setString(14, hash)
+                    statement
+                })
+                // raw_payload.event_id FKs to guard_event, so it can only be inserted after the
+                // row above exists -- and only for a call that actually stored a new row: a
+                // redelivery (ON CONFLICT DO NOTHING no-op) must not mint a second raw_payload row.
+                if (rowsAffected > 0 && draft.rawPayload != null) {
+                    val rawPayloadId = rawPayloadStore.insert(record.eventId, draft.rawPayload)
+                    if (rawPayloadId != null) {
+                        jdbcTemplate.update(UPDATE_RAW_PAYLOAD_REF_SQL, rawPayloadId, record.eventId)
+                    }
+                }
+                rowsAffected > 0
+            } ?: false
         }
 
     /** The chain's tip for a session, or `null` for its first event (spec §3.1 genesis case). */
@@ -259,7 +295,7 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
             matchedPolicyIds = policyIds,
             detections = detections,
             maskDiffRef = rs.getString("mask_diff_ref"),
-            rawPayload = rs.getString("raw_payload"),
+            rawPayloadRef = rs.getObject("raw_payload_ref", UUID::class.java),
             seq = seq,
             prevHash = rs.getString("prev_hash"),
             hash = rs.getString("hash"),
@@ -275,14 +311,17 @@ class GuardEventRepository(private val jdbcTemplate: JdbcTemplate) : AuditEventQ
         private const val INSERT_SQL = """
             INSERT INTO guard_event
                 (event_id, session_id, ts, direction, tool_name, args_digest, verdict, risk_score,
-                 matched_policy_ids, detections, mask_diff_ref, raw_payload, seq, prev_hash, hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 matched_policy_ids, detections, mask_diff_ref, seq, prev_hash, hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (event_id) DO NOTHING
         """
 
+        private const val UPDATE_RAW_PAYLOAD_REF_SQL =
+            "UPDATE guard_event SET raw_payload_ref = ? WHERE event_id = ?"
+
         private const val SELECT_COLUMNS_FROM = """
             SELECT event_id, session_id, ts, direction, tool_name, args_digest, verdict, risk_score,
-                   matched_policy_ids, detections, mask_diff_ref, raw_payload, seq, prev_hash, hash
+                   matched_policy_ids, detections, mask_diff_ref, raw_payload_ref, seq, prev_hash, hash
             FROM guard_event
         """
 

@@ -29,7 +29,14 @@ management:
         enabled: true
 
 security:
-  # NFR-04: shared secret required (in addition to the forgeable X-Actor-Role header) to call
-  # POST /events/{id}/reveal. Blank (the default) disables the endpoint entirely — deploying
-  # without setting this must not silently leave reveal reachable by header alone.
+  # NFR-04/GMCP-84 §7: shared secret required (in addition to a privileged X-Actor-Role) for both
+  # `events:reveal` and `settings:write` (PermissionService). Blank (the default) disables both
+  # entirely — deploying without setting this must not silently leave either reachable by header
+  # alone.
   reveal-token: ${REVEAL_OPERATOR_TOKEN:}
+  # GMCP-84 §5.2/§2: AES-256-GCM key for raw_payload.payload_encrypted, base64-encoded (32 raw
+  # bytes). Blank (the default) makes raw-payload storage a no-op regardless of
+  # rawPayloadStorageEnabled -- KMS-managed rotation is explicitly out of scope; this is a single
+  # env-provided secret only.
+  raw-payload-encryption-key: ${RAW_PAYLOAD_ENCRYPTION_KEY:}
+  raw-payload-encryption-key-version: ${RAW_PAYLOAD_ENCRYPTION_KEY_VERSION:v1}

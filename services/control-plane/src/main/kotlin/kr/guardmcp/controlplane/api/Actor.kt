@@ -16,6 +16,10 @@ data class Actor(val id: String, val role: String) {
         const val ROLE_HEADER = "X-Actor-Role"
         const val OPERATOR_ROLE = "operator"
 
+        /** GMCP-84 §7: the shared secret [kr.guardmcp.controlplane.domain.PermissionService]
+         *  requires alongside a privileged role, for both `events:reveal` and `settings:write`. */
+        const val OPERATOR_TOKEN_HEADER = "X-Operator-Token"
+
         fun from(actorId: String?, actorRole: String?): Actor =
             Actor(id = actorId?.takeIf(String::isNotBlank) ?: "anonymous", role = actorRole?.takeIf(String::isNotBlank) ?: "viewer")
     }

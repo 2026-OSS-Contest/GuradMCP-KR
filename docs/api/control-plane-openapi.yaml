@@ -234,19 +234,26 @@ paths:
   /api/v1/events/{eventId}/reveal:
     post:
       tags: [sessions]
-      summary: Reveal the unmasked original payload (NFR-04, GMCP-80 §3.6)
+      summary: Reveal the unmasked original payload (NFR-04, GMCP-84 §6.3)
       description: >-
-        Operator-only, and requires a valid X-Operator-Token (server-side
-        secret, configured out of band via REVEAL_OPERATOR_TOKEN — unset by
-        default, which disables this endpoint entirely). X-Actor-Role alone
-        is a forgeable header with no session/auth system behind it anywhere
-        in this service, so it is attribution only, not access control. Every
-        call — granted or denied — writes an append-only RevealAuditLog
-        entry. 409 when this event's raw payload was never stored
-        (audit.store-raw-payload / settings.storeRawOptIn was off at ingest
-        time), not 404. Does not match apps/console/lib/api/types.ts's
-        RevealContent (masked-line reconstruction is out of scope here); this
-        is the spec's own response shape.
+        Requires the events:reveal permission (PermissionService): a
+        privileged X-Actor-Role (operator/admin) *and* a valid
+        X-Operator-Token (server-side secret, configured out of band via
+        REVEAL_OPERATOR_TOKEN — unset by default, which disables this
+        endpoint entirely). X-Actor-Role alone is a forgeable header with no
+        session/auth system behind it anywhere in this service, so the token
+        is the actual access control. Every call — granted or denied —
+        writes a reveal_audit_log row (result: success /
+        denied_no_permission / denied_not_stored). A syntactically invalid
+        eventId 404s before the permission check (nothing to log against); a
+        well-formed but unknown or not-yet-permitted eventId reaches the
+        permission check first, matching the spec's step order. 409 when
+        this event's raw payload was never stored (rawPayloadStorageEnabled
+        was off at ingest time, or the key configured now cannot decrypt
+        what's stored), not 404. Does not match
+        apps/console/lib/api/types.ts's RevealContent (masked-line
+        reconstruction is out of scope here); this is the spec's own
+        response shape.
       operationId: revealEvent
       parameters:
         - name: eventId
@@ -263,7 +270,9 @@ paths:
         - name: X-Actor-Role
           in: header
           required: false
-          description: Must be "operator" or the call is rejected with 403.
+          description: >-
+            Must be "operator" or "admin", or the call is rejected with 403
+            regardless of X-Operator-Token.
           schema:
             type: string
         - name: X-Operator-Token
@@ -282,17 +291,17 @@ paths:
               $ref: "#/components/schemas/RevealRequest"
       responses:
         "200":
-          description: Unmasked payload plus the audit log entry it created
+          description: Unmasked payload
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/RevealResponse"
         "403":
           description: >-
-            X-Operator-Token is missing, invalid, or unconfigured server-side
-            (reveal_unauthorized), or the actor is not an operator
-            (reveal_forbidden). Either way the attempt is still logged as
-            REVEAL_DENIED.
+            Missing the events:reveal permission — X-Operator-Token is
+            missing/invalid/unconfigured server-side, or X-Actor-Role is not
+            a privileged role. Either way the attempt is still logged
+            (result: denied_no_permission).
           content:
             application/json:
               schema:
@@ -736,26 +745,54 @@ paths:
       tags: [settings]
       summary: Update gateway settings
       description: >-
-        No console session/auth exists yet, so this is not gated on
-        X-Actor-Role (apps/console/lib/api/client.ts never sends it) — it is
-        read only for the updatedBy audit trail. Every field is independent,
-        so a caller sends only what it changed. Setting failMode to fail_open
-        requires riskAcknowledged: true in the same request, regardless of
-        the previous value — otherwise the request is rejected with 400 and
-        nothing is changed. Reverting failMode to fail_closed never requires
-        it. A failMode change is recorded as a SETTINGS_FAILURE_POLICY_CHANGED
-        audit-log entry (severity=high for fail_open, info for fail_closed)
-        and pushed to /api/v1/settings/stream subscribers immediately;
-        storeRawOptIn flipping to true is recorded as
-        SETTINGS_RAW_PAYLOAD_OPT_IN_CHANGED (severity=high) and also gates
-        AuditEventController's ingest raw-payload write directly, so that
-        change takes effect on the very next event without a restart.
+        No console session/auth exists yet, so most of this is not gated on
+        X-Actor-Role (apps/console/lib/api/client.ts sends none of the
+        operator headers unless the update touches
+        rawPayloadStorageEnabled) — for failMode/locale/approvalTimeoutSeconds
+        X-Actor-Id is read only for the updatedBy audit trail. Every field is
+        independent, so a caller sends only what it changed. Setting
+        failMode to fail_open requires riskAcknowledged: true in the same
+        request, regardless of the previous value — otherwise the request is
+        rejected with 400 and nothing is changed. Reverting failMode to
+        fail_closed never requires it. A failMode change is recorded as a
+        SETTINGS_FAILURE_POLICY_CHANGED audit-log entry (severity=high for
+        fail_open, info for fail_closed) and pushed to
+        /api/v1/settings/stream subscribers immediately.
+        rawPayloadStorageEnabled additionally requires the events:reveal /
+        settings:write permission (X-Actor-Role + X-Operator-Token,
+        PermissionService — GMCP-84 §7), and a false→true transition also
+        requires acknowledgedNotice: true in the same request or the call is
+        rejected with 422 (GMCP-84 §6.2). A true→false transition needs
+        neither the checkbox nor a fresh notice, applies immediately, and
+        the 200 response carries a note explaining that already-stored raw
+        payloads are not deleted by this call. Turning it on is recorded as
+        SETTINGS_RAW_PAYLOAD_OPT_IN_CHANGED (severity=high) and pushed over
+        the same settings.changed stream the gateway's raw-payload cache
+        subscribes to, so the change takes effect on the very next ingest
+        without a gateway restart.
       operationId: updateSettings
       parameters:
         - name: X-Actor-Id
           in: header
           required: false
           description: Recorded as updatedBy on the settings row; not an access-control check.
+          schema:
+            type: string
+        - name: X-Actor-Role
+          in: header
+          required: false
+          description: >-
+            Only checked when the request body sets rawPayloadStorageEnabled;
+            must be "operator" or "admin" or the call is rejected with 403.
+          schema:
+            type: string
+        - name: X-Operator-Token
+          in: header
+          required: false
+          description: >-
+            Only required when the request body sets rawPayloadStorageEnabled
+            (GMCP-84 §7); must match the server's configured
+            REVEAL_OPERATOR_TOKEN or the call is rejected with 403.
           schema:
             type: string
       requestBody:
@@ -780,15 +817,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+        "403":
+          description: >-
+            The request sets rawPayloadStorageEnabled but lacks the
+            events:reveal / settings:write permission.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: >-
+            rawPayloadStorageEnabled is being turned on (false→true) without
+            acknowledgedNotice: true.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/settings/stream:
     get:
       tags: [settings]
       summary: Settings push channel
       description: >-
         Server-sent events. Emits a settings.changed event with the current
-        failMode and version on connect, and again after every failMode
-        change — the gateway's failure-policy cache subscribes instead of
-        polling, matching /api/v1/servers/stream's contract.
+        failMode, rawPayloadStorageEnabled and version on connect, and again
+        after every write — the gateway's failure-policy cache and its
+        raw-payload-storage cache (GMCP-84 §9) both subscribe to this one
+        stream instead of polling, matching /api/v1/servers/stream's
+        contract.
       operationId: streamSettings
       responses:
         "200":
@@ -800,6 +855,8 @@ paths:
                 properties:
                   failMode:
                     $ref: "#/components/schemas/FailMode"
+                  rawPayloadStorageEnabled:
+                    type: boolean
                   version:
                     type: integer
                     format: int64
@@ -838,7 +895,7 @@ components:
       enum: [fail_closed, fail_open]
     GuardSettings:
       type: object
-      required: [failMode, riskAcknowledged, storeRawOptIn, locale, approvalTimeoutSeconds]
+      required: [failMode, riskAcknowledged, rawPayloadStorageEnabled, locale, approvalTimeoutSeconds]
       properties:
         failMode:
           $ref: "#/components/schemas/FailMode"
@@ -847,9 +904,20 @@ components:
           description: >-
             Whether the operator ticked the risk-acknowledgement checkbox the
             last time failMode became fail_open.
-        storeRawOptIn:
+        rawPayloadStorageEnabled:
           type: boolean
-          description: NFR-04. Off by default; also gates AuditEventController's raw-payload write directly.
+          description: >-
+            NFR-04/GMCP-84 §5.1. Off by default; gates whether ingest writes
+            a raw_payload row (AES-256-GCM encrypted) and sets
+            guard_event.raw_payload_ref.
+        rawPayloadStorageEnabledAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last time it was turned on (false→true); null until the first time.
+        rawPayloadStorageEnabledBy:
+          type: string
+          nullable: true
         locale:
           type: string
           enum: [ko, en]
@@ -857,6 +925,12 @@ components:
           type: integer
           minimum: 1
           maximum: 3600
+        note:
+          type: string
+          description: >-
+            PUT response only: present when rawPayloadStorageEnabled just
+            went true→false, explaining that existing stored payloads are
+            not deleted by this call. Never present on GET.
     SettingsUpdateRequest:
       type: object
       description: Partial<GatewaySettings> — every field independent, unset fields are left unchanged.
@@ -865,8 +939,13 @@ components:
           $ref: "#/components/schemas/FailMode"
         riskAcknowledged:
           type: boolean
-        storeRawOptIn:
+        rawPayloadStorageEnabled:
           type: boolean
+        acknowledgedNotice:
+          type: boolean
+          description: >-
+            Must be true when rawPayloadStorageEnabled is being turned on
+            (false→true) — GMCP-84 §6.2. Ignored otherwise.
         locale:
           type: string
           enum: [ko, en]
@@ -1012,6 +1091,12 @@ components:
           oneOf:
             - $ref: "#/components/schemas/VerdictDetail"
             - type: "null"
+        hasRawPayload:
+          type: boolean
+          description: >-
+            GMCP-84 §8.3. Whether this event has a stored, revealable raw
+            payload — true only for a VERDICT node whose guard_event row has
+            a non-null raw_payload_ref. Absent/false everywhere else.
     SessionSummary:
       type: object
       required: [sessionId, agentLabel, startedAt, endedAt, isLive, eventCount, verdictSummary]
@@ -1431,21 +1516,19 @@ components:
           description: Optional; recorded in the audit log entry regardless.
     RevealResponse:
       type: object
-      required: [eventId, originalPayload, revealedBy, revealedAt, auditLogId]
+      required: [eventId, rawPayload, revealedBy, revealedAt]
       properties:
         eventId:
           type: string
           format: uuid
-        originalPayload:
+        rawPayload:
           type: string
+          description: Decrypted original payload (RawPayloadStore.decrypt).
         revealedBy:
           type: string
         revealedAt:
           type: string
           format: date-time
-        auditLogId:
-          type: string
-          format: uuid
     PolicyStatsResponse:
       type: object
       required: [policyId, window, firedLast30d]

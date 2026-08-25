@@ -146,6 +146,7 @@
       "chainFailed": "체인 검증 실패",
       "reveal": "원문 열람",
       "revealed": "원문이 표시되었습니다. 열람 기록이 감사 로그에 남았습니다.",
+      "revealUnavailable": "저장된 원문 없음",
       "noSelection": "타임라인에서 이벤트를 선택하세요.",
       "target": "대상",
       "args": "인자",
@@ -448,7 +449,9 @@
     },
     "log": {
       "title": "로그",
-      "storeRaw": "원문 저장 opt-in"
+      "storeRaw": "원문 민감정보 저장",
+      "storeRawHint": "기본적으로 로그·이벤트에는 마스킹본만 저장됩니다.",
+      "storeRawPermissionRequired": "관리자 권한이 필요합니다"
     },
     "general": {
       "title": "일반",
@@ -467,9 +470,11 @@
       "confirm": "저장"
     },
     "storeRawDialog": {
-      "title": "원문 저장 활성화",
-      "body": "원문 저장 opt-in 활성화 시 원문이 저장되어 이후 기능에 활용됩니다. 계속 진행하시겠습니까?",
-      "confirm": "적용"
+      "title": "원문 저장을 켜시겠습니까?",
+      "body": "이 설정을 켜면 탐지된 개인정보·자격증명의 원문이 암호화되어 별도로 저장됩니다. 원문은 권한이 있는 사용자만 열람할 수 있으며, 모든 열람은 감사 로그에 남습니다. 이 설정은 조직의 데이터 보관·개인정보 처리 정책과 별개로, 저장 자체에 대한 책임은 운영자에게 있습니다.",
+      "acknowledge": "위 내용을 이해했습니다",
+      "confirm": "원문 저장 켜기",
+      "enabledToast": "원문 저장이 활성화되었습니다."
     },
     "trustDialog": {
       "title": "신뢰 등급 상향",

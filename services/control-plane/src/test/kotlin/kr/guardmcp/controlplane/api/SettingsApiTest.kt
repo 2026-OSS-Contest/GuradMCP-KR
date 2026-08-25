@@ -4,11 +4,13 @@ import kr.guardmcp.controlplane.domain.AuditLogStore
 import kr.guardmcp.controlplane.domain.GuardEventRepository
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.test.context.TestPropertySource
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Instant
@@ -18,14 +20,20 @@ import java.util.UUID
  * GMCP-68 §5.1/§7.2/§7.3 DoD (`GET`/`PUT`/`stream /api/v1/settings`, the `riskAcknowledged`
  * server-side guard (REQ-08), the fail_open -> fail_closed no-friction reversal (REQ-09), and the
  * `SETTINGS_FAILURE_POLICY_CHANGED`/`SETTINGS_RAW_PAYLOAD_OPT_IN_CHANGED` audit trail (§3.3))
- * plus GMCP-80 §3.8.2's operator-role gate on `PUT`, which GMCP-68 predates.
+ * plus GMCP-84 §10.3's `rawPayloadStorageEnabled`/`acknowledgedNotice`/`settings:write` coverage.
  *
  * `guard_settings` is a singleton row shared by every test in this class (and, via the shared
  * Postgres container from [ApiTestSupport], by every other test class in this JVM fork) — each
- * test that changes `failMode` restores it to `fail_closed` afterward so it never leaks state
- * into a test that runs after it, regardless of JUnit's (unspecified) method order.
+ * test that changes `failMode`/`rawPayloadStorageEnabled` restores it afterward so it never leaks
+ * state into a test that runs after it, regardless of JUnit's (unspecified) method order.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@TestPropertySource(
+    properties = [
+        "security.reveal-token=test-operator-token",
+        "security.raw-payload-encryption-key=MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
+    ],
+)
 class SettingsApiTest : ApiTestSupport() {
     @Autowired
     private lateinit var auditLog: AuditLogStore
@@ -34,8 +42,9 @@ class SettingsApiTest : ApiTestSupport() {
     private lateinit var repository: GuardEventRepository
 
     @AfterEach
-    fun restoreFailClosed() {
+    fun restoreDefaults() {
         putSettings(mapOf("failMode" to "fail_closed"), operator = true)
+        putSettings(mapOf("rawPayloadStorageEnabled" to false), operator = true)
     }
 
     @Test
@@ -43,16 +52,20 @@ class SettingsApiTest : ApiTestSupport() {
         val body = parseMap(get("/api/v1/settings").body())
         assertTrue(body.containsKey("failMode"))
         assertTrue(body.containsKey("riskAcknowledged"))
-        assertTrue(body.containsKey("storeRawOptIn"))
+        assertTrue(body.containsKey("rawPayloadStorageEnabled"))
+        assertTrue(body.containsKey("rawPayloadStorageEnabledAt"))
+        assertTrue(body.containsKey("rawPayloadStorageEnabledBy"))
         assertTrue(body.containsKey("locale"))
         assertTrue(body.containsKey("approvalTimeoutSeconds"))
     }
 
     @Test
-    fun `updating settings with no actor headers at all still succeeds`() {
+    fun `updating settings with no actor headers at all still succeeds for non-raw-storage fields`() {
         // No console session/auth exists yet, and the real console client
         // (apps/console/lib/api/client.ts) never sends X-Actor-* — this is the request shape it
-        // actually makes, and it must not 403 (see SettingsController's doc comment).
+        // actually makes for failMode/locale/approvalTimeoutSeconds, and it must not 403 (see
+        // SettingsController's doc comment). rawPayloadStorageEnabled is the one field that now
+        // does require the operator headers (§10.3), covered separately below.
         val response = putSettings(mapOf("approvalTimeoutSeconds" to 60), operator = false)
 
         assertEquals(200, response.statusCode())
@@ -154,21 +167,78 @@ class SettingsApiTest : ApiTestSupport() {
     }
 
     @Test
-    fun `enabling raw payload opt-in is audited and takes effect on the next ingest without a restart`() {
+    fun `turning rawPayloadStorageEnabled on without acknowledgedNotice is a 422 (GMCP-84 §6_2, §10_3)`() {
+        val response = putSettings(mapOf("rawPayloadStorageEnabled" to true), operator = true)
+
+        assertEquals(422, response.statusCode())
+        assertEquals("acknowledgment_required", parseMap(response.body())["code"])
+        assertEquals(false, parseMap(get("/api/v1/settings").body())["rawPayloadStorageEnabled"])
+    }
+
+    @Test
+    fun `turning rawPayloadStorageEnabled on with acknowledgedNotice=true succeeds and stamps enabledAt_By`() {
+        val response = putSettings(
+            mapOf("rawPayloadStorageEnabled" to true, "acknowledgedNotice" to true),
+            operator = true,
+        )
+
+        assertEquals(200, response.statusCode())
+        val body = parseMap(response.body())
+        assertEquals(true, body["rawPayloadStorageEnabled"])
+        assertNotNull(body["rawPayloadStorageEnabledAt"])
+        assertEquals("operator@company.co.kr", body["rawPayloadStorageEnabledBy"])
+    }
+
+    @Test
+    fun `settings_write permission is required to change rawPayloadStorageEnabled (§10_3)`() {
+        val noHeaders = putSettings(mapOf("rawPayloadStorageEnabled" to true, "acknowledgedNotice" to true), operator = false)
+        assertEquals(403, noHeaders.statusCode())
+        assertEquals("settings_forbidden", parseMap(noHeaders.body())["code"])
+
+        val wrongToken = client.send(
+            HttpRequest.newBuilder(uri("/api/v1/settings"))
+                .header("Content-Type", "application/json")
+                .header(Actor.ID_HEADER, "operator@company.co.kr")
+                .header(Actor.ROLE_HEADER, "operator")
+                .header(Actor.OPERATOR_TOKEN_HEADER, "not-the-configured-token")
+                .PUT(HttpRequest.BodyPublishers.ofString("""{"rawPayloadStorageEnabled":true,"acknowledgedNotice":true}"""))
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertEquals(403, wrongToken.statusCode())
+        assertEquals("settings_forbidden", parseMap(wrongToken.body())["code"])
+
+        assertEquals(false, parseMap(get("/api/v1/settings").body())["rawPayloadStorageEnabled"])
+    }
+
+    @Test
+    fun `turning rawPayloadStorageEnabled off needs no acknowledgement and returns a retention note`() {
+        putSettings(mapOf("rawPayloadStorageEnabled" to true, "acknowledgedNotice" to true), operator = true)
+
+        val response = putSettings(mapOf("rawPayloadStorageEnabled" to false), operator = true)
+
+        assertEquals(200, response.statusCode())
+        val body = parseMap(response.body())
+        assertEquals(false, body["rawPayloadStorageEnabled"])
+        assertTrue((body["note"] as String).contains("유지됩니다"))
+    }
+
+    @Test
+    fun `enabling raw payload storage is audited and takes effect on the next ingest without a restart`() {
         val beforeToggle = UUID.randomUUID()
         send("POST", "/api/v1/events", ingestPayload(beforeToggle, rawPayload = "before-toggle"))
-        assertNull(repository.findById(beforeToggle)?.rawPayload)
+        assertNull(repository.findById(beforeToggle)?.rawPayloadRef)
 
         val before = auditLog.findByAction("SETTINGS_RAW_PAYLOAD_OPT_IN_CHANGED").size
-        val response = putSettings(mapOf("storeRawOptIn" to true), operator = true)
+        val response = putSettings(mapOf("rawPayloadStorageEnabled" to true, "acknowledgedNotice" to true), operator = true)
         assertEquals(200, response.statusCode())
         assertEquals(before + 1, auditLog.findByAction("SETTINGS_RAW_PAYLOAD_OPT_IN_CHANGED").size)
 
         val afterToggle = UUID.randomUUID()
         send("POST", "/api/v1/events", ingestPayload(afterToggle, rawPayload = "after-toggle"))
-        assertEquals("after-toggle", repository.findById(afterToggle)?.rawPayload)
+        assertNotNull(repository.findById(afterToggle)?.rawPayloadRef)
 
-        putSettings(mapOf("storeRawOptIn" to false), operator = true)
+        putSettings(mapOf("rawPayloadStorageEnabled" to false), operator = true)
     }
 
     @Test
@@ -188,7 +258,9 @@ class SettingsApiTest : ApiTestSupport() {
             .header("Content-Type", "application/json")
             .PUT(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(fields)))
         if (operator) {
-            builder.header(Actor.ID_HEADER, "operator@company.co.kr").header(Actor.ROLE_HEADER, "operator")
+            builder.header(Actor.ID_HEADER, "operator@company.co.kr")
+                .header(Actor.ROLE_HEADER, "operator")
+                .header(Actor.OPERATOR_TOKEN_HEADER, "test-operator-token")
         }
         return client.send(builder.build(), HttpResponse.BodyHandlers.ofString())
     }

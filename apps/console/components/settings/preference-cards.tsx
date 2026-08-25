@@ -24,6 +24,9 @@ export interface PreferenceCardsProps {
   onLocaleChange: (locale: GatewaySettings["locale"]) => void;
   onTimeoutChange: (seconds: number) => void;
   disabled?: boolean;
+  /** GMCP-84 §8.1: `settings:write`-gated separately from the other controls on this screen —
+   *  see `SettingsScreen`'s doc comment on the prop it passes here. */
+  storeRawDisabled?: boolean;
 }
 
 export function PreferenceCards({
@@ -31,7 +34,8 @@ export function PreferenceCards({
   onStoreRawChange,
   onLocaleChange,
   onTimeoutChange,
-  disabled
+  disabled,
+  storeRawDisabled
 }: PreferenceCardsProps) {
   const t = useTranslations("settings");
   // The cookie is what the page is actually rendered in; `settings.locale` is a stored preference
@@ -44,14 +48,17 @@ export function PreferenceCards({
         <h2 id="log-title" className="text-body-text-b3-md text-grayscale-300">
           {t("log.title")}
         </h2>
-        <div className="flex items-center gap-4 rounded-(--primitive-radius-rounded-xl) bg-grayscale-900 p-3 px-4 py-5">
-          <span className="text-body-text-b2-md flex-1 text-grayscale-white">{t("log.storeRaw")}</span>
-          <Switch
-            checked={settings.storeRawOptIn}
-            disabled={disabled}
-            onChange={onStoreRawChange}
-            label={t("log.storeRaw")}
-          />
+        <div className="flex flex-col gap-1 rounded-(--primitive-radius-rounded-xl) bg-grayscale-900 p-3 px-4 py-5">
+          <div className="flex items-center gap-4" title={storeRawDisabled ? t("log.storeRawPermissionRequired") : undefined}>
+            <span className="text-body-text-b2-md flex-1 text-grayscale-white">{t("log.storeRaw")}</span>
+            <Switch
+              checked={settings.rawPayloadStorageEnabled}
+              disabled={disabled || storeRawDisabled}
+              onChange={onStoreRawChange}
+              label={t("log.storeRaw")}
+            />
+          </div>
+          <p className="text-caption-text-c-rg text-grayscale-400">{t("log.storeRawHint")}</p>
         </div>
       </section>
 

@@ -103,6 +103,8 @@ class ChainBuilder {
         argsDigest: String? = null,
         /** Stores a deliberately wrong hash so [ReplayChain.validate] reports BROKEN. Seed data only. */
         corrupt: Boolean = false,
+        /** GMCP-84 §8.3 -- see [TimelineNode.hasRawPayload]. */
+        hasRawPayload: Boolean = false,
     ): TimelineNode {
         val maskDiffRef = ReplayChain.maskDiffRef(eventId)
         val correctHash = ReplayChain.sha256(
@@ -122,6 +124,7 @@ class ChainBuilder {
             verdict = verdict,
             riskScore = riskScore,
             detail = detail,
+            hasRawPayload = hasRawPayload,
         )
     }
 }
