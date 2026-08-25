@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2 } from "lucide-react";
 import { getBenchmarkReport, getBenchmarkSamples } from "@/lib/api/client";
 import { useResource } from "@/lib/api/use-resource";
 import { RunList } from "./run-list";
 import { ResultPanel } from "./result-panel";
 import { RowDialog } from "./row-dialog";
+import { EmptyTargetIcon, LoadFailedIcon } from "./icons";
 import { toRows, useBenchmarkRun, type RunRow } from "./use-benchmark-run";
 import { cn } from "@/lib/utils";
 
@@ -15,12 +15,29 @@ import { cn } from "@/lib/utils";
 const COMMAND = "npm run bench";
 
 /**
- * SCR-601 Benchmark (GMCP-61): press run, watch every sample get checked, read what it came to.
+ * The right column before there is anything to report (`Empty` in the frames): the rings disc
+ * and one line, centred in a 900 card. The 실행완료 frame swaps this card for the transparent
+ * detail column.
+ */
+function EmptyColumn() {
+  const t = useTranslations("benchmark");
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 rounded-(--primitive-radius-rounded-xl) bg-grayscale-900 px-8 py-6">
+      <div className="flex flex-col items-center gap-4">
+        <EmptyTargetIcon className="size-10" aria-hidden />
+        <p className="text-center text-title-text-t2-bd whitespace-pre-line text-grayscale-white">{t("idle")}</p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * SCR-601 Benchmark (GMCP-61): press run, watch every case get checked, read what it came to.
  *
  * The measurement itself is not made here — `attack-lab/benchmark/run.ts` made it, and the two
- * endpoints hand back its report together with the samples it judged. So the left column is not
- * a progress bar standing in for work: it is the evidence, all 245 rows of it, and the panel on
- * the right is the summary a reader can check against them.
+ * endpoints hand back its report together with the samples it judged. The left column is the
+ * evidence, all 245 rows of it, and the panel on the right is the summary a reader can check
+ * against them.
  */
 export function Benchmark() {
   const t = useTranslations("benchmark");
@@ -40,70 +57,87 @@ export function Benchmark() {
   const loading = report.loading || samples.loading;
   const failed = Boolean(report.error || samples.error) && rows.length === 0;
 
+  // 실행중-재실행 frame: a re-run keeps the previous report on screen while the cascade
+  // replays; the first run has nothing to keep, so the report only lands when it finishes.
+  const [ranOnce, setRanOnce] = useState(false);
+  useEffect(() => {
+    if (state === "done") setRanOnce(true);
+  }, [state]);
+  const showReport = Boolean(report.data) && (state === "done" || (state === "running" && ranOnce));
+
   return (
-    <div data-scr="SCR-601" className="flex min-h-0 flex-1 flex-col gap-4 px-8 py-6">
-      <div className="flex flex-none items-center gap-3">
-        <span className="flex min-w-0 flex-col">
-          <h2 className="text-body-text-b1-bd text-grayscale-white">{t("title")}</h2>
-          <span className="text-caption-text-c-rg text-(--primitive-opacity-white-alpha-50)">
-            {t("subtitle", { count: rows.length })}
+    <div data-scr="SCR-601" className="flex min-h-0 flex-1 flex-col gap-4 bg-grayscale-black px-4 py-6">
+      <div className="flex flex-none items-start gap-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <h2 className="text-body-text-b1-md text-grayscale-300">{t("title")}</h2>
+          {/* «샘플 245건 | 데이터셋 · 공격 시나리오 · 정책 픽스처» — the dots are the frame's
+              own 2px discs, not typed characters. */}
+          <span className="flex items-center gap-2 text-body-text-b3-md text-grayscale-400">
+            <span>{t("subtitleCount", { count: rows.length })}</span>
+            <span aria-hidden>|</span>
+            <span>{t("legend.datasets")}</span>
+            <Dot />
+            <span>{t("legend.scenarios")}</span>
+            <Dot />
+            <span>{t("legend.fixtures")}</span>
           </span>
-        </span>
+        </div>
         <button
           type="button"
           onClick={start}
-          // While it spins the button has no text of its own, so the name is carried here.
-          aria-label={t(state === "done" ? "runAgain" : "run")}
           disabled={loading || rows.length === 0 || state === "running"}
           className={cn(
-            // Hover goes darker rather than lighter: white on blue-700 is 4.18:1, under the
-            // 4.5:1 the project holds itself to (기획서 NFR-08). blue-800 is 6.5:1, blue-900 11:1.
-            "ml-auto flex h-10 flex-none items-center justify-center rounded-xl bg-blue-800 px-5 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-blue-900",
-            (loading || rows.length === 0 || state === "running") && "cursor-not-allowed opacity-50"
+            // Hover darkens rather than lightens: white on blue-700 is 4.18:1, under the 4.5:1
+            // the project holds itself to (기획서 NFR-08). blue-800 is 6.5:1, blue-900 11:1.
+            "flex h-10 flex-none items-center justify-center gap-2 rounded-(--primitive-radius-rounded-xl) bg-blue-800 px-4 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-blue-900",
+            // The three frames that disable it — 두 응답 도착 전, 응답 실패, 실행 중 — all fade
+            // it to 25%, and all three keep its label rather than swapping in a spinner. The
+            // cascade running down the list is what says the run is under way.
+            (loading || rows.length === 0 || state === "running") && "cursor-not-allowed opacity-25"
           )}
         >
-          {loading || state === "running" ? (
-            <Loader2 className="size-5 animate-spin motion-reduce:animate-none" aria-hidden />
-          ) : (
-            t(state === "done" ? "runAgain" : "run")
-          )}
+          {t(state === "done" || state === "running" ? "runAgain" : "run")}
         </button>
       </div>
 
-      {failed ? (
-        <p role="status" className="text-body-text-b3-md text-grayscale-400">
-          {t("error")}
-        </p>
-      ) : (
-        // The two never stack. Reading the result beside the rows it came from is the whole
-        // composition, and a narrow window is exactly where a reader is most likely to lose
-        // track of which list the numbers belong to — so both columns simply get narrower. The
-        // panel keeps the 347px the other screens give their detail column until there is no
-        // longer room, then shrinks with the window rather than dropping below it.
-        <div className="flex min-h-0 flex-1 gap-4">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-(--primitive-radius-rounded-2xl) bg-grayscale-900 p-4">
+      {/* Two columns at every width, the right one roughly a third (364/1008 · 560/1648 ·
+          274/752 across the frames' three widths). They never stack — the result is read
+          against the rows it came from. */}
+      <div className="flex min-h-0 flex-1 gap-4">
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-(--primitive-radius-rounded-xl) bg-grayscale-900">
+          {loading || failed ? (
+            // The 두-응답-도착-전 / 응답-실패 frames put the message inside the list card. They
+            // are not the same message: waiting is one quiet white line and the shimmer, while
+            // a failure gets the 40px warn disc and the larger yellow-200 heading — a state the
+            // reader has to act on should not look like a state that resolves itself.
+            <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+              {failed ? (
+                <>
+                  <LoadFailedIcon className="size-10 flex-none" />
+                  <p role="status" className="text-title-text-t2-bd text-yellow-200">
+                    {t("error")}
+                  </p>
+                </>
+              ) : (
+                <p className="text-body-text-b2-md text-grayscale-white">{t("loadingList")}</p>
+              )}
+              {loading && (
+                <span className="pane-shimmer motion-reduce:animate-none pointer-events-none absolute inset-0" aria-hidden />
+              )}
+            </div>
+          ) : (
             <RunList rows={rows} checked={checked} state={state} onSelect={setOpened} />
-          </div>
-
-          <div className="flex min-h-0 w-86.75 max-w-2/5 min-w-56 flex-col">
-            {report.data && state === "done" ? (
-              <ResultPanel report={report.data} checks={rows.length} command={COMMAND} />
-            ) : (
-              // Before the run there is nothing to report, and saying so is better than an
-              // empty column the reader has to interpret. While the run is on, the same
-              // `Proto/Shimmer` sweep SCR-201's panes use says the column is waiting on it.
-              <p className="relative flex min-h-40 flex-1 items-center justify-center overflow-hidden rounded-(--primitive-radius-rounded-2xl) bg-(--primitive-opacity-white-alpha-6) p-6 text-center text-body-text-b3-md text-grayscale-400">
-                {state === "running" && (
-                  <span className="pane-shimmer motion-reduce:animate-none pointer-events-none absolute inset-0" aria-hidden />
-                )}
-                {t(state === "running" ? "measuring" : "idle")}
-              </p>
-            )}
-          </div>
+          )}
         </div>
-      )}
+
+        <div className="flex min-h-0 w-[36%] max-w-140 min-w-56 flex-none flex-col">
+          {showReport ? <ResultPanel report={report.data!} checks={rows.length} command={COMMAND} /> : <EmptyColumn />}
+        </div>
+      </div>
 
       {opened && <RowDialog row={opened} onClose={() => setOpened(null)} />}
     </div>
   );
 }
+
+const Dot = () => <span aria-hidden className="size-0.5 flex-none rounded-full bg-(--primitive-opacity-white-alpha-50)" />;

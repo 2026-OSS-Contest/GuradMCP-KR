@@ -578,6 +578,13 @@ export interface TimelineResponse {
   events: TimelineEvent[];
   /** Full detail for each event id the panel can select. */
   details: Record<string, EventDetail>;
+  /**
+   * The node the hash chain stops verifying at, which the rail tints (화면설계서 §5.3 "불일치
+   * 구간 하이라이트"). Kept here rather than read off `details[id].chain`: that one needs the
+   * node's `VerdictDetail` for its hash and so exists only on VERDICT nodes, while `brokenAt`
+   * can name any node — the `체인 검증 실패 시` frame marks a RESULT row.
+   */
+  brokenAt?: string;
 }
 
 // ── SCR-501 Settings (spec §5.7, GMCP-88/GMCP-68) ───────────────────────────

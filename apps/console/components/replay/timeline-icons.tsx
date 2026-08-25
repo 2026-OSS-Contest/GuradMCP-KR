@@ -25,34 +25,37 @@ export const ShiftKeyIcon = (props: P) => (
   </svg>
 );
 
+/** USER_INPUT 노드. 프레임의 `Timeline_Rail/Node Marker`. `timeline-rail` 프레임의 export를 그대로 옮긴 것 — 색과 경로를 손대지 않는다. */
 export const NodeUserIcon = (props: P) => (
   <svg {...props} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
   <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="#FCFCFD" fillOpacity="0.06"/>
-  <g clipPath="url(#4731d332-clip0_296_2910)">
+  <g clipPath="url(#NodeUserIcon-clip0)">
   <path d="M20 10C14.47 10 10 14.47 10 20C10 25.53 14.47 30 20 30C25.53 30 30 25.53 30 20C30 14.47 25.53 10 20 10Z" fill="#FCFCFD"/>
   </g>
   <defs>
-  <clipPath id="4731d332-clip0_296_2910">
+  <clipPath id="NodeUserIcon-clip0">
   <rect width="24" height="24" fill="white" transform="translate(8 8)"/>
   </clipPath>
   </defs>
   </svg>
 );
 
+/** AGENT_STEP 노드. `timeline-rail` 프레임의 export를 그대로 옮긴 것 — 색과 경로를 손대지 않는다. */
 export const NodeAgentIcon = (props: P) => (
   <svg {...props} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
   <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="#006494"/>
-  <g clipPath="url(#f022449e-clip0_296_12969)">
-  <path d="M10.2223 21.2222L18.7778 29.7777C19.45 30.45 20.55 30.45 21.2223 29.7777L29.7778 21.2222C30.45 20.55 30.45 19.45 29.7778 18.7778L21.2223 10.2223C20.55 9.55004 19.45 9.55004 18.7778 10.2223L10.2223 18.7778C9.55009 19.45 9.55009 20.55 10.2223 21.2222Z" fill="#FCFCFD"/>
+  <g clipPath="url(#NodeAgentIcon-clip0)">
+  <path d="M10.2222 21.2222L18.7777 29.7777C19.45 30.45 20.55 30.45 21.2222 29.7777L29.7777 21.2222C30.4499 20.55 30.4499 19.45 29.7777 18.7778L21.2222 10.2223C20.55 9.55004 19.45 9.55004 18.7777 10.2223L10.2222 18.7778C9.55 19.45 9.55 20.55 10.2222 21.2222Z" fill="#FCFCFD"/>
   </g>
   <defs>
-  <clipPath id="f022449e-clip0_296_12969">
+  <clipPath id="NodeAgentIcon-clip0">
   <rect width="24" height="24" fill="white" transform="translate(8 8)"/>
   </clipPath>
   </defs>
   </svg>
 );
 
+/** TOOL_CALL 노드 — 앞으로 향하는 삼각형. `timeline-rail` 프레임의 export를 그대로 옮긴 것 — 색과 경로를 손대지 않는다. */
 export const NodeToolIcon = (props: P) => (
   <svg {...props} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
   <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="#FCFCFD" fillOpacity="0.06"/>
@@ -60,55 +63,64 @@ export const NodeToolIcon = (props: P) => (
   </svg>
 );
 
-/**
- * The verdict marker, in the colour of the verdict it marks.
- *
- * This was one glyph with `#F15B5B` painted into it — the frame it was extracted from happened to
- * show a block, and every timeline fixture at the time had exactly one verdict node, which was
- * also a block. Anything else (an allow, a masking warn, a held call) drew a red 차단 disc beside
- * its own badge (GMCP-117).
- */
+/** RESULT 노드 — 되돌아오는 삼각형. `timeline-rail` 프레임의 export를 그대로 옮긴 것 — 색과 경로를 손대지 않는다. */
+export const NodeResultIcon = (props: P) => (
+  <svg {...props} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="#FCFCFD" fillOpacity="0.06"/>
+  <path d="M25.1445 14.8198V25.1798C25.1445 25.9698 24.2745 26.4498 23.6045 26.0198L15.4645 20.8398C14.8445 20.4498 14.8445 19.5498 15.4645 19.1498L23.6045 13.9798C24.2745 13.5498 25.1445 14.0298 25.1445 14.8198Z" fill="#FCFCFD"/>
+  </svg>
+);
+
+/** VERDICT · 차단. `timeline-rail` 프레임의 export를 그대로 옮긴 것 — 색과 경로를 손대지 않는다. */
 export const NodeVerdictIcon = (props: P) => (
   <svg {...props} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="currentColor"/>
-  <g clipPath="url(#17b41c0c-clip0_296_11020)">
+  <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="#F15B5B"/>
+  <g clipPath="url(#NodeVerdictIcon-clip0)">
   <path d="M20 10C14.48 10 10 14.48 10 20C10 25.52 14.48 30 20 30C25.52 30 30 25.52 30 20C30 14.48 25.52 10 20 10ZM12 20C12 15.58 15.58 12 20 12C21.85 12 23.55 12.63 24.9 13.69L13.69 24.9C12.63 23.55 12 21.85 12 20ZM20 28C18.15 28 16.45 27.37 15.1 26.31L26.31 15.1C27.37 16.45 28 18.15 28 20C28 24.42 24.42 28 20 28Z" fill="#FCFCFD"/>
   </g>
   <defs>
-  <clipPath id="17b41c0c-clip0_296_11020">
+  <clipPath id="NodeVerdictIcon-clip0">
   <rect width="24" height="24" fill="white" transform="translate(8 8)"/>
   </clipPath>
   </defs>
   </svg>
 );
 
-/** The same disc with a tick, for a verdict that let the call through. */
+/** VERDICT · 허용. `timeline-rail` 프레임의 export를 그대로 옮긴 것 — 색과 경로를 손대지 않는다. */
 export const NodeVerdictAllowIcon = (props: P) => (
   <svg {...props} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="currentColor"/>
-  <path d="M17.6 24.3L13.4 20.1C13.0 19.7 13.0 19.1 13.4 18.7C13.8 18.3 14.4 18.3 14.8 18.7L18.3 22.2L25.2 15.3C25.6 14.9 26.2 14.9 26.6 15.3C27.0 15.7 27.0 16.3 26.6 16.7L19.0 24.3C18.6 24.7 18.0 24.7 17.6 24.3Z" fill="#FCFCFD"/>
+  <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="#16AA52"/>
+  <g clipPath="url(#NodeVerdictAllowIcon-clip0)">
+  <path d="M20 10C14.48 10 10 14.48 10 20C10 25.52 14.48 30 20 30C25.52 30 30 25.52 30 20C30 14.48 25.52 10 20 10ZM17.29 24.29L13.7 20.7C13.31 20.31 13.31 19.68 13.7 19.29C14.09 18.9 14.72 18.9 15.11 19.29L18 22.17L24.88 15.29C25.27 14.9 25.9 14.9 26.29 15.29C26.68 15.68 26.68 16.31 26.29 16.7L18.7 24.29C18.32 24.68 17.68 24.68 17.29 24.29Z" fill="#FCFCFD"/>
+  </g>
+  <defs>
+  <clipPath id="NodeVerdictAllowIcon-clip0">
+  <rect width="24" height="24" fill="white" transform="translate(8 8)"/>
+  </clipPath>
+  </defs>
   </svg>
 );
 
-/** The same disc with a warning triangle, for a call that went through with something recorded. */
+/** VERDICT · 경고. `timeline-rail` 프레임의 export를 그대로 옮긴 것 — 색과 경로를 손대지 않는다. */
 export const NodeVerdictWarnIcon = (props: P) => (
   <svg {...props} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="currentColor"/>
-  <path d="M13.0 27.0H27.0C27.8 27.0 28.3 26.1 27.9 25.4L20.9 13.3C20.5 12.6 19.5 12.6 19.1 13.3L12.1 25.4C11.7 26.1 12.2 27.0 13.0 27.0ZM20 22.7C19.6 22.7 19.2 22.3 19.2 21.9V19.9C19.2 19.5 19.6 19.1 20 19.1C20.4 19.1 20.8 19.5 20.8 19.9V21.9C20.8 22.3 20.4 22.7 20 22.7ZM20.8 25.4H19.2V23.8H20.8V25.4Z" fill="#1A1D21"/>
+  <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="#F7B938"/>
+  <path d="M12.4701 29.0002H27.5301C29.0701 29.0002 30.0301 27.3302 29.2601 26.0002L21.7301 12.9902C20.9601 11.6602 19.0401 11.6602 18.2701 12.9902L10.7401 26.0002C9.97012 27.3302 10.9301 29.0002 12.4701 29.0002ZM20.0001 22.0002C19.4501 22.0002 19.0001 21.5502 19.0001 21.0002V19.0002C19.0001 18.4502 19.4501 18.0002 20.0001 18.0002C20.5501 18.0002 21.0001 18.4502 21.0001 19.0002V21.0002C21.0001 21.5502 20.5501 22.0002 20.0001 22.0002ZM21.0001 26.0002H19.0001V24.0002H21.0001V26.0002Z" fill="#202429"/>
   </svg>
 );
 
-/** The same disc with a hold, for a call waiting on a person. */
+/** VERDICT · 승인 대기. `timeline-rail` 프레임의 export를 그대로 옮긴 것 — 색과 경로를 손대지 않는다. */
 export const NodeVerdictApprovalIcon = (props: P) => (
   <svg {...props} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="currentColor"/>
-  <path d="M16.5 14.5H18.5C19.05 14.5 19.5 14.95 19.5 15.5V24.5C19.5 25.05 19.05 25.5 18.5 25.5H16.5C15.95 25.5 15.5 25.05 15.5 24.5V15.5C15.5 14.95 15.95 14.5 16.5 14.5ZM21.5 14.5H23.5C24.05 14.5 24.5 14.95 24.5 15.5V24.5C24.5 25.05 24.05 25.5 23.5 25.5H21.5C20.95 25.5 20.5 25.05 20.5 24.5V15.5C20.5 14.95 20.95 14.5 21.5 14.5Z" fill="#FCFCFD"/>
+  <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="#6E6DC5"/>
+  <g clipPath="url(#NodeVerdictApprovalIcon-clip0)">
+  <path d="M20 10C14.48 10 10 14.48 10 20C10 25.52 14.48 30 20 30C25.52 30 30 25.52 30 20C30 14.48 25.52 10 20 10ZM18 24C17.45 24 17 23.55 17 23V17C17 16.45 17.45 16 18 16C18.55 16 19 16.45 19 17V23C19 23.55 18.55 24 18 24ZM22 24C21.45 24 21 23.55 21 23V17C21 16.45 21.45 16 22 16C22.55 16 23 16.45 23 17V23C23 23.55 22.55 24 22 24Z" fill="#FCFCFD"/>
+  </g>
+  <defs>
+  <clipPath id="NodeVerdictApprovalIcon-clip0">
+  <rect width="24" height="24" fill="white" transform="translate(8 8)"/>
+  </clipPath>
+  </defs>
   </svg>
 );
 
-export const NodeResultIcon = (props: P) => (
-  <svg {...props} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M0 20C0 8.95431 8.95431 0 20 0C31.0457 0 40 8.95431 40 20C40 31.0457 31.0457 40 20 40C8.95431 40 0 31.0457 0 20Z" fill="#FCFCFD" fillOpacity="0.06"/>
-  <path d="M25.145 14.8198V25.1798C25.145 25.9698 24.275 26.4498 23.605 26.0198L15.465 20.8398C14.845 20.4498 14.845 19.5498 15.465 19.1498L23.605 13.9798C24.275 13.5498 25.145 14.0298 25.145 14.8198Z" fill="#FCFCFD"/>
-  </svg>
-);

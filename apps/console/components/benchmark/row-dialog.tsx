@@ -2,22 +2,23 @@
 
 import { useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { VerdictAllowIcon, VerdictBlockIcon } from "@/components/icons";
+import { GatePassIcon, RowFailIcon } from "./icons";
 import type { RunRow } from "./use-benchmark-run";
 import { cn } from "@/lib/utils";
 
 /**
- * One labelled line of the case. Identifiers read in mono; the measured text does not — the mono
- * face has no Korean, so a Korean sample set in it falls back glyph by glyph and spaces oddly.
+ * One labelled line of the case (the modal frame's label/value pairs). Identifiers read in mono;
+ * the measured text does not — the mono face has no Korean, so a Korean sample set in it falls
+ * back glyph by glyph and spaces oddly.
  */
 function Field({ label, value, mono = true }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-caption-text-c-rg text-(--primitive-opacity-white-alpha-50)">{label}</span>
+      <span className="text-body-text-b3-md text-grayscale-400">{label}</span>
       <span
         className={cn(
           "break-all text-grayscale-100",
-          mono ? "font-mono text-body-mono-b3-rg" : "text-body-text-b3-md"
+          mono ? "font-mono text-body-mono-b2-rg" : "text-body-text-b2-md"
         )}
       >
         {value}
@@ -71,22 +72,27 @@ export function RowDialog({ row, onClose }: { row: RunRow; onClose: () => void }
   const { source } = row;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-(--primitive-opacity-black-alpha-75) p-4" onMouseDown={onClose}>
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="benchmark-row-title"
-        className="flex max-h-[80vh] w-160 max-w-full flex-col gap-4 overflow-y-auto rounded-(--primitive-radius-rounded-xl) bg-grayscale-900 p-6 shadow-xl shadow-black/50"
+        // The frame's Modal: 632 wide, 24px inset, 24px between the body and the close button.
+        className="flex max-h-[80vh] w-158 max-w-full flex-col gap-6 overflow-y-auto rounded-(--primitive-radius-rounded-xl) bg-grayscale-900 p-6 shadow-xl shadow-black/50"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 border-b border-(--primitive-opacity-white-alpha-10) pb-2">
+          {/* The modal titles a passed case with the same green-600 check the gate card uses —
+              read from the frame's `.html`, whose base64 icon is `#1AD164`. (The `.json` lists
+              a white fill on the instance node, which is override noise, and trusting it put a
+              white check here first.) A failure keeps the red block disc. */}
           {row.passed ? (
-            <VerdictAllowIcon className="h-6 w-5 flex-none text-verdict-allow" aria-hidden />
+            <GatePassIcon className="size-6 flex-none" aria-hidden />
           ) : (
-            <VerdictBlockIcon className="h-6 w-5 flex-none text-verdict-block" aria-hidden />
+            <RowFailIcon className="size-6 flex-none" aria-hidden />
           )}
-          <h2 id="benchmark-row-title" className="min-w-0 flex-1 font-mono text-body-mono-b2-rg text-grayscale-white">
+          <h2 id="benchmark-row-title" className="min-w-0 flex-1 font-mono text-body-mono-b1-rg text-grayscale-white">
             {row.id}
           </h2>
           <span className="flex-none text-body-text-b3-md text-grayscale-300">{t(`section.${row.section}`)}</span>
@@ -96,7 +102,9 @@ export function RowDialog({ row, onClose }: { row: RunRow; onClose: () => void }
           <>
             <Field label={t("field.text")} value={source.sample.text} mono={false} />
             <div className="grid grid-cols-2 gap-4">
-              <Field label={t("field.kind")} value={source.sample.kind ?? "—"} />
+              {/* `row.kind`, not `sample.kind`: the chip the list drew, so the modal cannot
+                  disagree with the row that opened it. */}
+              <Field label={t("field.kind")} value={row.kind ?? "—"} />
               <Field
                 label={t("field.label")}
                 value={t(source.sample.label ? "label.positive" : "label.negative")}
@@ -161,11 +169,11 @@ export function RowDialog({ row, onClose }: { row: RunRow; onClose: () => void }
           </>
         )}
 
-        <div className="mt-2 flex justify-end">
+        <div className="flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="flex h-10 cursor-pointer items-center rounded-(--primitive-radius-rounded-lg) bg-(--primitive-opacity-white-alpha-6) px-4 text-body-text-b2-md text-grayscale-white transition-colors hover:bg-white/10"
+            className="flex h-10 cursor-pointer items-center rounded-(--primitive-radius-rounded-xl) bg-(--primitive-opacity-white-alpha-25) px-4 text-body-text-b2-md text-grayscale-white transition-opacity hover:opacity-80"
           >
             {t("close")}
           </button>
