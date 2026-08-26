@@ -356,8 +356,15 @@ export const getPolicyStats = (id: string, signal?: AbortSignal) =>
   get<PolicyStats>(`/policies/${encodeURIComponent(id)}/stats`, signal);
 
 /**
- * The benchmark report (GMCP-61). `attack-lab/benchmark/run.ts` produces it; nothing serves it
- * yet, so this reaches only the mock. The path is the one the console asks the control plane for.
+ * The benchmark report (GMCP-61). `attack-lab/benchmark/run.ts` produces it and
+ * `BenchmarkController` now serves it, reading `GUARDMCP_BENCHMARK_REPORT` (default
+ * `reports/benchmark.json`, resolved against the control plane's own working directory).
+ *
+ * Expect a **404 `benchmark_report_not_found`** in the shipped stack until someone mounts one:
+ * `docker-compose.yml`'s `control-plane` service declares no volume and no benchmark env var, so
+ * that file does not exist inside the image. SCR-601 tells that apart from a real load failure —
+ * "no benchmark has been run" is something the reader can act on, and it is the state a fresh
+ * deployment is always in.
  */
 export const getBenchmarkReport = (signal?: AbortSignal) => get<BenchmarkReport>("/benchmark/report", signal);
 

@@ -409,7 +409,8 @@
       "scenarios": "공격 시나리오",
       "fixtures": "정책 픽스처"
     },
-    "loadingList": "리스트를 불러오는 중입니다."
+    "loadingList": "리스트를 불러오는 중입니다.",
+    "notRun": "아직 벤치마크를 실행하지 않았습니다."
   },
   "settings": {
     "servers": {

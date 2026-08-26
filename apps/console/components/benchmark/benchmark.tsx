@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { getBenchmarkReport, getBenchmarkSamples } from "@/lib/api/client";
+import { ApiError, getBenchmarkReport, getBenchmarkSamples } from "@/lib/api/client";
 import { useResource } from "@/lib/api/use-resource";
 import { RunList } from "./run-list";
 import { ResultPanel } from "./result-panel";
@@ -56,6 +56,18 @@ export function Benchmark() {
 
   const loading = report.loading || samples.loading;
   const failed = Boolean(report.error || samples.error) && rows.length === 0;
+  /**
+   * A 404 is not a failure here, it is the answer.
+   *
+   * `BenchmarkController` serves `reports/benchmark.json` off its own working directory and 404s
+   * `benchmark_report_not_found` when nothing is there — which is every deployment that has not
+   * run the benchmark, and, today, every one of them: `docker-compose.yml`'s control-plane
+   * service mounts no report and sets neither `GUARDMCP_BENCHMARK_REPORT` nor
+   * `GUARDMCP_BENCHMARK_SAMPLES`. Telling the reader to check the gateway connection for that
+   * sends them to look at a network that is working; `npm run bench` is what they need.
+   */
+  const notRunYet =
+    failed && [report.error, samples.error].some((error) => error instanceof ApiError && error.status === 404);
 
   // 실행중-재실행 frame: a re-run keeps the previous report on screen while the cascade
   // replays; the first run has nothing to keep, so the report only lands when it finishes.
@@ -115,8 +127,15 @@ export function Benchmark() {
                 <>
                   <LoadFailedIcon className="size-10 flex-none" />
                   <p role="status" className="text-title-text-t2-bd text-yellow-200">
-                    {t("error")}
+                    {t(notRunYet ? "notRun" : "error")}
                   </p>
+                  {/* The command that produces what this screen reads. It is already on the
+                      panel opposite as the re-run hint, but that panel is not drawn in this
+                      state — and a reader who is told "no benchmark has been run" and not how
+                      to run one has been given half an answer. */}
+                  {notRunYet && (
+                    <p className="font-mono text-body-mono-b2-rg text-grayscale-300">{COMMAND}</p>
+                  )}
                 </>
               ) : (
                 <p className="text-body-text-b2-md text-grayscale-white">{t("loadingList")}</p>

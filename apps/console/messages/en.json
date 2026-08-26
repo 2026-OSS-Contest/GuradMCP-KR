@@ -409,7 +409,8 @@
       "scenarios": "Attack scenarios",
       "fixtures": "Policy fixtures"
     },
-    "loadingList": "Loading the list…"
+    "loadingList": "Loading the list…",
+    "notRun": "No benchmark has been run yet."
   },
   "settings": {
     "servers": {
