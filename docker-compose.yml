@@ -219,6 +219,26 @@ services:
       POLICY_SYNC_TOKEN: ${POLICY_SYNC_TOKEN:-guardmcp-local-only}
     ports:
       - "127.0.0.1:${CONTROL_PLANE_PORT:-8080}:8080"
+    volumes:
+      # SCR-601's two endpoints (`GET /benchmark/report`, `/benchmark/samples`) serve files
+      # rather than computing anything: `BenchmarkController` reads the *relative* paths
+      # `reports/benchmark.json` and `reports/benchmark-samples.json`, which resolve against the
+      # JVM's working directory — `/app`, per the Dockerfile's `WORKDIR`. Nothing put them there:
+      # the runtime stage copies `app.jar` and nothing else, so both endpoints answered 404 in
+      # every deployment of this stack.
+      #
+      # The producer is `npm run bench` on the host (`attack-lab/benchmark/run.ts`, same two env
+      # vars, same two default paths), so this bind mount is the whole join between them. `:ro`
+      # is enough — the service only reads.
+      #
+      # Demo/local only. A real deployment has no repository checkout to mount, and the report
+      # cannot be baked into the image either: `.gitignore` excludes `reports/*.json`, so there
+      # is no file for a `COPY` to pick up. Publishing it as a build artefact is the durable fix.
+      #
+      # Missing files stay a 404 by design, and that is a state, not a failure: SCR-601 reads it
+      # as "no benchmark has been run yet" and prints the command that produces one. So an
+      # operator who has never run the benchmark sees the right thing rather than an error.
+      - ./reports:/app/reports:ro
     depends_on:
       postgres-seed:
         condition: service_completed_successfully

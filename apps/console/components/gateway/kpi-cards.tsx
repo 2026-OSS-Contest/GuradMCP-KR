@@ -42,9 +42,9 @@ export function KpiCards({ overview, failed }: { overview: Overview | undefined;
       key: "servers",
       href: `#${INVENTORY_ANCHOR}`,
       Icon: KpiServersIcon,
-      value: overview?.servers.total ?? UNKNOWN,
+      value: overview?.servers?.total ?? UNKNOWN,
       note:
-        overview && overview.servers.disconnected > 0
+        overview?.servers && overview.servers.disconnected > 0
           ? t("serversDown", { count: overview.servers.disconnected })
           : undefined,
       noteTone: "text-verdict-warn"

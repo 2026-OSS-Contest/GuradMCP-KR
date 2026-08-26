@@ -50,7 +50,7 @@
       "tools": "Protected tools",
       "policies": "Active policies",
       "packCount": "{count} packs",
-      "blocked": "Blocked 24h"
+      "blocked": "Blocked today"
     },
     "inventory": {
       "title": "MCP server inventory",
@@ -173,7 +173,11 @@
       "notice": "This access is recorded, and the panel re-masks automatically when you leave.",
       "raw": "Original (Raw)",
       "masked": "Masked",
-      "stop": "Stop revealing"
+      "stop": "Stop revealing",
+      "forbidden": "This account cannot reveal original payloads. Ask an administrator for the events:reveal permission.",
+      "notStored": "No original payload was stored for this event. Turn raw-payload storage on in Settings; events recorded after that can be revealed.",
+      "unreconstructable": "The detection offsets do not fit the payload, so the masked column cannot be rebuilt. The original is not shown without it.",
+      "failed": "Could not load the original payload. Try again in a moment."
     }
   },
   "attackLab": {
@@ -190,6 +194,8 @@
     "paneIdle": "Select a scenario and run it",
     "runFailedTitle": "Run request failed",
     "runFailedBody": "The run request could not be processed.\nCheck the attack-lab container.",
+    "runQueuedTitle": "Accepted, but nothing to show",
+    "runQueuedBody": "The gateway runner is not deployed yet, so this\nenvironment cannot return the call log. (GMCP-55)",
     "retry": "Retry",
     "riskScore": "Risk score",
     "resultSummary": "Result summary",
@@ -259,7 +265,8 @@
     "toggleFailed": "Could not change the policy. Check the gateway connection and try again.",
     "packs": {
       "title": "Policy packs",
-      "toggle": "Enable the {name} policy pack"
+      "toggle": "Enable the {name} policy pack",
+      "readOnly": "Policy packs are loaded by the gateway from policy-packs/. They cannot be switched from the console."
     },
     "table": {
       "title": "Policies",
@@ -307,7 +314,8 @@
       "secondary": "See the default policy pack",
       "secondaryAria": "See the default policy pack in a new tab",
       "note": "You can contribute YAML policies without writing any code."
-    }
+    },
+    "toggleIgnored": "The gateway did not apply this change. A policy's enabled state can only be changed through its YAML `enabled:`."
   },
   "screens": {
     "gateway": {
@@ -401,7 +409,8 @@
       "scenarios": "Attack scenarios",
       "fixtures": "Policy fixtures"
     },
-    "loadingList": "Loading the list…"
+    "loadingList": "Loading the list…",
+    "notRun": "No benchmark has been run yet."
   },
   "settings": {
     "servers": {

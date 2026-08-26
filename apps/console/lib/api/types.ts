@@ -15,12 +15,53 @@ export type RiskLevel = "high" | "medium" | "low";
 /** Status bar indicator (spec §4.1 no.3). `degraded` = gateway up, some upstreams down. */
 export type GatewayStatus = "protected" | "degraded" | "disconnected";
 
+/**
+ * What `GET /overview` **actually** answers today — `OverviewController.kt`'s `Overview`.
+ *
+ * It shares exactly one field name with the console's `Overview` below (`pendingApprovals`).
+ * Everything else is named differently, scoped differently, or simply absent, which is why
+ * `toOverview()` in `overview-adapter.ts` exists and is the only thing that should read this.
+ */
+export interface ApiOverview {
+  /** True when any policy pack is enabled — `activePacks.isNotEmpty()`, nothing more. */
+  protected: boolean;
+  /**
+   * Gateways, hardcoded to 1. **Not** the MCP inventory: the console's own `servers` count comes
+   * from `GET /servers`, and the two are different numbers.
+   */
+  gatewayCount: number;
+  activePolicyPacks: string[];
+  /** Since local midnight (`clock.instant().truncatedTo(DAYS)`), not a rolling 24 hours. */
+  blockedToday: number;
+  maskedToday: number;
+  pendingApprovals: number;
+  generatedAt: string;
+}
+
+/**
+ * What the screens read. `toOverview()` builds the first half from `ApiOverview`; the rest is
+ * derived from `GET /servers` and `GET /policies`, because `/overview` reports neither the MCP
+ * inventory nor a policy count. Those three stay **optional** so a screen that has not fetched
+ * (or could not fetch) the inventory renders a dash rather than a wrong zero.
+ */
 export interface Overview {
   status: GatewayStatus;
-  servers: { total: number; disconnected: number };
-  protectedTools: number;
-  policies: { active: number; packs: string[] };
+  /** Derived from `GET /servers`. Absent until that call lands. */
+  servers?: { total: number; disconnected: number };
+  /** Derived from `GET /servers` — every tool the registered servers expose. */
+  protectedTools?: number;
+  policies: {
+    /** Derived from `GET /policies`, counting only policies whose pack is enabled. */
+    active?: number;
+    packs: string[];
+  };
+  /**
+   * Named for the design's card, but the control plane counts **since local midnight**, not a
+   * rolling 24 hours. The label reads 오늘 for that reason — see `messages/*.json`.
+   */
   blocked24h: number;
+  /** Reported beside `blockedToday`; no card shows it yet, but dropping it would lose it. */
+  maskedToday: number;
   pendingApprovals: number;
 }
 
@@ -43,8 +84,16 @@ export interface SnapshotStatus {
 
 export interface ToolEntry {
   name: string;
+  /**
+   * **A seed, not a measurement — on the real backend too.** `ServerController.kt` keeps a
+   * hardcoded `TOOL_RISK_SEED` keyed by the demo servers' UUIDs, and any tool it does not name
+   * falls through to `ToolRisk.LOW` with no policies. So pointing the console at a live control
+   * plane does *not* turn this into real scoring: a genuinely registered server's tools will all
+   * read 낮음 with an empty policy list. No tool-level risk scoring exists anywhere yet.
+   */
   risk: RiskLevel;
-  /** Policy ids applied to this tool. The first is shown as a chip, the rest as "외 N". */
+  /** Policy ids applied to this tool. The first is shown as a chip, the rest as "외 N".
+   *  Same seed, same caveat: empty for anything outside `TOOL_RISK_SEED`. */
   policies: string[];
   snapshotStatus: SnapshotStatus;
 }
@@ -177,6 +226,15 @@ export interface Detection {
   subtype: string;
   /** 0–100. */
   confidence: number;
+
+  // The two below are not drawn in the detection list — they are what `reveal-adapter.ts` needs
+  // to lay the revealed raw payload out against its masked form. Optional because a control
+  // plane is free to omit them, and the reveal then declines rather than guessing (see the
+  // adapter). `ApiDetection` carries both, so in practice they are always present.
+  /** Character offsets into the event's stored `rawPayload` — the same string, verified in GMCP-118. */
+  span?: { start: number; end: number };
+  /** The token that replaced the span, e.g. `PHONE`. Never the raw match. */
+  maskedAs?: string;
 }
 
 /** Mask Diff View (spec §5.3 no.4④): the text before and after masking. */
@@ -218,12 +276,34 @@ export interface DirectionVerdict {
  * its masked form, shown in the reveal modal. Loaded only after the operator confirms.
  */
 export interface RevealContent {
-  /** Source line, e.g. "e-000  get_log  #C-20260712-142". */
+  /** Source line, e.g. "e-000  get_log". */
   source: string;
-  caseId: string;
+  /**
+   * The case the body belongs to, e.g. `#C-20260712-142`. Optional: it is a property of the
+   * *content* — a ticket number the tool happened to return — and no API reports one, so the
+   * modal folds the caption rather than printing a placeholder beside a real source line.
+   */
+  caseId?: string;
   /** Numbered like `masked`, so the two columns are read line against line. */
   raw: ContentLine[];
   masked: ContentLine[];
+}
+
+/**
+ * `POST /events/{id}/reveal` exactly as `AuditEventController.RevealResponse` builds it — the
+ * backend's shape, not the modal's. `reveal-adapter.ts` turns it into `RevealContent`.
+ *
+ * The two do not overlap at all: the control plane answers one flat string plus who read it and
+ * when, while the modal draws two numbered, part-wise columns. Everything that makes those
+ * columns — where the masking fell, and what it put there — lives on the *event's* detections,
+ * not in this response, which is why the adapter takes both.
+ */
+export interface ApiRevealResponse {
+  eventId: string;
+  /** The exact text that was inspected; `ApiDetection.span` indexes into this string. */
+  rawPayload: string;
+  revealedBy: string;
+  revealedAt: string;
 }
 
 /**
@@ -500,6 +580,32 @@ export interface AttackRun {
   sessionId: string;
 }
 
+/**
+ * What `POST /attacklab/run/{id}` **actually** answers today: a 202 and a receipt.
+ *
+ * `AttackLabRunStore.enqueue` records `{runId, scenarioId, status, requestedAt}` and nothing
+ * else — no calls, no summary, no stream, no session, and no `mode`, which the console sends as
+ * a query parameter that `AttackLabController.run` does not declare and therefore ignores. The
+ * runner that would fill any of this in is GMCP-55, unbuilt; there is no `GET /attacklab/runs/
+ * {runId}` to poll either.
+ *
+ * It is a separate type rather than optional fields on `AttackRun` so that reading `calls`
+ * without checking is a compile error. It used to be neither: the client claimed `AttackRun`
+ * unconditionally, and against a real control plane `run.calls.length` threw during render.
+ */
+export interface AttackRunQueued {
+  runId: string;
+  scenarioId: string;
+  status: string;
+  requestedAt: string;
+}
+
+export type AttackRunResponse = AttackRun | AttackRunQueued;
+
+/** Whether a run came back with the evidence the panes draw, or only a receipt. */
+export const hasRunResults = (run: AttackRunResponse): run is AttackRun =>
+  Array.isArray((run as AttackRun).calls);
+
 // ── SCR-401 Detector (spec §5.4) ────────────────────────────────────────────
 // `POST /detect/preview`, which the control plane already serves. Its own vocabulary is the
 // OpenAPI `GuardAction`/`Severity`, so these mirror the wire format rather than the UI's
@@ -590,6 +696,20 @@ export interface Approval {
   /** The 마스킹 미리보기 panes: the values that would go out, beside what would replace them. */
   maskPreview?: { raw: RawLine[]; masked: ContentLine[] };
 }
+
+/**
+ * `GET /approvals` as the control plane actually sends it.
+ *
+ * The three evidence fields are held as Jackson's generic tree (`ApprovalStore.kt`: `riskTags:
+ * List<Any?>?`, `maskPreview: Any?`) and are never validated on the way through, so they arrive
+ * as whatever the gateway put in. `toApproval()` in `approval-adapter.ts` is what turns them
+ * into the shape above — or drops them.
+ */
+export type ApiApproval = Omit<Approval, "riskTags" | "threatScore" | "maskPreview"> & {
+  riskTags?: unknown;
+  threatScore?: unknown;
+  maskPreview?: unknown;
+};
 
 export interface TimelineResponse {
   events: TimelineEvent[];

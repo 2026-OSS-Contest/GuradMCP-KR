@@ -47,7 +47,27 @@ interface Connection {
   timer: ReturnType<typeof setTimeout> | null;
   status: SseStatus;
   subscribers: Set<Subscriber>;
+  /** Whether this URL has ever answered with a stream. See `COLD_ATTEMPT_LIMIT`. */
+  everOpened: boolean;
 }
+
+/**
+ * How many times to try a URL that has **never** answered before giving up on it.
+ *
+ * The distinction matters: a stream that opened once and then dropped is a live console losing
+ * its backend, and it should keep reaching for it for as long as the screen is open. A stream
+ * that has never opened is almost always a build with no event source behind it at all — and
+ * `EventSource` cannot tell "connection refused" from "404 with an HTML body", so both arrive
+ * here as the same `onerror`.
+ *
+ * That case became reachable when the four call sites dropped their `MOCK_API ? … : null` guard
+ * for an always-relative URL (fix-api.md §2, so the `CONTROL_PLANE_URL` rewrite is used when it
+ * is configured). Without CONTROL_PLANE_URL and without MSW — a Vercel deploy, `next dev` with
+ * mocks off — `/api/v1/events/stream` is a Next.js 404 page, and the backoff below then hammered
+ * it at the 30s cap for the lifetime of the tab. Five attempts spans ~31s of real backoff, which
+ * is long enough to ride out a control plane that is still starting up.
+ */
+const COLD_ATTEMPT_LIMIT = 5;
 
 /**
  * One connection per URL. The status bar lives on every screen, so a second consumer would
@@ -61,7 +81,14 @@ function openConnection(url: string, maxDelay: number, withCredentials: boolean)
   const existing = connections.get(url);
   if (existing) return existing;
 
-  const connection: Connection = { source: null, attempt: 0, timer: null, status: "connecting", subscribers: new Set() };
+  const connection: Connection = {
+    source: null,
+    attempt: 0,
+    timer: null,
+    status: "connecting",
+    subscribers: new Set(),
+    everOpened: false
+  };
   connections.set(url, connection);
 
   const setStatus = (status: SseStatus) => {
@@ -77,6 +104,7 @@ function openConnection(url: string, maxDelay: number, withCredentials: boolean)
 
     source.onopen = () => {
       connection.attempt = 0;
+      connection.everOpened = true;
       setStatus("open");
     };
 
@@ -95,6 +123,15 @@ function openConnection(url: string, maxDelay: number, withCredentials: boolean)
     source.onerror = () => {
       source.close();
       if (!connections.has(url)) return;
+      // Give up on a URL that has never answered, rather than retrying it for the life of the
+      // tab. `closed` is a terminal status here: subscribers that want another go have to build
+      // a new client, which is what a remount does.
+      if (!connection.everOpened && connection.attempt + 1 >= COLD_ATTEMPT_LIMIT) {
+        connection.source = null;
+        connections.delete(url);
+        setStatus("closed");
+        return;
+      }
       const backoff = Math.min(maxDelay, 1_000 * 2 ** connection.attempt);
       const jitter = Math.floor(Math.random() * 300);
       connection.attempt += 1;
@@ -121,7 +158,10 @@ export function createSseClient(options: SseClientOptions): SseClient {
       options.onStatusChange?.("closed");
       if (connection.subscribers.size > 0) return;
       // Last one out tears the connection down, so a screen that stops listening stops the socket.
-      connections.delete(options.url);
+      // Only if the map still holds *this* connection: a cold-limit give-up (above) already
+      // dropped it, and a remount since then will have registered a live replacement under the
+      // same URL — deleting by key alone would tear that one down instead.
+      if (connections.get(options.url) === connection) connections.delete(options.url);
       if (connection.timer) clearTimeout(connection.timer);
       connection.source?.close();
     }

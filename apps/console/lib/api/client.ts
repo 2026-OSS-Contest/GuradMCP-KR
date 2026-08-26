@@ -1,11 +1,14 @@
 import type {
+  ApiApproval,
+  ApiOverview,
   ApiErrorBody,
+  ApiRevealResponse,
   ApiEventLookupResponse,
   ApiSessionTimelineResponse,
   ApiSessionsResponse,
   Approval,
   ApprovalDecision,
-  AttackRun,
+  AttackRunResponse,
   AttackRunMode,
   AttackScenariosResponse,
   BenchmarkReport,
@@ -20,7 +23,6 @@ import type {
   PolicyRow,
   PolicyStats,
   RecentEventsResponse,
-  RevealContent,
   ServerTrustChangeRequest,
   ServerTrustChangeResult,
   ServersResponse,
@@ -30,6 +32,8 @@ import type {
   ToolDefinitionDiff,
   ToolDiffsResponse
 } from "./types";
+import { toApproval, toApprovals } from "./approval-adapter";
+import { toOverview } from "./overview-adapter";
 import {
   toEventDetailFromLookup,
   toSessionsResponse,
@@ -97,8 +101,9 @@ async function postJson<T>(
   return (await response.json()) as T;
 }
 
-export const getOverview = (signal?: AbortSignal) =>
-  get<Overview>("/overview", signal);
+/** `/overview` answers a different shape than the screens read — see `overview-adapter.ts`. */
+export const getOverview = (signal?: AbortSignal): Promise<Overview> =>
+  get<ApiOverview>("/overview", signal).then(toOverview);
 export const getServers = (signal?: AbortSignal) =>
   get<ServersResponse>("/servers", signal);
 export const getRecentEvents = (signal?: AbortSignal) =>
@@ -207,20 +212,34 @@ export const getPolicy = (id: string, signal?: AbortSignal) =>
  * Reveal-original (GMCP-84 §6.3): records the access in the audit log. Carries the operator
  * headers `getOperatorHeaders` builds — without them the control plane's `PermissionService`
  * 403s regardless of what the UI decided to show (§7).
+ *
+ * Answers the control plane's own `RevealResponse`, not the modal's `RevealContent` — the two
+ * have no field in common, and `reveal-adapter.ts` needs the event's detections to bridge them,
+ * which this call has no access to. `AuditEventController.reveal` also has two refusals worth
+ * naming, since both are ordinary states rather than faults: **403** `reveal_forbidden` when the
+ * caller carries no `events:reveal` permission, and **409** `raw_payload_not_stored` when the
+ * event predates the opt-in (NFR-04 keeps no raw copy by default).
  */
 export const revealEvent = (id: string, signal?: AbortSignal) =>
-  post<RevealContent>(`/events/${encodeURIComponent(id)}/reveal`, signal, getOperatorHeaders());
+  post<ApiRevealResponse>(`/events/${encodeURIComponent(id)}/reveal`, signal, getOperatorHeaders());
 
 // SCR-201 Attack Lab (spec §5.2).
 export const getAttackScenarios = (signal?: AbortSignal) =>
   get<AttackScenariosResponse>("/attacklab/scenarios", signal);
-/** Runs one scenario with the guard off or on; resolves once the run has finished. */
+/**
+ * Runs one scenario with the guard off or on.
+ *
+ * Under the mocks this resolves with the finished run. A real control plane answers 202 with a
+ * receipt instead — see `AttackRunQueued` — so the caller has to narrow before reading any of
+ * the evidence. `?mode=` is sent for the mock's benefit; `AttackLabController.run` declares no
+ * such parameter and drops it.
+ */
 export const runAttackScenario = (
   id: string,
   mode: AttackRunMode,
   signal?: AbortSignal,
-) =>
-  post<AttackRun>(
+): Promise<AttackRunResponse> =>
+  post<AttackRunResponse>(
     `/attacklab/run/${encodeURIComponent(id)}?mode=${mode}`,
     signal,
   );
@@ -248,8 +267,9 @@ export const previewDetection = (
  * accepts one `ApprovalStatus` at a time — there is no `resolved` bucket covering the four
  * terminal ones. So the screen asks once, unfiltered, and splits the list itself.
  */
-export const getApprovals = (signal?: AbortSignal) =>
-  get<Approval[]>("/approvals", signal);
+/** The card's evidence fields arrive opaque — see `approval-adapter.ts`. */
+export const getApprovals = (signal?: AbortSignal): Promise<Approval[]> =>
+  get<ApiApproval[]>("/approvals", signal).then(toApprovals);
 
 /**
  * SCR-501 Settings (spec §5.7). Served for real by GMCP-68's `SettingsController`; MSW still
@@ -282,7 +302,9 @@ export const updateSettings = (update: SettingsUpdate, signal?: AbortSignal) =>
  * timeout — got there first, which the screen reports rather than retrying.
  */
 export const decideApproval = (id: string, decision: ApprovalDecision, signal?: AbortSignal) =>
-  postJson<Approval>(`/approvals/${encodeURIComponent(id)}/decision`, { decision }, signal);
+  postJson<ApiApproval>(`/approvals/${encodeURIComponent(id)}/decision`, { decision }, signal).then(
+    toApproval,
+  );
 
 /**
  * SCR-302 Policy Builder (spec §5.5), served by the control plane today.
@@ -293,7 +315,19 @@ export const decideApproval = (id: string, decision: ApprovalDecision, signal?: 
 export const getPolicyPacks = (signal?: AbortSignal) => get<PolicyPack[]>("/policy-packs", signal);
 export const getPolicies = (signal?: AbortSignal) => get<PolicyRow[]>("/policies", signal);
 
-/** Flip a whole pack. The one policy mutation the control plane fully supports. */
+/**
+ * Flip a whole pack — which the control plane refuses, always.
+ *
+ * `PolicyController.updatePack` answers **409 `policy_pack_toggle_read_only`** for every pack
+ * that exists and 404 for one that does not (fix-api.md §1): the Gateway is the only process
+ * that enforces packs, it reads them from `policy-packs/`, and there is no channel back to it.
+ * This used to be described here as "the one policy mutation the control plane fully supports",
+ * which was true before #131 replaced the hardcoded seed with the Gateway's own sync.
+ *
+ * Kept, rather than deleted, because the refusal is a property of today's wiring and not of the
+ * design — `pack-tree.tsx` disables the switch and names this endpoint, and restoring the
+ * control when a channel exists should be one line, not a re-implementation.
+ */
 export const setPackEnabled = (id: string, enabled: boolean, signal?: AbortSignal) =>
   putJson<PolicyPack>(`/policy-packs/${encodeURIComponent(id)}`, { enabled }, signal);
 
@@ -301,10 +335,15 @@ export const setPackEnabled = (id: string, enabled: boolean, signal?: AbortSigna
 /**
  * Flip one policy on or off.
  *
- * The path and verb are the real ones, but `enabled` is **not** a field
- * `PolicyUpdateRequest` declares, so a real control plane accepts the call and changes nothing.
- * Only the mock honours it. Until the control plane grows the field, this is the SCR-302 toggle
- * the design asks for and nothing more.
+ * The path and verb are the real ones, but `enabled` is **not** a field `PolicyUpdateRequest`
+ * declares, so a real control plane parses the body, finds `action`/`severity`/`priority` all
+ * null, copies the row unchanged and answers **200 with the old value**. Only the mock honours
+ * it. That silent success is why `policy-builder.tsx` compares the answer against what it asked
+ * for rather than treating 200 as done.
+ *
+ * #131 made this worse before it made it visible: `PolicyRow.enabled` is now always present (the
+ * policy's own YAML `enabled:`, read-only), which defeated the `policy-table.tsx` guard that had
+ * been keying "is this toggle controllable" on the field's absence.
  */
 export const setPolicyEnabled = (id: string, enabled: boolean, signal?: AbortSignal) =>
   putJson<PolicyRow>(`/policies/${encodeURIComponent(id)}`, { enabled }, signal);
@@ -317,8 +356,15 @@ export const getPolicyStats = (id: string, signal?: AbortSignal) =>
   get<PolicyStats>(`/policies/${encodeURIComponent(id)}/stats`, signal);
 
 /**
- * The benchmark report (GMCP-61). `attack-lab/benchmark/run.ts` produces it; nothing serves it
- * yet, so this reaches only the mock. The path is the one the console asks the control plane for.
+ * The benchmark report (GMCP-61). `attack-lab/benchmark/run.ts` produces it and
+ * `BenchmarkController` now serves it, reading `GUARDMCP_BENCHMARK_REPORT` (default
+ * `reports/benchmark.json`, resolved against the control plane's own working directory).
+ *
+ * Expect a **404 `benchmark_report_not_found`** in the shipped stack until someone mounts one:
+ * `docker-compose.yml`'s `control-plane` service declares no volume and no benchmark env var, so
+ * that file does not exist inside the image. SCR-601 tells that apart from a real load failure —
+ * "no benchmark has been run" is something the reader can act on, and it is the state a fresh
+ * deployment is always in.
  */
 export const getBenchmarkReport = (signal?: AbortSignal) => get<BenchmarkReport>("/benchmark/report", signal);
 

@@ -7,7 +7,7 @@ import {
   type AttackRunMode,
   type AttackScenariosResponse,
   type DetectDirection,
-  type Overview,
+  type ApiOverview,
   type RecentEventsResponse,
   type SecurityEvent,
   type ServersResponse,
@@ -54,7 +54,7 @@ const POLICY_RELOAD_EVERY = 10;
 /** `offline` fails at the network level, which is what a down gateway looks like to fetch(). */
 async function respond(
   payload:
-    | Overview
+    | ApiOverview
     | ServersResponse
     | RecentEventsResponse
     | ApiSessionsResponse
@@ -69,7 +69,7 @@ async function respond(
 export const handlers = [
   http.get("*/api/v1/overview", async () => {
     const empty = readScenario() === "empty";
-    return respond(empty ? EMPTY_OVERVIEW : overviewOf(SERVERS));
+    return respond(empty ? EMPTY_OVERVIEW : overviewOf());
   }),
 
   http.get("*/api/v1/servers", async () =>
@@ -367,9 +367,19 @@ export const handlers = [
   }),
 
   // Reveal-original (spec §5.3 no.5). POST — the real endpoint writes an audit record.
-  http.post("*/api/v1/events/:id/reveal", async () => {
+  // `AuditEventController.reveal`: the payload when one was stored, and 409
+  // `raw_payload_not_stored` when it was not — which is the default, since NFR-04 keeps no raw
+  // copy unless the opt-in is on. The panel already disables the button for those events
+  // (`hasRawPayload`), so this is the race where the setting changed under an open screen.
+  http.post("*/api/v1/events/:id/reveal", async ({ params }) => {
     await delay(LATENCY_MS);
-    return HttpResponse.json(revealOf());
+    const revealed = revealOf(String(params.id));
+    return revealed
+      ? HttpResponse.json(revealed)
+      : HttpResponse.json(
+          { code: "raw_payload_not_stored", message: "original payload was not stored for this event" },
+          { status: 409 }
+        );
   }),
 
   // The gateway event stream (spec §6.3). Real backends emit several event types; the console

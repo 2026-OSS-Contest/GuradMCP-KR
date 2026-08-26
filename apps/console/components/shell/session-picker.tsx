@@ -8,6 +8,7 @@ import type { SessionSummary } from "@/lib/api/types";
 import { useResource } from "@/lib/api/use-resource";
 import { DropdownChevronIcon } from "@/components/icons";
 import { hhmm } from "@/lib/time";
+import { displaySessionId } from "@/lib/session-id";
 import { cn } from "@/lib/utils";
 
 const LIST_ID = "session-picker-list";
@@ -146,7 +147,9 @@ export function SessionPicker() {
         )}
       >
         <span className="text-body-text-b3-md text-grayscale-200">{t("session")}</span>
-        <span className="min-w-0 flex-1 truncate text-left text-body-text-b3-md">{selected ? `#${selected.id}` : "—"}</span>
+        <span title={selected?.id} className="min-w-0 flex-1 truncate text-left text-body-text-b3-md">
+          {selected ? `#${displaySessionId(selected.id)}` : "—"}
+        </span>
         <DropdownChevronIcon className={cn("size-6 flex-none transition-transform", open && "rotate-180")} aria-hidden />
       </button>
 
@@ -197,7 +200,9 @@ export function SessionPicker() {
                   >
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="flex items-center gap-2">
-                        <span className="truncate font-mono text-caption-mono-c-rg text-grayscale-white">#{session.id}</span>
+                        <span title={session.id} className="truncate font-mono text-caption-mono-c-rg text-grayscale-white">
+                          #{displaySessionId(session.id)}
+                        </span>
                         {session.live && (
                           <span className="flex flex-none items-center gap-1 text-caption-text-c-rg text-red-300">
                             <span className="size-1.5 flex-none rounded-full bg-red-300" aria-hidden />

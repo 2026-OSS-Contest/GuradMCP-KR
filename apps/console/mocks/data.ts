@@ -5,9 +5,9 @@
 // events are the verdicts of the sessions on SCR-301, read straight off the same story, so a row
 // here always opens onto a timeline that contains it.
 
-import type { McpServer, Overview, SecurityEvent } from "@/lib/api/types";
+import type { ApiOverview, SecurityEvent } from "@/lib/api/types";
 import { pendingCount } from "./approvals";
-import { ACTIVE_POLICY_IDS, LIVE_SESSION_ID, SERVERS, STORIES, stepAt } from "./demo-story";
+import { LIVE_SESSION_ID, SERVERS, STORIES, stepAt } from "./demo-story";
 
 export { SERVERS };
 
@@ -21,42 +21,64 @@ export function affectedPolicyCount(serverId: string): number {
 
 
 /**
- * Every KPI is counted from what the other screens show. `protectedTools` used to read 17 beside
- * an inventory of 11, and `policies.active` 24 beside a table of 5 (GMCP-117): numbers a judge
- * can subtract are numbers a judge will subtract.
+ * `GET /overview` exactly as `OverviewController.kt` builds it — **the backend's shape, not the
+ * console's**. The screens never see this: `getOverview` runs it through `toOverview()` and the
+ * provider fills in the inventory, the same path a real control plane takes.
+ *
+ * Serving the console's own shape here was the older mistake this replaces. A mock that emits a
+ * shape the system never produces makes every e2e above it assert a state the product has never
+ * been in — which is how the three bugs in GMCP-117 stayed hidden.
+ *
+ * It takes no inventory any more, and that is the point: the server, tool and policy counts are
+ * no longer *stated* here beside a table that states its own. The console derives them from the
+ * same `/servers` and `/policies` responses the tables render, so `protectedTools` reading 17
+ * beside an inventory of 11 (GMCP-117) is now impossible to express rather than merely fixed.
  */
-export function overviewOf(servers: McpServer[]): Overview {
-  const disconnected = servers.filter((server) => !server.connected).length;
+export function overviewOf(): ApiOverview {
   return {
-    // The gateway reports its own health; a single unreachable upstream is not the console's
-    // cue to downgrade it. The design draws "보호 중" alongside a "1개 끊김" KPI for exactly
-    // this case, and `degraded` is reserved for the gateway saying so.
-    status: "protected",
-    servers: { total: servers.length, disconnected },
-    protectedTools: servers.reduce((total, server) => total + server.tools.length, 0),
-    policies: { active: ACTIVE_POLICY_IDS.length, packs: POLICY_PACKS },
-    blocked24h: blockedInLast24h(),
+    // `protected = activePacks.isNotEmpty()` in the control plane. A single unreachable upstream
+    // does not flip it — the design draws 보호 중 beside a "1개 끊김" card for exactly that case.
+    protected: POLICY_PACKS.length > 0,
+    // Gateways, not MCP servers, and hardcoded to 1 on the backend. The console's server card
+    // counts the `/servers` inventory instead, which is a different number.
+    gatewayCount: 1,
+    activePolicyPacks: POLICY_PACKS,
+    blockedToday: blockedToday(),
+    maskedToday: maskedToday(),
     pendingApprovals: pendingCount(),
+    generatedAt: new Date().toISOString(),
   };
 }
 
-/** Blocks the story actually contains, counted rather than stated. */
-function blockedInLast24h(): number {
-  const since = Date.now() - 24 * 60 * 60 * 1_000;
+/**
+ * Verdicts the story actually contains, counted rather than stated — and counted **since local
+ * midnight**, because that is the window the control plane uses (`truncatedTo(ChronoUnit.DAYS)`).
+ * It used to be a rolling 24 hours here, which is a different set of events either side of
+ * midnight and would have quietly disagreed with the real backend.
+ */
+function countTodayBy(verdict: string): number {
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
   return STORIES.flatMap((story) =>
     story.steps
-      .filter((step) => step.verdict === "block")
-      .filter((step) => Date.parse(stepAt(story, step)) >= since)
+      .filter((step) => step.verdict === verdict)
+      .filter((step) => Date.parse(stepAt(story, step)) >= midnight.getTime())
   ).length;
 }
 
-export const EMPTY_OVERVIEW: Overview = {
-  status: "protected",
-  servers: { total: 0, disconnected: 0 },
-  protectedTools: 0,
-  policies: { active: ACTIVE_POLICY_IDS.length, packs: POLICY_PACKS },
-  blocked24h: 0,
+const blockedToday = () => countTodayBy("block");
+/** The masking verdict's wire name is `mask_then_allow` (`GuardAction.MASK_THEN_ALLOW`). */
+const maskedToday = () => countTodayBy("mask_then_allow");
+
+/** A gateway that is up with its packs loaded and nothing registered against it yet. */
+export const EMPTY_OVERVIEW: ApiOverview = {
+  protected: POLICY_PACKS.length > 0,
+  gatewayCount: 1,
+  activePolicyPacks: POLICY_PACKS,
+  blockedToday: 0,
+  maskedToday: 0,
   pendingApprovals: 0,
+  generatedAt: new Date().toISOString(),
 };
 
 /**

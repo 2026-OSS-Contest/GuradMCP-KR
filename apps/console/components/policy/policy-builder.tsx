@@ -49,7 +49,9 @@ export function PolicyBuilder() {
   /** Raised by `policy.reloaded`; cleared when the operator takes the refetch. */
   const [reloaded, setReloaded] = useState(false);
   /** What the last toggle has to say for itself, if anything. */
-  const [notice, setNotice] = useState<"toggleFailed" | null>(null);
+  // `toggleFailed` is a request that did not land; `toggleIgnored` is one that did and changed
+  // nothing. The second used to be indistinguishable from success.
+  const [notice, setNotice] = useState<"toggleFailed" | "toggleIgnored" | null>(null);
   /** Bumped to refetch — on the banner's action, and after every toggle. */
   const [pulse, setPulse] = useState(0);
 
@@ -130,7 +132,20 @@ export function PolicyBuilder() {
       setBusy(row.id);
       setNotice(null);
       try {
-        await setPolicyEnabled(row.id, enabled);
+        const updated = await setPolicyEnabled(row.id, enabled);
+        // A 200 that changed nothing. `PolicyUpdateRequest` declares `action`, `severity` and
+        // `priority` and no `enabled`, so a control plane parses the request, finds all three
+        // null, copies the row unchanged and answers 200 with the old value — Jackson never
+        // complains about the field it did not ask for. Reading the answer back is the only way
+        // the console can tell that apart from a write that landed.
+        //
+        // Before #131 the switch was simply disabled here: `enabled` was absent from the list
+        // response, `policy-table.tsx` keyed `controllable` on that absence, and the tooltip said
+        // the toggle was unsupported. #131 added the field — as the policy's own YAML `enabled:`,
+        // read-only — which made the switch live again without making it work.
+        if (updated.enabled !== undefined && updated.enabled !== enabled) {
+          setNotice("toggleIgnored");
+        }
       } catch {
         // Say so. The refetch below snaps the switch back to what the gateway actually holds,
         // and without a word for it that looks like the click simply missed.

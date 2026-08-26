@@ -38,8 +38,11 @@ export function RevealModal({ content, onClose }: { content: RevealContent; onCl
                 {t("revealing")}
               </span>
             </span>
+            {/* `caseId` is a property of the content, not of the event, and no API reports one —
+                so the caption is the source line alone when it is absent, rather than a source
+                line trailed by a gap where a case number would be. */}
             <span className="font-mono text-caption-mono-c-rg text-(--primitive-opacity-white-alpha-75)">
-              {content.source} {content.caseId}
+              {content.caseId ? `${content.source}  ${content.caseId}` : content.source}
             </span>
           </div>
           <button

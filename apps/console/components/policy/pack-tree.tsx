@@ -48,6 +48,23 @@ function flatten(packs: PolicyPack[]): Node[] {
   return out;
 }
 
+/**
+ * A pack's switch reports which packs the gateway loaded; it does not change them.
+ *
+ * `PUT /policy-packs/{id}` answers **409 `policy_pack_toggle_read_only`** for every pack that
+ * exists (`PolicyController.updatePack`, fix-api.md §1), and the reason is not an oversight: the
+ * Gateway is the only process that enforces packs, it loads them from `policy-packs/`, and there
+ * is no channel back from the control plane's registry to it. A toggle here would change what
+ * the console displays without changing what the Gateway does — a false confirmation, and the
+ * worst possible outcome for a control that claims to switch protection off.
+ *
+ * That endpoint's own doc comment says "the console renders the switch disabled". Until this it
+ * did not: the click ran the FR-POL-04 confirmation dialog, the operator confirmed dropping a
+ * pack's blocking policies, the request 409'd, and the banner said to check the gateway
+ * connection — a network diagnosis for a deterministic, permanent refusal.
+ */
+const PACKS_ARE_READ_ONLY = true;
+
 export interface PackTreeProps {
   packs: PolicyPack[];
   /** Policies each pack contributes, keyed by pack id. The control plane reports no count. */
@@ -80,9 +97,13 @@ export function PackTree({ packs, counts, selected, onSelect, onToggle, busy }: 
               // than becoming a class per level.
               style={{ paddingLeft: `${12 + depth * 16}px` }}
             >
+              {/* Still drawn, and still showing which packs are live — that is real information
+                  and the design's own control. It just cannot be operated; see
+                  `PACKS_ARE_READ_ONLY`. */}
               <Switch
                 checked={pack.enabled}
-                disabled={busy === pack.id}
+                disabled={PACKS_ARE_READ_ONLY || busy === pack.id}
+                title={PACKS_ARE_READ_ONLY ? t("packs.readOnly") : undefined}
                 onChange={(next) => onToggle(pack, next)}
                 label={t("packs.toggle", { name: pack.id })}
               />
