@@ -85,14 +85,32 @@ Two more rules that come from the same failure:
   what the **UI specification** asks for, not what the control plane returns today — most of
   §6.2 is still unimplemented.
 - In development, `mocks/` serves those endpoints through **MSW** over real HTTP, so components
-  see genuine loading, error and offline paths. Set `NEXT_PUBLIC_API_BASE_URL` to talk to a real
-  backend instead; the mocks then switch themselves off.
+  see genuine loading, error and offline paths.
 - The dev-only flask button (bottom right) switches between the `full` / `empty` / `offline`
   states. Add a state by extending `mocks/scenario.ts` and `mocks/data.ts`.
 - The gateway event stream (`lib/sse.ts`, `EventSource`) is mocked too: MSW's `sse()` handler
   serves `/api/v1/events/stream` under the mock and pushes a `guard.event` every few seconds.
-  It points at the real gateway when `NEXT_PUBLIC_API_BASE_URL` is set. `msw init` regenerates
-  `public/mockServiceWorker.js`; keep it on a version that supports SSE (≥ 2.12).
+  `msw init` regenerates `public/mockServiceWorker.js`; keep it on a version that supports SSE
+  (≥ 2.12).
+
+### Reaching a real control plane
+
+There are **two** variables and they are not alternatives — one chooses the transport, the other
+only turns the mocks off. Getting this wrong is silent: the screens fill with offline states.
+
+- **`CONTROL_PLANE_URL`** (server-side only, never `NEXT_PUBLIC_*`) is the one to set. It installs
+  a `/api/v1/*` rewrite in `next.config.ts`, so the browser only ever talks to the console's own
+  origin and `lib/api/client.ts`'s `BASE` stays `""`. This exists because **the control plane
+  serves no CORS headers at all** — no `CorsConfiguration`, no `addCorsMappings`, no
+  `@CrossOrigin` — so a browser calling it cross-origin has every request blocked. It is also
+  what `docker-compose.yml` sets, which makes it the configuration the console actually ships in.
+- **`NEXT_PUBLIC_API_BASE_URL`** is inlined into the client bundle and makes the browser call that
+  origin directly. Setting it switches the mocks off no matter what else is set. Useful only
+  where CORS is solved some other way — and note that pointing it at the console's *own* origin
+  is a valid (if counterintuitive) way to use the rewrite while still disabling MSW.
+- Setting **neither**, with MSW off, leaves `/api/v1/*` answered by Next.js as a 404 page. The SSE
+  client gives up after five cold attempts rather than retrying for the life of the tab
+  (`lib/sse.ts`), but nothing else recovers — the screens simply stay empty.
 
 ## Routing (SCR scheme)
 
