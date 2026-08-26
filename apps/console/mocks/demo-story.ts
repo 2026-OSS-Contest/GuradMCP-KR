@@ -58,15 +58,35 @@ export const ENV_AFTER = "OPENAI_API_KEY=[SECRET_LLM_API_KEY]\nSMTP_PASSWORD=[SE
 export const TICKET_ID = "TCK-2026-9001";
 export const TICKET_CUSTOMER = "정다은";
 
-const ticketLines = (value: (raw: string, tag: string) => ContentPart): ContentLine[] => [
-  { no: "01", parts: [{ text: `[상담 요약] ${TICKET_ID} · ${TICKET_CUSTOMER} · 전화 · 2026-03-02` }] },
-  { no: "02", parts: [{ text: "환불 처리를 위해 본인 확인을 진행했습니다." }] },
-  { no: "03", parts: [{ text: "연락처는 " }, value("010-3456-7890", "PHONE"), { text: " 입니다." }] },
-  { no: "04", parts: [{ text: "주민등록번호 " }, value("881124-2300149", "RRN_LIKE"), { text: " 확인했고," }] },
-  { no: "05", parts: [{ text: "환불 계좌번호: " }, value("110-234-567890", "BANK_ACCOUNT"), { text: " 으로 안내했습니다." }] },
-  { no: "06", parts: [{ text: "회신 메일은 " }, value("dae-eun.jung@example.co.kr", "EMAIL"), { text: "," }] },
-  { no: "07", parts: [{ text: "주소는 " }, value("서울특별시 성동구 왕십리로 222", "ADDRESS"), { text: " 입니다." }] }
+/**
+ * The ticket body, once. A plain string is text the detector passed over; a `[value, tag]` pair
+ * is a span it caught, written beside the token that replaced it.
+ *
+ * Everything below is derived from this — the raw and masked columns, the flat payload the mask
+ * diff and `POST /events/{id}/reveal` carry, and the detections that say where the masking fell.
+ * They used to be written out separately, and the detections' `span` offsets on the `e10` verdict
+ * node were simply wrong: `PHONE` claimed 58–71, which is `" 확인을 진행했습니다.\n"` — a stretch of
+ * the *previous* line. Nothing read them, so nothing noticed. `reveal-adapter.ts` reads them now,
+ * and a fixture whose spans do not index its own payload is a fixture that proves the adapter
+ * works while it does not.
+ */
+const TICKET_BODY: (string | readonly [value: string, tag: string])[][] = [
+  [`[상담 요약] ${TICKET_ID} · ${TICKET_CUSTOMER} · 전화 · 2026-03-02`],
+  ["환불 처리를 위해 본인 확인을 진행했습니다."],
+  ["연락처는 ", ["010-3456-7890", "PHONE"], " 입니다."],
+  ["주민등록번호 ", ["881124-2300149", "RRN_LIKE"], " 확인했고,"],
+  ["환불 계좌번호: ", ["110-234-567890", "BANK_ACCOUNT"], " 으로 안내했습니다."],
+  ["회신 메일은 ", ["dae-eun.jung@example.co.kr", "EMAIL"], ","],
+  ["주소는 ", ["서울특별시 성동구 왕십리로 222", "ADDRESS"], " 입니다."]
 ];
+
+const ticketLines = (value: (raw: string, tag: string) => ContentPart): ContentLine[] =>
+  TICKET_BODY.map((segments, index) => ({
+    no: String(index + 1).padStart(2, "0"),
+    parts: segments.map((segment) =>
+      typeof segment === "string" ? { text: segment } : value(segment[0], segment[1])
+    )
+  }));
 
 /** What the agent was allowed to see: the same body with every detected span replaced. */
 export const TICKET_MASKED: ContentLine[] = ticketLines((_raw, tag) => ({ mask: tag }));
@@ -85,6 +105,64 @@ const flatten = (lines: ContentLine[]): string =>
     .join("\n");
 
 export const TICKET_DIFF = { before: flatten(TICKET_RAW), after: flatten(TICKET_MASKED) };
+
+/**
+ * What `POST /events/{id}/reveal` hands back for this body: the exact text that was inspected,
+ * which is also the string [TICKET_DETECTIONS]'s spans index (`pipeline/types.ts` — the gateway
+ * stores the serialised text it ran the detectors over, not the whole call).
+ */
+export const TICKET_RAW_PAYLOAD = TICKET_DIFF.before;
+
+/** How confident the detector is said to be, per tag. 0–1 on the wire, as `ApiDetection` carries it. */
+const TICKET_CONFIDENCE: Record<string, { type: string; confidence: number }> = {
+  PHONE: { type: "PII", confidence: 0.98 },
+  RRN_LIKE: { type: "PII", confidence: 0.97 },
+  BANK_ACCOUNT: { type: "PII", confidence: 0.95 },
+  EMAIL: { type: "PII", confidence: 0.93 },
+  ADDRESS: { type: "PII", confidence: 0.9 }
+};
+
+interface TicketDetection {
+  type: string;
+  subtype: string;
+  span: { start: number; end: number };
+  confidence: number;
+  maskedAs: string;
+}
+
+/** Measured off [TICKET_RAW_PAYLOAD] rather than stated, so the two cannot drift apart. */
+export const TICKET_DETECTIONS: TicketDetection[] = (() => {
+  const out: TicketDetection[] = [];
+  let at = 0;
+  for (const segments of TICKET_BODY) {
+    for (const segment of segments) {
+      if (typeof segment === "string") {
+        at += segment.length;
+        continue;
+      }
+      const [value, tag] = segment;
+      const meta = TICKET_CONFIDENCE[tag];
+      out.push({
+        type: meta.type,
+        subtype: tag,
+        span: { start: at, end: at + value.length },
+        confidence: meta.confidence,
+        maskedAs: tag
+      });
+      at += value.length;
+    }
+    at += 1; // the newline `flatten` joins on
+  }
+  return out;
+})();
+
+/**
+ * The path `read_file` was called with, which for a *request* is the whole text the detectors
+ * ran over — `pipeline/types.ts`: the payload is the serialised text that was inspected, not the
+ * whole call. So the `PATH_CREDENTIAL_FILE` finding on the block node spans this entire string,
+ * and revealing it shows the operator the four characters that stopped the read.
+ */
+export const ENV_PATH = ".env";
 
 /** The integration key the user pasted into their own prompt — what makes the mail need approval. */
 export const PASTED_KEY = "sk-DEMO000000000000000000000000000000FAKE";
@@ -223,7 +301,24 @@ export interface StoryStep {
   riskScore?: number;
   detail?: {
     matchedPolicyIds: string[];
+    /**
+     * `span` indexes [rawPayload] below. On a node that carries none it is inert — the detection
+     * list draws type, subtype and confidence and nothing else — and the numbers there are
+     * decorative, left from before anything read them.
+     */
     detections: { type: string; subtype: string; span: { start: number; end: number }; confidence: number; maskedAs: string }[];
+    /**
+     * What `POST /events/{id}/reveal` would return for this event, and therefore whether the
+     * node reports `hasRawPayload` at all.
+     *
+     * Only the nodes whose body this repository can actually name carry one — the ticket
+     * response and the blocked `.env` read. The rest stand for events recorded before the
+     * storage opt-in, which is the default (NFR-04), and the panel disables 원문 열람 with
+     * `revealUnavailable` exactly as it would against a real control plane. Inventing a payload
+     * for them would mean inventing the masking that goes beside it, and the reveal modal's
+     * whole job is to let an operator check that masking against the original.
+     */
+    rawPayload?: string;
     maskDiff?: { before: string; after: string } | null;
     hash: string;
     prevHash: string;
@@ -334,8 +429,9 @@ const SESSION_LIVE: Story = {
       detail: {
         matchedPolicyIds: ["block_env_file_read"],
         detections: [
-          { type: "PATH", subtype: "CREDENTIAL_FILE", span: { start: 0, end: 4 }, confidence: 0.99, maskedAs: "PATH_CREDENTIAL_FILE" }
+          { type: "PATH", subtype: "CREDENTIAL_FILE", span: { start: 0, end: ENV_PATH.length }, confidence: 0.99, maskedAs: "PATH_CREDENTIAL_FILE" }
         ],
+        rawPayload: ENV_PATH,
         maskDiff: { before: ENV_BEFORE, after: ENV_AFTER },
         hash: "a3f9c1",
         prevHash: "5b12ac"
@@ -387,13 +483,11 @@ const SESSION_LIVE: Story = {
       riskScore: 75,
       detail: {
         matchedPolicyIds: ["mask_korean_pii_response"],
-        detections: [
-          { type: "PII", subtype: "PHONE", span: { start: 58, end: 71 }, confidence: 0.98, maskedAs: "PHONE" },
-          { type: "PII", subtype: "RRN_LIKE", span: { start: 84, end: 98 }, confidence: 0.97, maskedAs: "RRN_LIKE" },
-          { type: "PII", subtype: "BANK_ACCOUNT", span: { start: 116, end: 130 }, confidence: 0.95, maskedAs: "BANK_ACCOUNT" },
-          { type: "PII", subtype: "EMAIL", span: { start: 152, end: 178 }, confidence: 0.93, maskedAs: "EMAIL" },
-          { type: "PII", subtype: "ADDRESS", span: { start: 188, end: 208 }, confidence: 0.9, maskedAs: "ADDRESS" }
-        ],
+        // Derived from the body itself — this is the node `원문 열람` reveals, so its spans have
+        // to be the ones that actually index `TICKET_RAW_PAYLOAD`.
+        detections: TICKET_DETECTIONS,
+        // The response body the spans above index, and what `원문 열람` shows.
+        rawPayload: TICKET_RAW_PAYLOAD,
         maskDiff: TICKET_DIFF,
         hash: "c7e410",
         prevHash: "a3f9c1"
@@ -493,10 +587,12 @@ const SESSION_APPROVED: Story = {
       riskScore: 71,
       detail: {
         matchedPolicyIds: ["mask_korean_pii_response"],
-        detections: [
-          { type: "PII", subtype: "PHONE", span: { start: 58, end: 71 }, confidence: 0.98, maskedAs: "PHONE" },
-          { type: "PII", subtype: "BANK_ACCOUNT", span: { start: 116, end: 130 }, confidence: 0.95, maskedAs: "BANK_ACCOUNT" }
-        ],
+        // The same body and the same policy as `e10`, so the same findings. This used to list
+        // two of the five while `maskDiff` opposite it showed all five masked — a node that
+        // disagreed with itself about what the gateway had caught.
+        detections: TICKET_DETECTIONS,
+        // The response body the spans above index, and what `원문 열람` shows.
+        rawPayload: TICKET_RAW_PAYLOAD,
         maskDiff: TICKET_DIFF,
         hash: "8811ba",
         prevHash: ""
@@ -706,6 +802,8 @@ const SESSION_HELD: Story = {
           { type: "PII", subtype: "RRN_LIKE", span: { start: 84, end: 98 }, confidence: 0.97, maskedAs: "RRN_LIKE" },
           { type: "PII", subtype: "BANK_ACCOUNT", span: { start: 116, end: 130 }, confidence: 0.95, maskedAs: "BANK_ACCOUNT" }
         ],
+        // The response body the spans above index, and what `원문 열람` shows.
+        rawPayload: TICKET_RAW_PAYLOAD,
         maskDiff: TICKET_DIFF,
         hash: "16ff08",
         prevHash: ""

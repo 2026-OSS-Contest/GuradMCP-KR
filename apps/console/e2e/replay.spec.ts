@@ -12,6 +12,17 @@ import { expect, test, type Page } from "@playwright/test";
 const blockNode = (page: Page) =>
   page.getByRole("log").getByRole("button", { name: /block_env_file_read/ });
 
+/**
+ * The masking verdict on the consultation ticket — the node whose stored payload the demo story
+ * can actually name, and therefore the one `원문 열람` offers.
+ *
+ * Selecting it is the point. The reveal used to be exercised on whichever node the session
+ * happened to open on, because the mock answered the same ticket body for every event id; the
+ * test passed while the modal was showing a body belonging to a different event entirely.
+ */
+const maskNode = (page: Page) =>
+  page.getByRole("log").getByRole("button", { name: /mask_korean_pii_response/ });
+
 test("GMCP-34 SCR-301 shows the block event detail in fixed order", async ({ page }) => {
   await page.goto("/replay");
   await blockNode(page).click();
@@ -43,6 +54,7 @@ test("SCR-301 policy chip opens a YAML popover", async ({ page }) => {
 
 test("SCR-301 reveal-original confirms, then shows the raw vs masked content", async ({ page }) => {
   await page.goto("/replay");
+  await maskNode(page).click();
   // Step 1: the audit-log confirmation.
   await page.getByTestId("event-detail").getByRole("button", { name: /원문 열람/ }).click();
   const confirm = page.getByRole("alertdialog");
@@ -57,6 +69,16 @@ test("SCR-301 reveal-original confirms, then shows the raw vs masked content", a
   await expect(reveal.getByText("PHONE")).toBeVisible();
   await reveal.getByRole("button", { name: "열람 중지" }).click();
   await expect(reveal).toBeHidden();
+});
+
+test("SCR-301 an event with no stored payload offers no reveal to click", async ({ page }) => {
+  await page.goto("/replay");
+  // The blocked `.env` read carries a payload; the injection verdict the session opens on does
+  // not — it stands for an event recorded before the storage opt-in, which is the default
+  // (NFR-04). The panel says so on the button rather than letting the click reach a 409.
+  const button = page.getByTestId("event-detail").getByRole("button", { name: /원문 열람/ });
+  await expect(button).toBeDisabled();
+  await expect(button).toHaveAttribute("title", "저장된 원문 없음");
 });
 
 test("GMCP-84 §10.4: an account without events:reveal never sees the reveal button", async ({ page }) => {

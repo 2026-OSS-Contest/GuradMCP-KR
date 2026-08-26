@@ -117,7 +117,17 @@ export function toEventDetail(
     policies: detail?.matchedPolicyIds,
     threatScore: node.riskScore,
     detections: detail?.detections.map(
-      (d): Detection => ({ type: d.type, subtype: d.subtype, confidence: Math.round(d.confidence * 100) })
+      (d): Detection => ({
+        type: d.type,
+        subtype: d.subtype,
+        confidence: Math.round(d.confidence * 100),
+        // Not drawn in the detection list — carried for `reveal-adapter.ts`, which needs to know
+        // where each finding fell in the stored payload to lay the reveal modal's masked column
+        // over it. Passed through rather than reshaped: they are offsets into a string this
+        // adapter never sees.
+        span: d.span,
+        maskedAs: d.maskedAs
+      })
     ),
     maskDiff: detail?.maskDiff,
     chain: detail && chainStatus ? { status: chainStatus, hash: detail.hash } : undefined,

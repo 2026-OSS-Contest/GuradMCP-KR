@@ -173,7 +173,11 @@
       "notice": "This access is recorded, and the panel re-masks automatically when you leave.",
       "raw": "Original (Raw)",
       "masked": "Masked",
-      "stop": "Stop revealing"
+      "stop": "Stop revealing",
+      "forbidden": "This account cannot reveal original payloads. Ask an administrator for the events:reveal permission.",
+      "notStored": "No original payload was stored for this event. Turn raw-payload storage on in Settings; events recorded after that can be revealed.",
+      "unreconstructable": "The detection offsets do not fit the payload, so the masked column cannot be rebuilt. The original is not shown without it.",
+      "failed": "Could not load the original payload. Try again in a moment."
     }
   },
   "attackLab": {

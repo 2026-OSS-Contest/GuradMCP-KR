@@ -226,6 +226,15 @@ export interface Detection {
   subtype: string;
   /** 0–100. */
   confidence: number;
+
+  // The two below are not drawn in the detection list — they are what `reveal-adapter.ts` needs
+  // to lay the revealed raw payload out against its masked form. Optional because a control
+  // plane is free to omit them, and the reveal then declines rather than guessing (see the
+  // adapter). `ApiDetection` carries both, so in practice they are always present.
+  /** Character offsets into the event's stored `rawPayload` — the same string, verified in GMCP-118. */
+  span?: { start: number; end: number };
+  /** The token that replaced the span, e.g. `PHONE`. Never the raw match. */
+  maskedAs?: string;
 }
 
 /** Mask Diff View (spec §5.3 no.4④): the text before and after masking. */
@@ -267,12 +276,34 @@ export interface DirectionVerdict {
  * its masked form, shown in the reveal modal. Loaded only after the operator confirms.
  */
 export interface RevealContent {
-  /** Source line, e.g. "e-000  get_log  #C-20260712-142". */
+  /** Source line, e.g. "e-000  get_log". */
   source: string;
-  caseId: string;
+  /**
+   * The case the body belongs to, e.g. `#C-20260712-142`. Optional: it is a property of the
+   * *content* — a ticket number the tool happened to return — and no API reports one, so the
+   * modal folds the caption rather than printing a placeholder beside a real source line.
+   */
+  caseId?: string;
   /** Numbered like `masked`, so the two columns are read line against line. */
   raw: ContentLine[];
   masked: ContentLine[];
+}
+
+/**
+ * `POST /events/{id}/reveal` exactly as `AuditEventController.RevealResponse` builds it — the
+ * backend's shape, not the modal's. `reveal-adapter.ts` turns it into `RevealContent`.
+ *
+ * The two do not overlap at all: the control plane answers one flat string plus who read it and
+ * when, while the modal draws two numbered, part-wise columns. Everything that makes those
+ * columns — where the masking fell, and what it put there — lives on the *event's* detections,
+ * not in this response, which is why the adapter takes both.
+ */
+export interface ApiRevealResponse {
+  eventId: string;
+  /** The exact text that was inspected; `ApiDetection.span` indexes into this string. */
+  rawPayload: string;
+  revealedBy: string;
+  revealedAt: string;
 }
 
 /**

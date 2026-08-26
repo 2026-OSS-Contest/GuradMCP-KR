@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { revealEvent } from "@/lib/api/client";
+import { ApiError, revealEvent } from "@/lib/api/client";
 import { hasOperatorPermissions } from "@/lib/api/permissions";
+import { toRevealContent } from "@/lib/api/reveal-adapter";
 import type { DirectionVerdict, EventDetail, RevealContent, TimelineNodeType } from "@/lib/api/types";
 import { VerdictBadge } from "@/components/verdict-badge";
 import { RevealLockIcon, VerdictAllowIcon, VerdictWarnIcon } from "@/components/icons";
@@ -111,8 +112,28 @@ function ChainPill({ status, hash }: NonNullable<EventDetail["chain"]>) {
   );
 }
 
+/**
+ * Why a reveal did not happen, as a message key under `replay.reveal`.
+ *
+ * All four are refusals rather than errors, and they say different things to the operator: ask
+ * for the permission, turn the storage opt-in on, report a control plane that is answering
+ * inconsistently, or try again. Before this they were one silent `finally` — the modal simply
+ * stayed put with the spinner off, which reads as a click that missed.
+ */
+type RevealFailure = "forbidden" | "notStored" | "unreconstructable" | "failed";
+
 /** Step 1 of reveal-original: the audit-log confirmation (spec §5.3 no.5). */
-function ConfirmRevealModal({ onCancel, onConfirm, pending }: { onCancel: () => void; onConfirm: () => void; pending: boolean }) {
+function ConfirmRevealModal({
+  onCancel,
+  onConfirm,
+  pending,
+  failure
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+  pending: boolean;
+  failure: RevealFailure | null;
+}) {
   const t = useTranslations("replay.reveal");
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && onCancel();
@@ -135,6 +156,13 @@ function ConfirmRevealModal({ onCancel, onConfirm, pending }: { onCancel: () => 
         <p id="confirm-reveal-body" className="mt-2 text-body-text-b3-md text-grayscale-300">
           {t("body")}
         </p>
+        {/* The refusal replaces neither the question nor the buttons: `failed` is worth another
+            attempt, and the operator has to be able to close the dialog either way. */}
+        {failure && (
+          <p role="alert" className="mt-4 text-body-text-b3-md text-verdict-warn">
+            {t(failure)}
+          </p>
+        )}
         <div className="mt-6 flex justify-end gap-2">
           <button
             type="button"
@@ -167,19 +195,33 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [revealed, setRevealed] = useState<RevealContent | null>(null);
+  const [failure, setFailure] = useState<RevealFailure | null>(null);
 
   // Reset any open reveal when the selected event changes.
   useEffect(() => {
     setConfirmOpen(false);
     setRevealed(null);
+    setFailure(null);
   }, [detail.id]);
 
   const confirmReveal = async () => {
     setPending(true);
+    setFailure(null);
     try {
-      // The real endpoint records the access; here MSW returns the raw content.
-      setRevealed(await revealEvent(detail.id));
+      // The endpoint records the access and answers the control plane's own shape; the modal's
+      // two columns are laid out from that plus this event's detections (`reveal-adapter.ts`).
+      const content = toRevealContent(await revealEvent(detail.id), detail.detections ?? [], detail.tool);
+      // The adapter declines rather than guessing when the masked column cannot be rebuilt from
+      // the detections — and a masked column this screen guessed at is the one thing the reveal
+      // modal must never show, since checking it against the original is the whole point.
+      if (!content) return setFailure("unreconstructable");
+      setRevealed(content);
       setConfirmOpen(false);
+    } catch (error) {
+      // Both refusals are ordinary states, not faults: no `events:reveal` permission, and an
+      // event recorded while raw-payload storage was off (the default — NFR-04).
+      const status = error instanceof ApiError ? error.status : 0;
+      setFailure(status === 403 ? "forbidden" : status === 409 ? "notStored" : "failed");
     } finally {
       setPending(false);
     }
@@ -347,7 +389,14 @@ export function EventDetailPanel({ detail }: { detail: EventDetail }) {
         </button>
       )}
 
-      {confirmOpen && <ConfirmRevealModal onCancel={() => setConfirmOpen(false)} onConfirm={confirmReveal} pending={pending} />}
+      {confirmOpen && (
+        <ConfirmRevealModal
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={confirmReveal}
+          pending={pending}
+          failure={failure}
+        />
+      )}
       {revealed && <RevealModal content={revealed} onClose={() => setRevealed(null)} />}
     </div>
   );

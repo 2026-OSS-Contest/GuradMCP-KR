@@ -2,6 +2,7 @@ import type {
   ApiApproval,
   ApiOverview,
   ApiErrorBody,
+  ApiRevealResponse,
   ApiEventLookupResponse,
   ApiSessionTimelineResponse,
   ApiSessionsResponse,
@@ -22,7 +23,6 @@ import type {
   PolicyRow,
   PolicyStats,
   RecentEventsResponse,
-  RevealContent,
   ServerTrustChangeRequest,
   ServerTrustChangeResult,
   ServersResponse,
@@ -212,9 +212,16 @@ export const getPolicy = (id: string, signal?: AbortSignal) =>
  * Reveal-original (GMCP-84 §6.3): records the access in the audit log. Carries the operator
  * headers `getOperatorHeaders` builds — without them the control plane's `PermissionService`
  * 403s regardless of what the UI decided to show (§7).
+ *
+ * Answers the control plane's own `RevealResponse`, not the modal's `RevealContent` — the two
+ * have no field in common, and `reveal-adapter.ts` needs the event's detections to bridge them,
+ * which this call has no access to. `AuditEventController.reveal` also has two refusals worth
+ * naming, since both are ordinary states rather than faults: **403** `reveal_forbidden` when the
+ * caller carries no `events:reveal` permission, and **409** `raw_payload_not_stored` when the
+ * event predates the opt-in (NFR-04 keeps no raw copy by default).
  */
 export const revealEvent = (id: string, signal?: AbortSignal) =>
-  post<RevealContent>(`/events/${encodeURIComponent(id)}/reveal`, signal, getOperatorHeaders());
+  post<ApiRevealResponse>(`/events/${encodeURIComponent(id)}/reveal`, signal, getOperatorHeaders());
 
 // SCR-201 Attack Lab (spec §5.2).
 export const getAttackScenarios = (signal?: AbortSignal) =>

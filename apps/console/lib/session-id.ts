@@ -1,6 +1,19 @@
 /** A canonical UUID: 8-4-4-4-12 hex, which is what the control plane keys sessions by. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Whether an id is in the control plane's own key space, as opposed to a fixture's slug. */
+export function isUuid(id: string): boolean {
+  return UUID.test(id);
+}
+
+/**
+ * The same rule for any of the control plane's ids — events are keyed by `UUID` too, and the
+ * reveal modal's source line has no more room for 36 characters than the status bar does.
+ */
+export function displayId(id: string): string {
+  return UUID.test(id) ? id.slice(0, 8) : id;
+}
+
 /**
  * How a session id is *shown*, as opposed to how it is passed around.
  *
@@ -16,6 +29,4 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * Only ever for display. The full id stays in the URL, the fetch and the `title`, because a
  * shortened id is not a session id and nothing should be looked up by it.
  */
-export function displaySessionId(id: string): string {
-  return UUID.test(id) ? id.slice(0, 8) : id;
-}
+export const displaySessionId = displayId;

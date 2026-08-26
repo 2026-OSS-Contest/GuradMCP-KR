@@ -367,9 +367,19 @@ export const handlers = [
   }),
 
   // Reveal-original (spec §5.3 no.5). POST — the real endpoint writes an audit record.
-  http.post("*/api/v1/events/:id/reveal", async () => {
+  // `AuditEventController.reveal`: the payload when one was stored, and 409
+  // `raw_payload_not_stored` when it was not — which is the default, since NFR-04 keeps no raw
+  // copy unless the opt-in is on. The panel already disables the button for those events
+  // (`hasRawPayload`), so this is the race where the setting changed under an open screen.
+  http.post("*/api/v1/events/:id/reveal", async ({ params }) => {
     await delay(LATENCY_MS);
-    return HttpResponse.json(revealOf());
+    const revealed = revealOf(String(params.id));
+    return revealed
+      ? HttpResponse.json(revealed)
+      : HttpResponse.json(
+          { code: "raw_payload_not_stored", message: "original payload was not stored for this event" },
+          { status: 409 }
+        );
   }),
 
   // The gateway event stream (spec §6.3). Real backends emit several event types; the console

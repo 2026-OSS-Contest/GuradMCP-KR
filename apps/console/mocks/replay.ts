@@ -9,23 +9,13 @@
 
 import type {
   ApiEventLookupResponse,
+  ApiRevealResponse,
   ApiSessionSummary,
   ApiSessionTimelineResponse,
   ApiTimelineNode,
-  RevealContent,
   Verdict
 } from "@/lib/api/types";
-import {
-  LIVE_SESSION_ID,
-  STORIES,
-  TICKET_ID,
-  TICKET_MASKED,
-  TICKET_RAW,
-  stepAt,
-  storyOf,
-  type Story,
-  type StoryStep
-} from "./demo-story";
+import { LIVE_SESSION_ID, STORIES, stepAt, storyOf, type Story, type StoryStep } from "./demo-story";
 
 function toNode(story: Story, step: StoryStep): ApiTimelineNode {
   return {
@@ -46,10 +36,13 @@ function toNode(story: Story, step: StoryStep): ApiTimelineNode {
     // implements that route (see the note on `ApiVerdictDetail`), so the diff travels inline and
     // this is filled in here for contract shape alone rather than repeated in the story.
     detail: step.detail ? { ...step.detail, maskDiffRef: `/api/v1/events/${step.id}/mask-diff` } : null,
-    // GMCP-84 §8.3: every VERDICT node in the demo story stands in for a real GuardEvent with a
-    // stored raw_payload_ref, so `원문 열람` has something to reveal in dev/e2e the same way a
-    // real opt-in-enabled backend would report it.
-    hasRawPayload: Boolean(step.detail)
+    // GMCP-84 §8.3: true only where the story can actually name the body behind the event
+    // (`StoryStep.detail.rawPayload`). It used to be true for every VERDICT node, which made
+    // `원문 열람` live on all of them while `revealOf()` answered the same ticket regardless of
+    // which one was asked — so the modal drew a body that had nothing to do with the event's own
+    // findings, and the 409 `raw_payload_not_stored` path (the *default*, since NFR-04 stores no
+    // raw copy unless the opt-in is on) could not be reached in dev at all.
+    hasRawPayload: Boolean(step.detail?.rawPayload)
   };
 }
 
@@ -108,16 +101,32 @@ export function eventLookup(eventId: string): ApiEventLookupResponse | undefined
 
 /**
  * POST /events/{id}/reveal (spec §5.3 no.5) — the audited look at what the tool actually
- * returned. The gateway keeps no raw copy of its own (NFR-04); this fixture stands in for the
- * one place the design says an operator may see it, with a record left behind.
+ * returned. The gateway keeps no raw copy of its own (NFR-04); this stands in for the one place
+ * the design says an operator may see it, with a record left behind.
+ *
+ * Answers `AuditEventController.RevealResponse` — the control plane's shape, not the modal's, so
+ * `reveal-adapter.ts` runs here exactly as it does in production. It used to answer the modal's
+ * `RevealContent` directly, which is a shape no backend has ever produced: the reveal worked in
+ * dev and would have handed the modal `content.raw === undefined` against a real one.
+ *
+ * `undefined` where the event has no stored payload — the handler turns that into the 409
+ * `raw_payload_not_stored` a real control plane answers with.
  */
-export function revealOf(): RevealContent {
-  return {
-    source: "e11  search_tickets",
-    caseId: `#${TICKET_ID}`,
-    raw: TICKET_RAW,
-    masked: TICKET_MASKED
-  };
+export function revealOf(eventId: string): ApiRevealResponse | undefined {
+  for (const story of STORIES) {
+    const step = story.steps.find((candidate) => candidate.id === eventId);
+    if (!step) continue;
+    if (!step.detail?.rawPayload) return undefined;
+    return {
+      eventId,
+      rawPayload: step.detail.rawPayload,
+      // No console build carries a real identity yet (`lib/api/permissions.ts`); the control
+      // plane stamps whatever `X-Actor-Id` reached it, defaulting to this.
+      revealedBy: "operator",
+      revealedAt: new Date().toISOString()
+    };
+  }
+  return undefined;
 }
 
 export const LIVE_SESSION = LIVE_SESSION_ID;
