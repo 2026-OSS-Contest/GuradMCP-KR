@@ -265,7 +265,8 @@
     "toggleFailed": "Could not change the policy. Check the gateway connection and try again.",
     "packs": {
       "title": "Policy packs",
-      "toggle": "Enable the {name} policy pack"
+      "toggle": "Enable the {name} policy pack",
+      "readOnly": "Policy packs are loaded by the gateway from policy-packs/. They cannot be switched from the console."
     },
     "table": {
       "title": "Policies",

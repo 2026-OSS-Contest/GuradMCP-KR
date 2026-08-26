@@ -104,15 +104,12 @@ test("SCR-302 a policy that neither blocks nor is critical toggles without a pro
   await expect(toggle).toHaveAttribute("aria-checked", "false");
 });
 
-test("SCR-302 a pack carrying nothing grave switches off without a prompt", async ({ page }) => {
+test("SCR-302 no pack is switchable, whatever it carries", async ({ page }) => {
   await page.goto("/policies");
-  // `developer-relaxed` ships empty, so switching it off loses no protection to ask about.
-  const toggle = page.getByRole("switch", { name: "developer-relaxed 정책팩 사용" });
-
-  await toggle.click();
-
-  await expect(page.getByRole("alertdialog")).toBeHidden();
-  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  // The read-only refusal is a property of the channel, not of the pack: `PUT /policy-packs/{id}`
+  // 409s for every pack that exists. `developer-relaxed` ships empty and loses no protection, and
+  // it is no more switchable than `default`.
+  await expect(page.getByRole("switch", { name: "developer-relaxed 정책팩 사용" })).toBeDisabled();
 });
 
 test("SCR-302 the fired count leads to the sessions that policy decided", async ({ page }) => {
@@ -156,16 +153,21 @@ test("SCR-302 says when the gateway serves no source for a policy", async ({ pag
   await expect(page.getByRole("region", { name: "YAML" }).getByText(/원문을 제공하지 않습니다/)).toBeVisible();
 });
 
-test("SCR-302 questions switching off a pack that carries a blocking policy", async ({ page }) => {
+test("SCR-302 shows which packs are loaded without offering to switch them", async ({ page }) => {
   await page.goto("/policies");
 
-  await page.getByRole("switch", { name: "default 정책팩 사용" }).click();
+  // `PUT /policy-packs/{id}` answers 409 `policy_pack_toggle_read_only` for every pack that
+  // exists: the Gateway loads packs from `policy-packs/` and there is no channel back to it, so
+  // a toggle here would change the display and nothing else. The switch still reports the state
+  // — that part is real — and says why it cannot be moved.
+  const toggle = page.getByRole("switch", { name: "default 정책팩 사용" });
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(toggle).toBeDisabled();
+  await expect(toggle).toHaveAttribute("title", /policy-packs\//);
 
-  // FR-POL-04 is about losing a block or a critical rule, not about which control did it.
-  const dialog = page.getByRole("alertdialog");
-  await expect(dialog.getByText(/default 정책팩에는 차단 또는 critical/)).toBeVisible();
-  await dialog.getByRole("button", { name: "취소" }).click();
-  await expect(page.getByRole("switch", { name: "default 정책팩 사용" })).toHaveAttribute("aria-checked", "true");
+  // And no confirmation dialog, because there is nothing to confirm. It used to ask the operator
+  // to accept losing the pack's blocking policies, and then 409.
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
 });
 
 test("SCR-302 points at the authoring guide when no packs are loaded", async ({ page }) => {

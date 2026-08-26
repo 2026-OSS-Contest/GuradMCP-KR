@@ -265,7 +265,8 @@
     "toggleFailed": "정책을 변경하지 못했습니다. 게이트웨이 연결을 확인한 뒤 다시 시도하세요.",
     "packs": {
       "title": "정책팩",
-      "toggle": "{name} 정책팩 사용"
+      "toggle": "{name} 정책팩 사용",
+      "readOnly": "정책팩은 policy-packs/ 에서 게이트웨이가 읽어 옵니다. 콘솔에서는 켜고 끌 수 없습니다."
     },
     "table": {
       "title": "정책 테이블",

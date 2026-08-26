@@ -315,7 +315,19 @@ export const decideApproval = (id: string, decision: ApprovalDecision, signal?: 
 export const getPolicyPacks = (signal?: AbortSignal) => get<PolicyPack[]>("/policy-packs", signal);
 export const getPolicies = (signal?: AbortSignal) => get<PolicyRow[]>("/policies", signal);
 
-/** Flip a whole pack. The one policy mutation the control plane fully supports. */
+/**
+ * Flip a whole pack — which the control plane refuses, always.
+ *
+ * `PolicyController.updatePack` answers **409 `policy_pack_toggle_read_only`** for every pack
+ * that exists and 404 for one that does not (fix-api.md §1): the Gateway is the only process
+ * that enforces packs, it reads them from `policy-packs/`, and there is no channel back to it.
+ * This used to be described here as "the one policy mutation the control plane fully supports",
+ * which was true before #131 replaced the hardcoded seed with the Gateway's own sync.
+ *
+ * Kept, rather than deleted, because the refusal is a property of today's wiring and not of the
+ * design — `pack-tree.tsx` disables the switch and names this endpoint, and restoring the
+ * control when a channel exists should be one line, not a re-implementation.
+ */
 export const setPackEnabled = (id: string, enabled: boolean, signal?: AbortSignal) =>
   putJson<PolicyPack>(`/policy-packs/${encodeURIComponent(id)}`, { enabled }, signal);
 
