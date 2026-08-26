@@ -39,13 +39,13 @@ abstract class ApiTestSupport {
     protected fun get(path: String): HttpResponse<String> =
         client.send(HttpRequest.newBuilder(uri(path)).GET().build(), HttpResponse.BodyHandlers.ofString())
 
-    protected fun send(method: String, path: String, body: Any?): HttpResponse<String> {
+    protected fun send(method: String, path: String, body: Any?, headers: Map<String, String> = emptyMap()): HttpResponse<String> {
         val publisher = body?.let { HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(it)) }
             ?: HttpRequest.BodyPublishers.noBody()
-        val request = HttpRequest.newBuilder(uri(path))
+        val requestBuilder = HttpRequest.newBuilder(uri(path))
             .header("Content-Type", "application/json")
-            .method(method, publisher)
-            .build()
+        headers.forEach { (name, value) -> requestBuilder.header(name, value) }
+        val request = requestBuilder.method(method, publisher).build()
         return client.send(request, HttpResponse.BodyHandlers.ofString())
     }
 

@@ -165,6 +165,12 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-guardmcp}:${POSTGRES_PASSWORD:-guardmcp-local-only}@postgres:5432/${POSTGRES_DB:-guardmcp}
       REDIS_URL: redis://:${REDIS_PASSWORD:-guardmcp-local-only}@redis:6379/0
       CONTROL_PLANE_URL: http://control-plane:8080
+      # Same shared secret the control-plane service reads below as POLICY_SYNC_TOKEN — sent as
+      # X-Sync-Token on every POST /policies/sync (fix-api.md §1 review: that endpoint must not
+      # accept an unauthenticated registry overwrite). Defaulted, not blank, like
+      # POSTGRES_PASSWORD/REDIS_PASSWORD: unlike reveal, sync isn't optional to the demo stack —
+      # PolicyStore never receives a registry without it.
+      POLICY_SYNC_TOKEN: ${POLICY_SYNC_TOKEN:-guardmcp-local-only}
       DEMO_MCP_TOOLS_URL: http://demo-mcp-tools:3003
       # Identity of the single upstream this gateway routes to, in the Control Plane's server
       # registry (FR-GW-02 §4.1) — must match a seeded id in infra/postgres/002-mcp-servers.sql.
@@ -209,6 +215,8 @@ services:
       # NFR-04: unset (empty) by default, same as every other demo/development secret in this
       # file — POST /events/{id}/reveal stays disabled until an operator sets this explicitly.
       REVEAL_OPERATOR_TOKEN: ${REVEAL_OPERATOR_TOKEN:-}
+      # Defaulted (not blank) — see the same variable on the gateway service above.
+      POLICY_SYNC_TOKEN: ${POLICY_SYNC_TOKEN:-guardmcp-local-only}
     ports:
       - "127.0.0.1:${CONTROL_PLANE_PORT:-8080}:8080"
     depends_on:
@@ -235,6 +243,11 @@ services:
       NODE_ENV: production
       GATEWAY_URL: http://gateway:3001
       CONTROL_PLANE_URL: http://control-plane:8080
+      # fix-api.md §6 (option 2): same shared secret the control-plane service reads below as
+      # REVEAL_OPERATOR_TOKEN — the console's server-side reveal proxy
+      # (app/api/v1/events/[eventId]/reveal/route.ts) attaches it as X-Operator-Token. Never
+      # NEXT_PUBLIC_*, so it stays out of the client bundle and the browser never sees it.
+      OPERATOR_TOKEN: ${REVEAL_OPERATOR_TOKEN:-}
       DEPENDENCY_URLS: http://gateway:3001/health,http://control-plane:8080/actuator/health
     ports:
       - "127.0.0.1:${CONSOLE_PORT:-3000}:3000"

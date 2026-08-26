@@ -106,10 +106,10 @@ class ServerController(
                 "list_dir" to (ToolRisk.LOW to emptyList()),
             ),
             DemoSeed.SERVER_MAIL_ID to mapOf(
-                "send_email" to (ToolRisk.HIGH to listOf("approve_external_email")),
+                "send_email" to (ToolRisk.HIGH to listOf("approve_external_email_with_secret")),
             ),
             DemoSeed.SERVER_DB_ID to mapOf(
-                "lookup_customer" to (ToolRisk.MEDIUM to listOf("mask_korean_phone")),
+                "lookup_customer" to (ToolRisk.MEDIUM to listOf("mask_korean_pii_response")),
             ),
         )
 

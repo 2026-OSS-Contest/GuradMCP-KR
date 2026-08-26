@@ -198,8 +198,11 @@ export const reapproveTool = (
     signal,
   );
 
+/** fix-api.md §4: the raw YAML behind a policy id, at `/source` rather than `/policies/{id}`
+ *  itself — that path is already spoken for by `PUT /policies/{id}` (the action/severity/
+ *  priority override), so a GET there would be asymmetric with what the PUT means. */
 export const getPolicy = (id: string, signal?: AbortSignal) =>
-  get<PolicyDetail>(`/policies/${encodeURIComponent(id)}`, signal);
+  get<PolicyDetail>(`/policies/${encodeURIComponent(id)}/source`, signal);
 /**
  * Reveal-original (GMCP-84 §6.3): records the access in the audit log. Carries the operator
  * headers `getOperatorHeaders` builds — without them the control plane's `PermissionService`

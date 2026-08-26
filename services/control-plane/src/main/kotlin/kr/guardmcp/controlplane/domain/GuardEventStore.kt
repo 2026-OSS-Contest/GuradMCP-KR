@@ -49,7 +49,7 @@ class GuardEventStore {
             sequenceNo = 1,
             verdict = GuardAction.MASK_THEN_ALLOW,
             toolName = "lookup_customer",
-            policyId = "mask_korean_phone",
+            policyId = "mask_korean_pii_response",
             riskScore = 82,
             occurredAt = DemoSeed.SEEDED_AT.plusSeconds(61),
         )

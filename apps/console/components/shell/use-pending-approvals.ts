@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { createSseClient } from "@/lib/sse";
-import { MOCK_API } from "@/mocks/scenario";
 
-// Same stream the rest of the console consumes: same-origin under the mock, the real gateway
-// when one is configured, and nothing to connect to without either. `createSseClient` shares one
-// connection per URL, so the status bar does not add an EventSource to every screen.
+// Same stream the rest of the console consumes: an absolute URL when NEXT_PUBLIC_API_BASE_URL
+// points at a backend directly, same-origin otherwise. The relative form covers both the mock
+// (MSW answers it) and the real control plane reached through next.config.ts's `/api/v1/*`
+// rewrite (fix-api.md §2) — the deployment this console actually ships with (docker-compose.yml
+// sets CONTROL_PLANE_URL, not NEXT_PUBLIC_API_BASE_URL), so this must not require MOCK_API to be
+// true or the stream never connects in that mode. `createSseClient` shares one connection per
+// URL, so the status bar does not add an EventSource to every screen.
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
-const STREAM_URL = API_BASE ? `${API_BASE}/api/v1/events/stream` : MOCK_API ? "/api/v1/events/stream" : null;
+const STREAM_URL = `${API_BASE ?? ""}/api/v1/events/stream`;
 
 /** A `approval.created` (+1) or `approval.resolved` (-1), stamped with when it reached us. */
 interface Change {

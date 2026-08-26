@@ -40,3 +40,7 @@ security:
   # env-provided secret only.
   raw-payload-encryption-key: ${RAW_PAYLOAD_ENCRYPTION_KEY:}
   raw-payload-encryption-key-version: ${RAW_PAYLOAD_ENCRYPTION_KEY_VERSION:v1}
+  # Shared secret the Gateway must present (X-Sync-Token) to call POST /policies/sync, which
+  # overwrites the entire policy registry. Blank (the default) disables the endpoint entirely,
+  # same contract as reveal-token above — see PolicyController.sync's own doc.
+  sync-token: ${POLICY_SYNC_TOKEN:}

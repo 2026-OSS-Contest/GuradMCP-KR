@@ -16,6 +16,7 @@ import {
 } from "@guardmcp/policy-engine";
 import { createAutoExpireApprovalBackend } from "./approval/backend.js";
 import { createControlPlaneApprovalBackend } from "./controlPlane/approvalBackend.js";
+import { syncPolicyRegistry } from "./controlPlane/policySync.js";
 import { detect, mask, type Detection } from "./detect.js";
 import { adjudicate, adjudicationEnabled, isBorderline } from "./llm/adjudicator.js";
 import {
@@ -82,6 +83,10 @@ const EMAIL_FIELD_SEPARATOR = "\n";
 const gatewayServerId = process.env.GATEWAY_SERVER_ID ?? "demo-mcp-tools";
 
 const controlPlaneUrl = process.env.CONTROL_PLANE_URL;
+// Shared secret the Control Plane's `security.sync-token` gates POST /policies/sync with
+// (docker-compose.yml wires the same POLICY_SYNC_TOKEN value into both services) — see
+// policySync.ts's own doc. Unset by default, same as REVEAL_OPERATOR_TOKEN.
+const policySyncToken = process.env.POLICY_SYNC_TOKEN;
 startServerRegistrySync(controlPlaneUrl);
 // NFR-03/GMCP-68 §4.3: cache starts cold (fail-closed) until the first snapshot arrives.
 startFailurePolicySync(controlPlaneUrl);
@@ -131,6 +136,10 @@ if (bootLoad.fatal) {
   process.exit(1);
 }
 const policyStore = new PolicyStore(bootLoad.snapshot);
+// fix-api.md §1: report the real, just-loaded pack/policy set to the Control Plane so
+// `GET /policies`/`GET /policy-packs` stop serving a hardcoded seed. Boot pushes once
+// immediately; the watcher below pushes again after every hot-reload.
+syncPolicyRegistry(controlPlaneUrl, bootLoad.registry, policySyncToken);
 // The watcher holds an open chokidar handle (fs watches + a debounce timer), which would leak
 // across the test suite for no benefit — tests exercise PolicyWatcher directly instead
 // (policy-watcher.test.ts), the same way ./pipeline/auditPublisher.ts gates its own bus
@@ -138,6 +147,8 @@ const policyStore = new PolicyStore(bootLoad.snapshot);
 if (process.env.NODE_ENV !== "test") {
   startPolicyWatcher(policyPacksDir, policyStore, {
     activePackId: ACTIVE_POLICY_PACK_ID,
+    controlPlaneUrl,
+    syncToken: policySyncToken,
   });
 }
 

@@ -21,6 +21,8 @@ tags:
   - name: attack-lab
   - name: servers
   - name: settings
+  - name: events
+  - name: benchmark
 paths:
   /api/v1/overview:
     get:
@@ -331,7 +333,15 @@ paths:
   /api/v1/policy-packs/{packId}:
     put:
       tags: [policies]
-      summary: Enable or disable a policy pack
+      summary: Toggle a policy pack (read-only — always rejected)
+      description: >-
+        fix-api.md §1: the Gateway is the only process that actually enforces
+        policy packs (packages/policy-engine's loader), and there is no
+        channel back from this store to the Gateway's own enable/disable
+        state — toggling a pack here would change what the console displays
+        without changing what the Gateway does. A known packId therefore
+        always answers 409 policy_pack_toggle_read_only, never 200; an
+        unknown packId is a 404. The console renders the switch disabled.
       operationId: updatePolicyPack
       parameters:
         - name: packId
@@ -350,14 +360,56 @@ paths:
                 enabled:
                   type: boolean
       responses:
-        "200":
-          description: Updated pack with a bumped version
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The pack exists but is loaded by the gateway from policy-packs/ and cannot be toggled from the console
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PolicyPack"
-        "404":
-          $ref: "#/components/responses/NotFound"
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/policies/sync:
+    post:
+      tags: [policies]
+      summary: Gateway push — replaces the whole policy registry (fix-api.md §1)
+      description: >-
+        The only writer of the console's policy/pack state. The Gateway calls
+        this once at boot and again after every hot-reload
+        (packages/gateway/src/controlPlane/policySync.ts), reporting the
+        pack/policy set it just loaded from policy-packs/ — there is no other
+        way for GET /policies / GET /policy-packs to become non-empty.
+        Publishes a policy.reloaded event on GET /events/stream. Requires a
+        server-side shared secret (X-Sync-Token, configured out of band via
+        POLICY_SYNC_TOKEN — unset by default, which disables this endpoint
+        entirely): without it, any caller able to reach the Control Plane
+        could overwrite the registry every console renders.
+      operationId: syncPolicies
+      parameters:
+        - name: X-Sync-Token
+          in: header
+          required: true
+          description: Must match the server's configured POLICY_SYNC_TOKEN or the call is rejected with 403.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicySyncRequest"
+      responses:
+        "200":
+          description: Counts of packs/policies stored, and when
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicySyncResponse"
+        "403":
+          description: X-Sync-Token is missing, invalid, or unconfigured server-side (sync_unauthorized)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/policies:
     get:
       tags: [policies]
@@ -406,6 +458,32 @@ paths:
                 $ref: "#/components/schemas/Policy"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/policies/{policyId}/source:
+    get:
+      tags: [policies]
+      summary: Raw policy YAML (fix-api.md §4)
+      description: >-
+        The source text synced in alongside the policy itself via POST
+        /policies/sync — backs the Policy Chip popover and the SCR-302 YAML
+        panel. 404 policy_not_found for an unknown policyId, or
+        policy_source_not_found if the policy exists but no source has been
+        synced for it yet.
+      operationId: getPolicySource
+      parameters:
+        - name: policyId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The policy's raw YAML and the file path it came from
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyDetailResponse"
         "404":
           $ref: "#/components/responses/NotFound"
   /api/v1/policies/{policyId}/stats:
@@ -546,7 +624,21 @@ paths:
         (block_env_file_read, mask_korean_phone, approve_external_email).
         The full detector engine lives in packages/policy-engine; verdict
         aggregation here is fail-closed (strongest matched action wins).
+        fix-api.md §3: the same wording can judge differently by direction
+        (e.g. warn on request vs block on response) — direction rides as a
+        query parameter, matching how the console already sends it
+        (apps/console/lib/api/client.ts's previewDetection); the request
+        body only ever carries text. Omitted/absent keeps the
+        pre-existing direction-agnostic behavior.
       operationId: previewDetection
+      parameters:
+        - name: direction
+          in: query
+          required: false
+          description: '"request" or "response"; any other value is a 400 invalid_direction.'
+          schema:
+            type: string
+            enum: [request, response]
       requestBody:
         required: true
         content:
@@ -860,6 +952,85 @@ paths:
                   version:
                     type: integer
                     format: int64
+  /api/v1/events/stream:
+    get:
+      tags: [events]
+      summary: Combined guard/approval/policy push channel (fix-api.md §5)
+      description: >-
+        Server-sent events. One connection carries every event type the
+        console subscribes to (apps/console/lib/sse.ts's
+        GUARD_EVENT_TYPES): guard.event (a new GuardEvent ingested),
+        approval.created and approval.resolved (ApprovalStore), and
+        policy.reloaded (a PolicySyncResponse — fires on POST
+        /policies/sync, including the boot sync, not only a hot-reload).
+        Unlike /api/v1/servers/stream or /api/v1/settings/stream, there is
+        no resendable snapshot pushed on connect — every frame here is a
+        live occurrence a client connecting late has already missed.
+      operationId: streamEvents
+      responses:
+        "200":
+          description: text/event-stream of guard.event / approval.created / approval.resolved / policy.reloaded frames
+          content:
+            text/event-stream:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/SecurityEvent"
+                  - $ref: "#/components/schemas/Approval"
+                  - $ref: "#/components/schemas/PolicySyncResponse"
+  /api/v1/benchmark/report:
+    get:
+      tags: [benchmark]
+      summary: Latest detection-benchmark report (fix-api.md §7, SCR-601)
+      description: >-
+        Serves attack-lab/benchmark/run.ts's report output
+        (GUARDMCP_BENCHMARK_REPORT, default reports/benchmark.json) verbatim
+        — this service does not compute or validate it, only reads and
+        passes through whatever bytes are on disk. Shape matches
+        apps/console/lib/api/types.ts's BenchmarkReport; fields that type
+        doesn't model (e.g. dryRunObservations, koreanInjection) still pass
+        through and are ignored on that side.
+      operationId: getBenchmarkReport
+      responses:
+        "200":
+          description: The report JSON, byte-for-byte
+          content:
+            application/json:
+              schema:
+                type: object
+                description: See apps/console/lib/api/types.ts's BenchmarkReport for the modeled subset.
+        "404":
+          description: No report file on disk yet (benchmark_report_not_found) — run `npm run bench` or mount one
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/benchmark/samples:
+    get:
+      tags: [benchmark]
+      summary: Per-sample detection verdicts backing the benchmark report (fix-api.md §7, SCR-601)
+      description: >-
+        Serves attack-lab/benchmark/run.ts's samples output
+        (GUARDMCP_BENCHMARK_SAMPLES, default reports/benchmark-samples.json)
+        verbatim, same passthrough contract as GET /benchmark/report. Row
+        detected reflects the same detect() call runBenchmark() itself
+        scores recall/fpr against — including for a labelled-negative
+        sample, so a sample the report's fpr counts as a false positive
+        shows detected=true here too, not a fixed false.
+      operationId: getBenchmarkSamples
+      responses:
+        "200":
+          description: The samples JSON, byte-for-byte
+          content:
+            application/json:
+              schema:
+                type: object
+                description: See apps/console/lib/api/types.ts's BenchmarkSamplesResponse for the modeled subset.
+        "404":
+          description: No samples file on disk yet (benchmark_samples_not_found) — run `npm run bench` or mount one
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   responses:
     BadRequest:
@@ -1200,6 +1371,86 @@ components:
           $ref: "#/components/schemas/Severity"
         description:
           type: string
+    PolicyDetailResponse:
+      type: object
+      description: fix-api.md §4 — the Policy Chip popover / SCR-302 YAML panel.
+      required: [id, yaml, path]
+      properties:
+        id:
+          type: string
+        yaml:
+          type: string
+        path:
+          type: string
+    PolicySyncPackInput:
+      type: object
+      description: The Gateway's own PackState shape (fix-api.md §1).
+      required: [packId, name]
+      properties:
+        packId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+          default: true
+    PolicySyncPolicyInput:
+      type: object
+      required: [id, packId, priority, action, severity]
+      properties:
+        id:
+          type: string
+        packId:
+          type: string
+        priority:
+          type: integer
+        action:
+          type: string
+          description: The Gateway's own Action wire value — not validated against GuardAction's enum here.
+        severity:
+          type: string
+          description: The Gateway's own Severity wire value — not validated against Severity's enum here.
+        description:
+          type: string
+        direction:
+          type: string
+          description: '"request", "response", or "any" (the pipeline default) when omitted.'
+        message:
+          type: string
+          description: Accepted for wire-shape parity with the Gateway's PackState.policies; not yet surfaced by any console field.
+        enabled:
+          type: boolean
+          default: true
+        sourcePath:
+          type: string
+        sourceYaml:
+          type: string
+    PolicySyncRequest:
+      type: object
+      properties:
+        packs:
+          type: array
+          items:
+            $ref: "#/components/schemas/PolicySyncPackInput"
+          default: []
+        policies:
+          type: array
+          items:
+            $ref: "#/components/schemas/PolicySyncPolicyInput"
+          default: []
+    PolicySyncResponse:
+      type: object
+      required: [packsStored, policiesStored, syncedAt]
+      properties:
+        packsStored:
+          type: integer
+        policiesStored:
+          type: integer
+        syncedAt:
+          type: string
+          format: date-time
     ApprovalCreateRequest:
       type: object
       required: [sessionId, toolName, riskReason]
