@@ -314,7 +314,8 @@
       "secondary": "기본 정책팩 예제 보기",
       "secondaryAria": "기본 정책팩 예제 새 창에서 열기",
       "note": "코드를 작성하지 않아도 YAML 정책으로 기여할 수 있습니다."
-    }
+    },
+    "toggleIgnored": "게이트웨이가 이 변경을 반영하지 않았습니다. 정책의 사용 여부는 YAML의 enabled: 로만 바꿀 수 있습니다."
   },
   "screens": {
     "gateway": {

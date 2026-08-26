@@ -335,10 +335,15 @@ export const setPackEnabled = (id: string, enabled: boolean, signal?: AbortSigna
 /**
  * Flip one policy on or off.
  *
- * The path and verb are the real ones, but `enabled` is **not** a field
- * `PolicyUpdateRequest` declares, so a real control plane accepts the call and changes nothing.
- * Only the mock honours it. Until the control plane grows the field, this is the SCR-302 toggle
- * the design asks for and nothing more.
+ * The path and verb are the real ones, but `enabled` is **not** a field `PolicyUpdateRequest`
+ * declares, so a real control plane parses the body, finds `action`/`severity`/`priority` all
+ * null, copies the row unchanged and answers **200 with the old value**. Only the mock honours
+ * it. That silent success is why `policy-builder.tsx` compares the answer against what it asked
+ * for rather than treating 200 as done.
+ *
+ * #131 made this worse before it made it visible: `PolicyRow.enabled` is now always present (the
+ * policy's own YAML `enabled:`, read-only), which defeated the `policy-table.tsx` guard that had
+ * been keying "is this toggle controllable" on the field's absence.
  */
 export const setPolicyEnabled = (id: string, enabled: boolean, signal?: AbortSignal) =>
   putJson<PolicyRow>(`/policies/${encodeURIComponent(id)}`, { enabled }, signal);

@@ -314,7 +314,8 @@
       "secondary": "See the default policy pack",
       "secondaryAria": "See the default policy pack in a new tab",
       "note": "You can contribute YAML policies without writing any code."
-    }
+    },
+    "toggleIgnored": "The gateway did not apply this change. A policy's enabled state can only be changed through its YAML `enabled:`."
   },
   "screens": {
     "gateway": {
