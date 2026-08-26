@@ -305,6 +305,7 @@ async function loadPack(
   let evaluationStrategy: EvaluationStrategy = "severity-max";
   let extendsRefs: string[] = [];
   let enabled = true;
+  let defaultDryRun = false;
   let declaredPolicyPaths: string[] | undefined;
 
   if (manifestPath) {
@@ -332,6 +333,7 @@ async function loadPack(
         if (value.evaluation_strategy !== undefined) evaluationStrategy = value.evaluation_strategy;
         if (value.extends !== undefined) extendsRefs = value.extends;
         if (value.enabled !== undefined) enabled = value.enabled;
+        if (value.default_dry_run !== undefined) defaultDryRun = value.default_dry_run;
         if (value.policies !== undefined) {
           declaredPolicyPaths = await resolveDeclaredPolicyPaths(entry, value.policies, displayManifestPath, errors);
         }
@@ -378,9 +380,14 @@ async function loadPack(
       continue;
     }
 
-    const { policy, errors: fileErrors } = parsePolicyFile(text, displayPath);
+    const { policy: parsed, errors: fileErrors } = parsePolicyFile(text, displayPath);
     errors.push(...fileErrors);
-    if (!policy) continue;
+    if (!parsed) continue;
+    // SPEC-POL-04 §3.1: `default_dry_run: true` only fills in for a policy that leaves its own
+    // `dry_run` unset — an explicit `dry_run: false` on the policy file always wins over the
+    // pack's default, the same "explicit beats inherited" rule `enabled`/`default_action`
+    // already follow elsewhere in this loader.
+    const policy = parsed.dry_run === undefined && defaultDryRun ? { ...parsed, dry_run: true } : parsed;
 
     if (policy.pack !== entry.packId) {
       errors.push(

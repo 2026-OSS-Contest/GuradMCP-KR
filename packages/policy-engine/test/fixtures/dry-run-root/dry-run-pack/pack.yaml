@@ -1,0 +1,11 @@
+name: dry-run-pack
+version: 1.0.0
+description: Fixture pack for SPEC-POL-04 dry_run/default_dry_run loader tests
+dsl_version: 1
+default_action: allow
+evaluation_strategy: severity-max
+default_dry_run: true
+policies:
+  - policies/explicit-dry-run-block.yaml
+  - policies/inherited-dry-run-warn.yaml
+  - policies/opted-out-block.yaml

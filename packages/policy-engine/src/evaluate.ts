@@ -19,45 +19,65 @@
 // See docs/task-docs/GMCP-75/정책평가전략구현.md §3-§4 for the rules this
 // mirrors. Matching itself (A.1/A.2) is unchanged; this module only decides
 // among policies that `matchesPolicy` already says matched.
+//
+// SPEC-POL-04 §3.2 (GMCP-77) adds a second split on top of that: `matched` here divides into
+// an `actionable` group (decides `action`/`severity`/`matchedPolicyIds`/`winningPolicyId`,
+// exactly as before) and a `shadow` group (`dry_run: true`, or every match when
+// `mode: "shadow-all"`) that only ever produces `virtualVerdict`/`dryRunMatchedPolicyIds`/
+// `wouldEscalate` — see shadow.ts. `usedDefault` now means "no ACTIONABLE policy matched",
+// not "no policy matched at all": a shadow-only match still adopts `default_action` for the
+// real verdict while still reporting a `virtualVerdict`.
 
-import type { Action, EvaluationResult, Policy, PolicyContext, PolicyPackConfig } from "./types.js";
+import type { Action, EvaluationMode, EvaluationResult, Policy, PolicyContext, PolicyPackConfig } from "./types.js";
 import { matchesPolicy } from "./matcher.js";
 import { ACTION_RANK, SEVERITY_RANK } from "./action-rank.js";
+import { computeWouldEscalate, severityMaxVirtualVerdict, splitShadow } from "./shadow.js";
 
 export function evaluatePolicies(
   rules: Policy[],
   context: PolicyContext,
-  pack: PolicyPackConfig
+  pack: PolicyPackConfig,
+  mode: EvaluationMode = "normal"
 ): EvaluationResult {
   const sorted = [...rules]
     .filter((rule) => rule.enabled !== false)
     .sort((left, right) => left.priority - right.priority || left.id.localeCompare(right.id));
 
   const matched: Policy[] = [];
+  const { actionable: actionableSorted } = splitShadow(sorted, mode);
+  const actionableIds = new Set(actionableSorted.map((rule) => rule.id));
   let firstMatchWinner: Policy | null = null;
 
   for (const rule of sorted) {
     if (!matchesPolicy(rule, context)) continue;
     matched.push(rule);
-    if (pack.strategy === "first-match" && firstMatchWinner === null) {
+    if (pack.strategy === "first-match" && firstMatchWinner === null && actionableIds.has(rule.id)) {
       firstMatchWinner = rule;
     }
   }
 
-  if (matched.length === 0) {
+  const { actionable, shadow } = splitShadow(matched, mode);
+  const virtualVerdict = severityMaxVirtualVerdict(shadow);
+  const dryRunMatchedPolicyIds = shadow.map((rule) => rule.id);
+
+  if (actionable.length === 0) {
+    const action = resolveDefaultAction(pack);
     return {
-      action: resolveDefaultAction(pack),
+      action,
       severity: null,
       matchedPolicyIds: [],
       winningPolicyId: null,
       strategy: pack.strategy,
-      usedDefault: true
+      usedDefault: true,
+      virtualVerdict,
+      dryRunMatchedPolicyIds,
+      wouldEscalate: computeWouldEscalate(action, virtualVerdict)
     };
   }
 
   const winner =
     firstMatchWinner ??
-    matched.reduce((strongest, rule) => {
+    actionable.reduce((strongest, rule) => {
       const ruleRank = ACTION_RANK[rule.action];
       const strongestRank = ACTION_RANK[strongest.action];
       if (ruleRank !== strongestRank) return ruleRank > strongestRank ? rule : strongest;
@@ -65,7 +85,7 @@ export function evaluatePolicies(
       return SEVERITY_RANK[rule.severity] > SEVERITY_RANK[strongest.severity] ? rule : strongest;
     });
 
-  return buildResult(winner, matched, pack);
+  return buildResult(winner, actionable, virtualVerdict, dryRunMatchedPolicyIds, pack);
 }
 
 /** 규칙 3: 명시된 default_action > strict 모드(warn) > 하드코딩 기본값(allow). */
@@ -74,13 +94,22 @@ export function resolveDefaultAction(pack: PolicyPackConfig): Action {
   return pack.strict ? "warn" : "allow";
 }
 
-function buildResult(winner: Policy, matched: Policy[], pack: PolicyPackConfig): EvaluationResult {
+function buildResult(
+  winner: Policy,
+  actionable: Policy[],
+  virtualVerdict: EvaluationResult["virtualVerdict"],
+  dryRunMatchedPolicyIds: string[],
+  pack: PolicyPackConfig
+): EvaluationResult {
   return {
     action: winner.action,
     severity: winner.severity,
-    matchedPolicyIds: matched.map((rule) => rule.id),
+    matchedPolicyIds: actionable.map((rule) => rule.id),
     winningPolicyId: winner.id,
     strategy: pack.strategy,
-    usedDefault: false
+    usedDefault: false,
+    virtualVerdict,
+    dryRunMatchedPolicyIds,
+    wouldEscalate: computeWouldEscalate(winner.action, virtualVerdict)
   };
 }

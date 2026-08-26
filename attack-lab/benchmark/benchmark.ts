@@ -202,14 +202,19 @@ export async function runBenchmark(): Promise<BenchmarkReport> {
       detections: fixture.event.detections.map(toDetection),
       riskScore: fixture.event.risk_score
     }, pack.manifest.default_action, pack.manifest.evaluation_strategy);
+    // SPEC-POL-04 (GMCP-77): `result.matchedPolicyIds` is now ACTIONABLE-only — a shadow
+    // (dry_run) policy that matched shows up in `result.dryRunMatchedPolicyIds` instead. A
+    // fixture's job is "did this policy's match condition fire", which is true either way, so
+    // coverage is checked against the union; `result.action` (never influenced by the shadow
+    // group, §2.1) is still the actionable-only real verdict.
     const expectedIds = [...fixture.expected.matched_policy_ids].sort();
-    const actualIds = [...result.matchedPolicyIds].sort();
+    const actualIds = [...result.matchedPolicyIds, ...result.dryRunMatchedPolicyIds].sort();
     return {
       id: fixture.id,
       coverage: fixture.coverage,
       passed: result.action === fixture.expected.action && JSON.stringify(actualIds) === JSON.stringify(expectedIds),
       expected: fixture.expected,
-      actual: { action: result.action, matched_policy_ids: result.matchedPolicyIds }
+      actual: { action: result.action, matched_policy_ids: actualIds }
     };
   });
   const fixtureCoverage = policies.map(({ id }) => {

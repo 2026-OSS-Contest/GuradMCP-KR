@@ -1,0 +1,24 @@
+# SPEC-POL-04 (GMCP-77) worked example: verifying whether a single address disclosure
+# should become a hard block, without yet actually blocking anything. `dry_run: true`
+# means this policy is matched and scored like any other (§2.3) but excluded from the
+# real verdict and every stage after it (§2.1) — the response is still masked by
+# `mask_korean_pii_response` below, exactly as it was before this file existed.
+#
+# `GET /api/v1/policies/block_large_address_dump/stats` reports how often this would have
+# fired against real traffic, so the block/require_approval decision can be made from
+# observed data instead of a guess.
+id: block_large_address_dump
+pack: korean-pii
+version: 1
+description: 응답 내 주소 노출 시 차단 여부를 검증 중 (dry-run)
+priority: 150
+dry_run: true
+match:
+  direction: response
+  detections:
+    any_of: [PII.ADDRESS]
+  risk_score:
+    gte: 60
+action: block
+severity: high
+message: A response disclosing a Korean street address would have been blocked by this policy.

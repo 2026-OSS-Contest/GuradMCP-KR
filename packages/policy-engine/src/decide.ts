@@ -32,7 +32,10 @@ export function decide(input: DecisionInput): DecisionResult {
     rules: input.activePolicies
   };
 
-  const result = evaluatePolicies(input.activePolicies, context, pack);
+  const result = evaluatePolicies(input.activePolicies, context, pack, input.mode);
+  // SPEC-POL-04 §4.1: GuardEvent.dryRunVerdict is `Action | null`, never a full VirtualVerdict —
+  // severity of the shadow verdict isn't part of the documented GuardEvent shape.
+  const dryRunVerdict = result.virtualVerdict?.action ?? null;
 
   if (result.usedDefault) {
     return {
@@ -42,7 +45,10 @@ export function decide(input: DecisionInput): DecisionResult {
       reason:
         input.strictMode && input.defaultAction === undefined
           ? "strict 모드: 매칭 정책 없음 → warn"
-          : `매칭 정책 없음 → default_action(${result.action})`
+          : `매칭 정책 없음 → default_action(${result.action})`,
+      dryRunVerdict,
+      dryRunMatchedPolicyIds: result.dryRunMatchedPolicyIds,
+      wouldEscalate: result.wouldEscalate
     };
   }
 
@@ -51,6 +57,9 @@ export function decide(input: DecisionInput): DecisionResult {
     verdict: result.action,
     matchedPolicyIds: result.matchedPolicyIds,
     decidingPolicyId: result.winningPolicyId,
-    reason: deciding?.message ?? `정책 ${result.winningPolicyId} 매칭`
+    reason: deciding?.message ?? `정책 ${result.winningPolicyId} 매칭`,
+    dryRunVerdict,
+    dryRunMatchedPolicyIds: result.dryRunMatchedPolicyIds,
+    wouldEscalate: result.wouldEscalate
   };
 }

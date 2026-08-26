@@ -48,6 +48,7 @@ export function syncPolicyRegistry(baseUrl: string | undefined, registry: PackRe
           enabled: policy.enabled !== false,
           sourcePath: source?.filePath ?? "",
           sourceYaml: source?.sourceText ?? "",
+          dryRun: policy.dry_run === true,
         };
       })),
     }),

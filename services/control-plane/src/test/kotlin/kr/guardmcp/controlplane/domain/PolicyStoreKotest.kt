@@ -25,7 +25,7 @@ class PolicyStoreKotest : StringSpec({
         val first = policyStore.sync(PolicyFixtures.packs, PolicyFixtures.policies)
 
         first.packsStored shouldBe 2
-        first.policiesStored shouldBe 9
+        first.policiesStored shouldBe 10
         val versionAfterFirstSync = policyStore.listPacks().single { it.id == "default" }.version
 
         policyStore.sync(PolicyFixtures.packs, PolicyFixtures.policies)
@@ -78,5 +78,12 @@ class PolicyStoreKotest : StringSpec({
 
         policyStore.source("block_env_file_read")?.path shouldBe "policy-packs/default/policies/block-env-file-read.yaml"
         policyStore.source("missing").shouldBeNull()
+    }
+
+    "dry-run policies are read-only and reported honestly (GMCP-77)" {
+        val policy = store().policy("block_large_address_dump")
+        checkNotNull(policy)
+        policy.dryRun shouldBe true
+        store().policy("block_env_file_read")?.dryRun shouldBe false
     }
 })

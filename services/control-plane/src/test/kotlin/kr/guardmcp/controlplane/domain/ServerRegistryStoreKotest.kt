@@ -42,9 +42,36 @@ class ServerRegistryStoreKotest : StringSpec({
         // PolicyFixtures (mirrors policy-packs/default + korean-pii): 2 BLOCK
         // (block_env_file_read, block_untrusted_injection_response) + 4 REQUIRE_APPROVAL
         // (approve_external_email_with_secret, require_approval_untrusted_high_risk_tool,
-        // approve_external_email_with_korean_pii, require_approval_bulk_pii_response).
+        // approve_external_email_with_korean_pii, require_approval_bulk_pii_response). The
+        // fixture's block_large_address_dump is BLOCK too but dryRun: true, so it must not
+        // inflate this count (GMCP-77) — see the next test for that exclusion made explicit.
         exception.affectedPolicyCount shouldBe 6
         store.get(DemoSeed.SERVER_DB_ID)?.trustLevel shouldBe TrustLevel.UNTRUSTED
+    }
+
+    "a dry-run policy never inflates the upgrade-confirmation impact estimate (GMCP-77)" {
+        val store = storeAt(now)
+        checkNotNull(PolicyFixtures.policies.find { it.id == "block_large_address_dump" }).dryRun shouldBe true
+
+        val exception = shouldThrow<TrustUpgradeRequiresConfirmationException> {
+            store.changeTrust(DemoSeed.SERVER_DB_ID, TrustLevel.LIMITED, confirmed = false)
+        }
+        // Same count as the previous test: block_large_address_dump is a BLOCK policy too, but
+        // dryRun: true, so it must not appear as "impact" in a prompt asking an operator to
+        // confirm a trust upgrade.
+        exception.affectedPolicyCount shouldBe 6
+
+        // Prove the exclusion is actually doing something: flip that one policy's dryRun off
+        // and the count grows by exactly one.
+        val withoutDryRun = PolicyFixtures.policies.map { if (it.id == "block_large_address_dump") it.copy(dryRun = false) else it }
+        val storeWithoutDryRun = ServerRegistryStore(
+            Clock.fixed(now, ZoneOffset.UTC),
+            PolicyStore(Clock.fixed(now, ZoneOffset.UTC)).also { it.sync(PolicyFixtures.packs, withoutDryRun) },
+        )
+        val exceptionWithoutDryRun = shouldThrow<TrustUpgradeRequiresConfirmationException> {
+            storeWithoutDryRun.changeTrust(DemoSeed.SERVER_DB_ID, TrustLevel.LIMITED, confirmed = false)
+        }
+        exceptionWithoutDryRun.affectedPolicyCount shouldBe 7
     }
 
     "a confirmed upgrade applies and records who confirmed it" {

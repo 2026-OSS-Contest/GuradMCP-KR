@@ -25,6 +25,15 @@ data class Policy(
     val enabled: Boolean = true,
     /** Repo-relative source path, same value as [PolicySource.path] — `PolicyRow.path`'s caption (fix-api.md §4), without a second round-trip to `/source`. */
     val path: String? = null,
+    /**
+     * SPEC-POL-04 §3.1/§4.2 (GMCP-77): mirrors the DSL's `dry_run` on the policy-pack side —
+     * evaluated but excluded from the real action. Pushed in by the Gateway's own sync
+     * (`policy.dry_run`, `default_dry_run` already folded in — see `packRegistry.ts`'s
+     * `loadPack`), same as every other field on this class; there is no local override —
+     * [PolicyController.updatePolicy]'s request shape intentionally has no way to flip it,
+     * matching §9's "정책은 파일 기반 편집" console policy.
+     */
+    val dryRun: Boolean = false,
 )
 
 /** The raw YAML a policy was parsed from, and where — served by `GET /policies/{id}/source` (fix-api.md §4). */
@@ -43,6 +52,7 @@ data class PolicySyncPolicyInput(
     val enabled: Boolean = true,
     val sourcePath: String? = null,
     val sourceYaml: String? = null,
+    val dryRun: Boolean = false,
 )
 
 data class PolicySyncResult(val packsStored: Int, val policiesStored: Int, val syncedAt: Instant)
@@ -98,6 +108,7 @@ class PolicyStore(private val clock: Clock) {
                 direction = input.direction,
                 enabled = input.enabled,
                 path = input.sourcePath?.takeIf(String::isNotBlank),
+                dryRun = input.dryRun,
             )
             if (!input.sourcePath.isNullOrBlank() && input.sourceYaml != null) {
                 nextSources[input.id] = PolicySource(input.id, input.sourcePath, input.sourceYaml)

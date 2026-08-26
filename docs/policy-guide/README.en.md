@@ -44,6 +44,7 @@ Save it as `policy-packs/default/policies/block-private-key-read.yaml`. The `id`
 | `severity` | yes | one of five values | security significance of the event |
 | `message` | recommended | string | user message with no sensitive source text |
 | `approval` | conditional | object | required for `require_approval` |
+| `dry_run` | optional | boolean, default `false` | "observation mode" — matching and judgment still happen, but the real action (masking/approval queue/block) never sees it. Unlike `enabled: false`, it isn't excluded from evaluation. Used to verify a new policy against real traffic with no risk (SPEC-POL-04). |
 
 Unknown fields, bad enum values, an empty `match`, duplicate IDs, and mismatched pack names are validation errors. Single-quote regular expressions in YAML to avoid backslash escapes.
 
@@ -266,6 +267,7 @@ policies:
 - `evaluation_strategy` is `severity-max` or `first-match`.
 - `extends` lists `pack@semver-range`; parents load first and the child manifest selects strategy/default.
 - `policies` contains paths relative to the pack directory. `priority`, not list order, controls evaluation.
+- `default_dry_run` (optional, boolean) is the `dry_run` value a policy in this pack inherits when it doesn't declare its own. Use it to trial an entire new policy pack in observation mode.
 
 A duplicate policy `id` anywhere in the extended graph is an error rather than a silent override. Propose a change to the parent version or add a new ID with a stronger condition.
 
