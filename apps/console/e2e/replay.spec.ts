@@ -71,6 +71,25 @@ test("SCR-301 reveal-original confirms, then shows the raw vs masked content", a
   await expect(reveal).toBeHidden();
 });
 
+test("SCR-301 a deep link whose session id is the gateway's still opens the event it names", async ({ page }) => {
+  // The real shape of an SCR-101 recent-events link against a control plane: `GET /events/recent`
+  // reports the gateway's own opaque session id, while `GET /sessions/{id}/timeline` only answers
+  // for `nameUUIDFromBytes("guardmcp-session:" + raw)`. So the session in the URL is one the
+  // session list does not contain — which is what `req-s-envdemo` stands for here.
+  //
+  // Event ids are shared across both spaces, so `GET /events/{id}` bridges them.
+  await page.goto("/replay/req-s-envdemo?event=e6");
+
+  // The session the event actually belongs to, not the live one the list would have fallen back
+  // to — landing on a different session silently reads as a link that worked.
+  await expect(page.getByRole("button", { name: /^#s-0712/ })).toHaveAttribute("aria-current", "true");
+
+  // And the event it named survives the switch, rather than the session's first verdict winning.
+  const detail = page.getByTestId("event-detail");
+  await expect(detail.getByRole("button", { name: "block_env_file_read" })).toBeVisible();
+  await expect(detail.getByText("read_file")).toBeVisible();
+});
+
 test("SCR-301 an event with no stored payload offers no reveal to click", async ({ page }) => {
   await page.goto("/replay");
   // The blocked `.env` read carries a payload; the injection verdict the session opens on does
