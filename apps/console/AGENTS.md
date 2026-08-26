@@ -98,19 +98,28 @@ Two more rules that come from the same failure:
 There are **two** variables and they are not alternatives — one chooses the transport, the other
 only turns the mocks off. Getting this wrong is silent: the screens fill with offline states.
 
-- **`CONTROL_PLANE_URL`** (server-side only, never `NEXT_PUBLIC_*`) is the one to set. It installs
-  a `/api/v1/*` rewrite in `next.config.ts`, so the browser only ever talks to the console's own
-  origin and `lib/api/client.ts`'s `BASE` stays `""`. This exists because **the control plane
-  serves no CORS headers at all** — no `CorsConfiguration`, no `addCorsMappings`, no
-  `@CrossOrigin` — so a browser calling it cross-origin has every request blocked. It is also
-  what `docker-compose.yml` sets, which makes it the configuration the console actually ships in.
+- **`CONTROL_PLANE_URL`** (server-side only, never `NEXT_PUBLIC_*`) is the one to set. It is read
+  **per request** by the proxy route handler at `app/api/v1/[...path]/route.ts`, so the browser
+  only ever talks to the console's own origin and `lib/api/client.ts`'s `BASE` stays `""`. This
+  exists because **the control plane serves no CORS headers at all** — no `CorsConfiguration`, no
+  `addCorsMappings`, no `@CrossOrigin` — so a browser calling it cross-origin has every request
+  blocked. It is also what `docker-compose.yml` sets, which makes it the configuration the
+  console actually ships in.
 - **`NEXT_PUBLIC_API_BASE_URL`** is inlined into the client bundle and makes the browser call that
   origin directly. Setting it switches the mocks off no matter what else is set. Useful only
   where CORS is solved some other way — and note that pointing it at the console's *own* origin
-  is a valid (if counterintuitive) way to use the rewrite while still disabling MSW.
-- Setting **neither**, with MSW off, leaves `/api/v1/*` answered by Next.js as a 404 page. The SSE
-  client gives up after five cold attempts rather than retrying for the life of the tab
-  (`lib/sse.ts`), but nothing else recovers — the screens simply stay empty.
+  is a valid (if counterintuitive) way to use the proxy while still disabling MSW.
+- Setting **neither**, with MSW off, leaves the proxy answering 503
+  `control_plane_not_configured`. The SSE client gives up after five cold attempts rather than
+  retrying for the life of the tab (`lib/sse.ts`), but nothing else recovers — the screens simply
+  stay empty.
+
+**Do not turn that proxy back into a `rewrites()` entry.** It was one, and it could not work in
+the image: `rewrites()` is evaluated at *build* time and baked into `.next/routes-manifest.json`,
+while `CONTROL_PLANE_URL` is supplied at *run* time — so the manifest shipped empty and every
+`/api/v1/*` call to the console container answered 404. Passing the URL as a Docker build arg
+would fix the symptom and make the image environment-specific, so the artefact that was tested
+would not be the artefact that ships.
 
 ## Routing (SCR scheme)
 
